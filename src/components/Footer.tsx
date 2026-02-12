@@ -1,9 +1,19 @@
-import React from 'react';
+"use client"
 
-const Footer: React.FC = () => (
-  <footer className="fixed bottom-0 left-0 w-full h-12 bg-gray-900 text-white flex items-center justify-center z-50 shadow-md">
-    <span className="text-sm">© 2026 Empresa de Aseo. Todos los derechos reservados.</span>
-  </footer>
-);
+type FooterProps = {
+  collapsed: boolean
+}
 
-export default Footer;
+export default function Footer({ collapsed }: FooterProps) {
+  const leftClass = collapsed ? "left-16" : "left-64"
+
+  return (
+    <footer
+      className={`fixed bottom-0 right-0 z-50 flex h-12 items-center justify-center bg-gray-900 text-white shadow-md transition-all duration-300 ${leftClass}`}
+    >
+      <span className="text-sm">
+        Copyright 2026 Empresa de Aseo. Todos los derechos reservados.
+      </span>
+    </footer>
+  )
+}
