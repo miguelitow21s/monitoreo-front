@@ -1,8 +1,6 @@
 "use client"
 
-import { createClient } from "@supabase/supabase-js"
+import { supabaseBrowser } from "@/services/supabaseBrowser"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Alias temporal para mantener compatibilidad durante la migracion.
+export const supabase = supabaseBrowser

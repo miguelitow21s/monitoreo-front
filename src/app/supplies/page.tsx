@@ -8,20 +8,15 @@ export default function SuppliesPage() {
   return (
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPERVISORA]}>
-        <div className="p-6 space-y-4">
-          <h1 className="text-2xl font-bold">Insumos</h1>
-
-          <div className="rounded border bg-white p-4">
-            <p className="text-sm text-gray-700">
+        <div className="space-y-4">
+          <h1 className="text-2xl font-bold text-slate-900">Insumos</h1>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-600">
               Registro y control de entrega de insumos por restaurante.
             </p>
-
-            {/* Base para CRUD real */}
-            <div className="mt-4">
-              <button className="rounded bg-blue-600 px-4 py-2 text-white">
-                Registrar entrega de insumos
-              </button>
-            </div>
+            <button className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+              Registrar entrega
+            </button>
           </div>
         </div>
       </RoleGuard>

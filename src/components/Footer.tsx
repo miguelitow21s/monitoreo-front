@@ -5,15 +5,14 @@ type FooterProps = {
 }
 
 export default function Footer({ collapsed }: FooterProps) {
-  const leftClass = collapsed ? "left-16" : "left-64"
+  const leftClass = collapsed ? "md:left-20" : "md:left-64"
 
   return (
     <footer
-      className={`fixed bottom-0 right-0 z-50 flex h-12 items-center justify-center bg-gray-900 text-white shadow-md transition-all duration-300 ${leftClass}`}
+      className={`fixed bottom-0 left-0 right-0 z-40 flex h-11 items-center justify-between border-t border-slate-200 bg-white px-4 text-xs text-slate-600 ${leftClass}`}
     >
-      <span className="text-sm">
-        Copyright 2026 Empresa de Aseo. Todos los derechos reservados.
-      </span>
+      <span>Control de Aseo</span>
+      <span>Copyright 2026</span>
     </footer>
   )
 }

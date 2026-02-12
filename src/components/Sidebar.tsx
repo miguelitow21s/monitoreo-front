@@ -8,74 +8,113 @@ import { useRole } from "@/hooks/useRole"
 
 type SidebarProps = {
   collapsed: boolean
+  mobileOpen: boolean
   onToggle: Dispatch<SetStateAction<boolean>>
+  onCloseMobile: () => void
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+type NavItem = {
+  href: string
+  label: string
+  icon: string
+}
+
+export default function Sidebar({
+  collapsed,
+  mobileOpen,
+  onToggle,
+  onCloseMobile,
+}: SidebarProps) {
   const pathname = usePathname()
   const { isEmpleado, isSupervisora, isSuperAdmin, loading } = useRole()
 
-  if (loading) return null
+  const items: NavItem[] = [{ href: "/dashboard", label: "Dashboard", icon: "DB" }]
 
-  const linkClass = (path: string) =>
-    `flex items-center rounded px-3 py-2 text-sm transition ${
-      pathname.startsWith(path)
-        ? "bg-blue-600 text-white"
-        : "text-gray-700 hover:bg-gray-200"
-    } ${collapsed ? "justify-center" : ""}`
+  if (isEmpleado) {
+    items.push({ href: "/shifts", label: "Mi turno", icon: "TR" })
+  }
 
-  const labelClass = collapsed ? "hidden" : "ml-2"
+  if (isSupervisora) {
+    items.push({ href: "/shifts", label: "Turnos", icon: "TN" })
+    items.push({ href: "/supplies", label: "Insumos", icon: "IN" })
+  }
+
+  if (isSuperAdmin) {
+    items.push({ href: "/restaurants", label: "Restaurantes", icon: "RS" })
+    items.push({ href: "/users", label: "Usuarios", icon: "US" })
+    items.push({ href: "/reports", label: "Reportes", icon: "RP" })
+  }
+
+  const desktopWidth = collapsed ? "md:w-20" : "md:w-64"
+  const mobileTranslate = mobileOpen ? "translate-x-0" : "-translate-x-full"
 
   return (
-    <aside
-      className={`fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] border-r bg-white transition-all ${
-        collapsed ? "w-16" : "w-64"
-      }`}
-    >
-      <button
-        onClick={() => onToggle(v => !v)}
-        className="m-2 rounded bg-gray-100 p-2 text-sm"
-        aria-label="Toggle menu"
+    <>
+      <div
+        className={`fixed inset-0 z-40 bg-slate-950/35 transition-opacity md:hidden ${
+          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={onCloseMobile}
+        aria-hidden="true"
+      />
+
+      <aside
+        className={`fixed left-0 top-0 z-50 h-screen w-72 transform border-r border-slate-200 bg-white transition-all duration-300 md:top-16 md:z-40 md:h-[calc(100vh-4rem)] md:translate-x-0 ${desktopWidth} ${mobileTranslate}`}
       >
-        Menu
-      </button>
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 md:hidden">
+            <p className="text-sm font-semibold text-slate-800">Menu</p>
+            <button
+              onClick={onCloseMobile}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600"
+            >
+              Cerrar
+            </button>
+          </div>
 
-      <nav className="mt-4 space-y-1 px-2">
-        <Link href="/dashboard" className={linkClass("/dashboard")}>
-          <span className={labelClass}>Dashboard</span>
-        </Link>
+          <div className="hidden px-3 py-3 md:block">
+            <button
+              onClick={() => onToggle(v => !v)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100"
+            >
+              {collapsed ? "Expandir" : "Colapsar"}
+            </button>
+          </div>
 
-        {isEmpleado && (
-          <Link href="/shifts" className={linkClass("/shifts")}>
-            <span className={labelClass}>Mi turno</span>
-          </Link>
-        )}
+          <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-4 pt-2">
+            {loading && (
+              <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">
+                Cargando menu...
+              </div>
+            )}
 
-        {isSupervisora && (
-          <>
-            <Link href="/shifts" className={linkClass("/shifts")}>
-              <span className={labelClass}>Turnos</span>
-            </Link>
-            <Link href="/supplies" className={linkClass("/supplies")}>
-              <span className={labelClass}>Insumos</span>
-            </Link>
-          </>
-        )}
-
-        {isSuperAdmin && (
-          <>
-            <Link href="/restaurants" className={linkClass("/restaurants")}>
-              <span className={labelClass}>Restaurantes</span>
-            </Link>
-            <Link href="/users" className={linkClass("/users")}>
-              <span className={labelClass}>Usuarios</span>
-            </Link>
-            <Link href="/reports" className={linkClass("/reports")}>
-              <span className={labelClass}>Reportes</span>
-            </Link>
-          </>
-        )}
-      </nav>
-    </aside>
+            {!loading &&
+              items.map(item => {
+                const active = pathname.startsWith(item.href)
+                const compact = collapsed ? "md:justify-center md:px-0" : ""
+                const title = collapsed ? item.label : undefined
+                return (
+                  <Link
+                    key={`${item.href}-${item.label}`}
+                    href={item.href}
+                    title={title}
+                    onClick={onCloseMobile}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition ${compact} ${
+                      active
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-current/20 text-[10px] font-bold">
+                      {item.icon}
+                    </span>
+                    <span className={collapsed ? "md:hidden" : ""}>{item.label}</span>
+                  </Link>
+                )
+              })}
+          </nav>
+        </div>
+      </aside>
+    </>
   )
 }

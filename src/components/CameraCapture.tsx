@@ -15,16 +15,13 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
   const [ready, setReady] = useState(false)
   const [captured, setCaptured] = useState(false)
 
-  // 🔧 DECLARAR PRIMERO
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach(track => track.stop())
     streamRef.current = null
   }
 
   useEffect(() => {
-    return () => {
-      stopCamera()
-    }
+    return () => stopCamera()
   }, [])
 
   const startCamera = async () => {
@@ -32,9 +29,7 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-        },
+        video: { facingMode: { ideal: "environment" } },
       })
 
       streamRef.current = stream
@@ -45,30 +40,28 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
         setReady(true)
       }
     } catch (err: unknown) {
-  if (err instanceof DOMException) {
-    switch (err.name) {
-      case "NotAllowedError":
-        setError("Permiso de cámara denegado")
-        break
-      case "NotFoundError":
-        setError("No se encontró cámara disponible")
-        break
-      default:
-        setError("Error al acceder a la cámara")
+      if (err instanceof DOMException) {
+        switch (err.name) {
+          case "NotAllowedError":
+            setError("Permiso de camara denegado")
+            break
+          case "NotFoundError":
+            setError("No se encontro una camara disponible")
+            break
+          default:
+            setError("Error al acceder a la camara")
+        }
+      } else {
+        setError("Error al acceder a la camara")
+      }
     }
-  } else {
-    setError("Error al acceder a la cámara")
   }
-}
-  }
-
 
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current || captured) return
 
     const canvas = canvasRef.current
     const video = videoRef.current
-
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
 
@@ -76,22 +69,20 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     if (!ctx) return
 
     ctx.drawImage(video, 0, 0)
-
-    canvas.toBlob(blob => {
-      if (blob) {
+    canvas.toBlob(
+      blob => {
+        if (!blob) return
         onCapture(blob)
         setCaptured(true)
         stopCamera()
-      }
-    }, "image/jpeg", 0.9)
+      },
+      "image/jpeg",
+      0.9
+    )
   }
 
   if (captured) {
-    return (
-      <div className="text-sm text-green-600">
-        Evidencia fotográfica capturada
-      </div>
-    )
+    return <div className="text-sm text-emerald-600">Evidencia fotografica capturada</div>
   }
 
   return (
@@ -101,25 +92,19 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
       {!ready && (
         <button
           onClick={startCamera}
-          className="rounded bg-blue-600 px-4 py-2 text-white"
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
         >
-          Activar cámara
+          Activar camara
         </button>
       )}
 
-      <video
-        ref={videoRef}
-        className="w-full max-w-xs rounded border"
-        playsInline
-        muted
-      />
-
+      <video ref={videoRef} className="w-full max-w-sm rounded-lg border border-slate-300" playsInline muted />
       <canvas ref={canvasRef} className="hidden" />
 
-      {ready && !captured && (
+      {ready && (
         <button
           onClick={capturePhoto}
-          className="rounded bg-green-600 px-4 py-2 text-white"
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
         >
           Capturar evidencia
         </button>

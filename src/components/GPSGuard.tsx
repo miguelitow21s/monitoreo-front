@@ -28,53 +28,30 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         }
-
         onLocation(coords)
         setLoading(false)
       },
       err => {
         switch (err.code) {
           case err.PERMISSION_DENIED:
-            setError("Permiso de ubicación denegado")
+            setError("Permiso de ubicacion denegado")
             break
           case err.POSITION_UNAVAILABLE:
-            setError("Ubicación no disponible")
+            setError("Ubicacion no disponible")
             break
           case err.TIMEOUT:
             setError("Tiempo de espera agotado")
             break
           default:
-            setError("Error obteniendo ubicación")
+            setError("Error obteniendo ubicacion")
         }
         setLoading(false)
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     )
   }, [onLocation])
 
-  if (loading) {
-    return (
-      <div className="text-sm text-gray-500">
-        Obteniendo ubicación…
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="text-sm text-red-600">
-        {error}
-      </div>
-    )
-  }
-
-  return (
-    <div className="text-sm text-green-600">
-      Ubicación capturada
-    </div>
-  )
+  if (loading) return <div className="text-sm text-slate-500">Obteniendo ubicacion...</div>
+  if (error) return <div className="text-sm text-red-600">{error}</div>
+  return <div className="text-sm text-emerald-600">Ubicacion capturada</div>
 }

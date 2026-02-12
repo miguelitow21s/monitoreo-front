@@ -1,6 +1,8 @@
 "use client"
 
-import { ReactNode } from "react"
+import { ReactNode, useEffect } from "react"
+import { useRouter } from "next/navigation"
+
 import { useAuth } from "@/hooks/useAuth"
 import { Role } from "@/utils/permissions"
 
@@ -10,14 +12,32 @@ interface RoleGuardProps {
 }
 
 export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
+  const router = useRouter()
   const { user, loading } = useAuth()
 
-  if (loading) return null
-
   const role = user?.user_metadata?.role as Role | undefined
+  const allowed = !!role && allowedRoles.includes(role)
 
-  if (!role || !allowedRoles.includes(role)) {
-    return null
+  useEffect(() => {
+    if (!loading && !allowed) {
+      router.replace("/unauthorized")
+    }
+  }, [loading, allowed, router])
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-gray-500">
+        Verificando permisos...
+      </div>
+    )
+  }
+
+  if (!allowed) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-gray-500">
+        Redirigiendo...
+      </div>
+    )
   }
 
   return <>{children}</>

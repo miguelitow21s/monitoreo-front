@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { usePathname } from "next/navigation"
 
 import Header from "@/components/Header"
 import Sidebar from "@/components/Sidebar"
@@ -11,15 +12,36 @@ type LayoutShellProps = {
 }
 
 export default function LayoutShell({ children }: LayoutShellProps) {
+  const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
-  const sidebarWidth = collapsed ? "ml-16" : "ml-64"
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  const standalonePage =
+    pathname === "/" ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/unauthorized")
+
+  if (standalonePage) {
+    return <>{children}</>
+  }
+
+  const desktopOffset = collapsed ? "md:ml-20" : "md:ml-64"
 
   return (
     <>
-      <Header />
-      <Sidebar collapsed={collapsed} onToggle={setCollapsed} />
+      <Header
+        collapsed={collapsed}
+        onToggleDesktop={() => setCollapsed(v => !v)}
+        onToggleMobile={() => setMobileOpen(v => !v)}
+      />
+      <Sidebar
+        collapsed={collapsed}
+        mobileOpen={mobileOpen}
+        onToggle={setCollapsed}
+        onCloseMobile={() => setMobileOpen(false)}
+      />
       <main
-        className={`px-6 pt-24 pb-20 transition-all duration-300 ${sidebarWidth}`}
+        className={`min-h-screen px-4 pb-16 pt-20 transition-all duration-300 sm:px-6 ${desktopOffset}`}
       >
         {children}
       </main>

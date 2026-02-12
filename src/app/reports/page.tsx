@@ -8,20 +8,17 @@ export default function ReportsPage() {
   return (
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
-        <div className="p-6 space-y-4">
-          <h1 className="text-2xl font-bold">Reportes</h1>
-
-          <div className="rounded border p-4 bg-white">
-            <p className="text-sm text-gray-700">
-              Generación y descarga de reportes oficiales en PDF y Excel.
+        <div className="space-y-4">
+          <h1 className="text-2xl font-bold text-slate-900">Reportes</h1>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-600">
+              Generacion y descarga de reportes oficiales en PDF y Excel.
             </p>
-
-            {/* Aquí luego conectas generación real */}
-            <div className="mt-4 space-x-2">
-              <button className="rounded bg-blue-600 px-4 py-2 text-white">
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
                 Descargar PDF
               </button>
-              <button className="rounded bg-green-600 px-4 py-2 text-white">
+              <button className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">
                 Descargar Excel
               </button>
             </div>

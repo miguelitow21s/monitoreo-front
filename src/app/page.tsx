@@ -1,10 +1,22 @@
-/*src\app\page.tsx*/
-"use client";
-export default function Home() {
-  // ...existing code...
-  // Endurecimiento: redirección segura
-  // Usar hooks centralizados
-  // Debe ser Client Component si usas hooks
-  // Si solo quieres redirección, deja solo esto:
-  return null;
+"use client"
+
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+
+import { useAuth } from "@/hooks/useAuth"
+
+export default function HomePage() {
+  const router = useRouter()
+  const { session, loading } = useAuth()
+
+  useEffect(() => {
+    if (loading) return
+    router.replace(session ? "/dashboard" : "/auth/login")
+  }, [loading, session, router])
+
+  return (
+    <div className="flex min-h-screen items-center justify-center text-sm text-gray-500">
+      Redirigiendo...
+    </div>
+  )
 }

@@ -8,21 +8,15 @@ export default function RestaurantsPage() {
   return (
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
-        <div className="p-6 space-y-4">
-          <h1 className="text-2xl font-bold">Restaurantes</h1>
-
-          <div className="rounded border bg-white p-4">
-            <p className="text-sm text-gray-700">
-              Gestión de restaurantes: creación, edición y configuración
-              de ubicación y horarios.
+        <div className="space-y-4">
+          <h1 className="text-2xl font-bold text-slate-900">Restaurantes</h1>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-600">
+              Gestion de restaurantes, configuracion de ubicacion y horarios operativos.
             </p>
-
-            {/* Placeholder CRUD */}
-            <div className="mt-4">
-              <button className="rounded bg-blue-600 px-4 py-2 text-white">
-                Crear restaurante
-              </button>
-            </div>
+            <button className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+              Crear restaurante
+            </button>
           </div>
         </div>
       </RoleGuard>
