@@ -2,16 +2,10 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 export function middleware(req: NextRequest) {
-  const pathname = req.nextUrl.pathname
-
-  const accessToken =
-    req.cookies.get("sb-access-token")?.value ||
-    req.cookies.get("supabase-auth-token")?.value
-
-  if (!accessToken && !pathname.startsWith("/auth")) {
-    return NextResponse.redirect(new URL("/auth/login", req.url))
-  }
-
+  // This app currently uses Supabase browser session persistence (localStorage),
+  // so auth tokens are not available to Next middleware cookies reliably.
+  // Route protection is handled client-side by ProtectedRoute/RoleGuard.
+  void req
   return NextResponse.next()
 }
 
