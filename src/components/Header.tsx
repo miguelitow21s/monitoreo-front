@@ -50,10 +50,10 @@ export default function Header({
           {collapsed ? ">>" : "<<"}
         </button>
         <div>
-          <h1 className="text-sm font-semibold text-slate-900 md:text-base">
+          <h1 className="max-w-[180px] truncate text-sm font-semibold text-slate-900 md:max-w-none md:text-base">
             Plataforma de Control Operativo
           </h1>
-          <p className="text-xs text-slate-500">Monitoreo de turnos y supervision</p>
+          <p className="hidden text-xs text-slate-500 md:block">Monitoreo de turnos y supervision</p>
         </div>
       </div>
 
@@ -68,13 +68,13 @@ export default function Header({
         </div>
         <button
           onClick={logout}
-          className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700"
+          className="rounded-lg bg-slate-900 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-slate-700 md:px-3 md:text-xs"
         >
           Salir
         </button>
         <Link
           href="/account/password"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+          className="rounded-lg border border-slate-300 px-2.5 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 md:px-3 md:text-xs"
         >
           Contrasena
         </Link>

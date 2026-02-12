@@ -41,7 +41,7 @@ export default function LayoutShell({ children }: LayoutShellProps) {
         onCloseMobile={() => setMobileOpen(false)}
       />
       <main
-        className={`min-h-screen px-4 pb-16 pt-20 transition-all duration-300 sm:px-6 ${desktopOffset}`}
+        className={`min-h-screen px-4 pb-6 pt-20 transition-all duration-300 sm:px-6 md:pb-16 ${desktopOffset}`}
       >
         {children}
       </main>

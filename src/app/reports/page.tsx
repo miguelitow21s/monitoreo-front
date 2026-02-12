@@ -79,7 +79,7 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold text-slate-900">Reportes</h1>
 
           <Card title="Filtros del reporte" subtitle="Consulta por rango de fechas y restaurante.">
-            <div className="mt-3 grid gap-2 md:grid-cols-5">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               <input
                 type="date"
                 value={fromDate}
@@ -137,35 +137,53 @@ export default function ReportsPage() {
                 onAction={() => void loadReport()}
               />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-slate-500">
-                      <th className="pb-2 pr-3">Turno</th>
-                      <th className="pb-2 pr-3">Restaurante</th>
-                      <th className="pb-2 pr-3">Inicio</th>
-                      <th className="pb-2 pr-3">Fin</th>
-                      <th className="pb-2 pr-3">Estado</th>
-                      <th className="pb-2 pr-3">Detalle</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(item => (
-                      <tr key={item.id} className="border-b border-slate-100">
-                        <td className="py-2 pr-3">{item.id.slice(0, 8)}</td>
-                        <td className="py-2 pr-3">{item.restaurant_id ?? "-"}</td>
-                        <td className="py-2 pr-3">{new Date(item.start_time).toLocaleString("es-CO")}</td>
-                        <td className="py-2 pr-3">
-                          {item.end_time ? new Date(item.end_time).toLocaleString("es-CO") : "-"}
-                        </td>
-                        <td className="py-2 pr-3">{item.status}</td>
-                        <td className="py-2 pr-3">
-                          <span className="text-xs text-slate-500">Solo lectura</span>
-                        </td>
+              <div className="space-y-3">
+                <div className="space-y-2 md:hidden">
+                  {rows.map(item => (
+                    <div key={item.id} className="rounded-lg border border-slate-200 p-3">
+                      <p className="text-xs text-slate-500">Turno {String(item.id).slice(0, 8)}</p>
+                      <p className="mt-1 text-sm text-slate-700">Restaurante: {item.restaurant_id ?? "-"}</p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        Inicio: {new Date(item.start_time).toLocaleString("es-CO")}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        Fin: {item.end_time ? new Date(item.end_time).toLocaleString("es-CO") : "-"}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-700">Estado: {item.status}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-slate-500">
+                        <th className="pb-2 pr-3">Turno</th>
+                        <th className="pb-2 pr-3">Restaurante</th>
+                        <th className="pb-2 pr-3">Inicio</th>
+                        <th className="pb-2 pr-3">Fin</th>
+                        <th className="pb-2 pr-3">Estado</th>
+                        <th className="pb-2 pr-3">Detalle</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {rows.map(item => (
+                        <tr key={item.id} className="border-b border-slate-100">
+                          <td className="py-2 pr-3">{String(item.id).slice(0, 8)}</td>
+                          <td className="py-2 pr-3">{item.restaurant_id ?? "-"}</td>
+                          <td className="py-2 pr-3">{new Date(item.start_time).toLocaleString("es-CO")}</td>
+                          <td className="py-2 pr-3">
+                            {item.end_time ? new Date(item.end_time).toLocaleString("es-CO") : "-"}
+                          </td>
+                          <td className="py-2 pr-3">{item.status}</td>
+                          <td className="py-2 pr-3">
+                            <span className="text-xs text-slate-500">Solo lectura</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </Card>

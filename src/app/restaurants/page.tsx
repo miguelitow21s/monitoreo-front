@@ -131,7 +131,7 @@ export default function RestaurantsPage() {
           ) : (
             <>
               <Card title="Crear restaurante" subtitle="Incluye coordenadas y radio de geofence.">
-                <div className="mt-3 grid gap-2 md:grid-cols-5">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     placeholder="Nombre"
@@ -161,7 +161,7 @@ export default function RestaurantsPage() {
               </Card>
 
               <Card title="Asignar empleados" subtitle="Relaciona usuario operativo con restaurante.">
-                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={assignRestaurant}

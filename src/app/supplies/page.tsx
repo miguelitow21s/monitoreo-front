@@ -124,7 +124,7 @@ export default function SuppliesPage() {
           ) : (
             <>
               <Card title="Crear insumo" subtitle="Alta de producto base para inventario.">
-                <div className="mt-3 grid gap-2 md:grid-cols-4">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <input
                     value={supplyName}
                     onChange={event => setSupplyName(event.target.value)}
@@ -148,7 +148,7 @@ export default function SuppliesPage() {
               </Card>
 
               <Card title="Registrar entrega" subtitle="Asocia cantidad entregada a un restaurante.">
-                <div className="mt-3 grid gap-2 md:grid-cols-4">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <select
                     value={deliverySupplyId}
                     onChange={event => setDeliverySupplyId(event.target.value)}
@@ -192,25 +192,37 @@ export default function SuppliesPage() {
                     onAction={() => void loadData()}
                   />
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-left text-slate-500">
-                          <th className="pb-2 pr-3">Nombre</th>
-                          <th className="pb-2 pr-3">Unidad</th>
-                          <th className="pb-2 pr-3">Stock</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {supplies.map(item => (
-                          <tr key={item.id} className="border-b border-slate-100">
-                            <td className="py-2 pr-3">{item.name}</td>
-                            <td className="py-2 pr-3">{item.unit}</td>
-                            <td className="py-2 pr-3">{item.stock}</td>
+                  <div className="space-y-3">
+                    <div className="space-y-2 md:hidden">
+                      {supplies.map(item => (
+                        <div key={item.id} className="rounded-lg border border-slate-200 p-3">
+                          <p className="font-medium text-slate-900">{item.name}</p>
+                          <p className="mt-1 text-sm text-slate-600">Unidad: {item.unit}</p>
+                          <p className="mt-1 text-sm text-slate-600">Stock: {item.stock}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="hidden overflow-x-auto md:block">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-left text-slate-500">
+                            <th className="pb-2 pr-3">Nombre</th>
+                            <th className="pb-2 pr-3">Unidad</th>
+                            <th className="pb-2 pr-3">Stock</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {supplies.map(item => (
+                            <tr key={item.id} className="border-b border-slate-100">
+                              <td className="py-2 pr-3">{item.name}</td>
+                              <td className="py-2 pr-3">{item.unit}</td>
+                              <td className="py-2 pr-3">{item.stock}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </Card>

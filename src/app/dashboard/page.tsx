@@ -68,10 +68,10 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <section className="space-y-6">
-        <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 px-6 py-6 text-white shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 px-4 py-5 text-white shadow-sm sm:px-6 sm:py-6">
           <p className="text-xs uppercase tracking-[0.16em] text-slate-300">Panel principal</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold sm:text-3xl">Dashboard Operativo</h1>
+            <h1 className="text-xl font-bold sm:text-3xl">Dashboard Operativo</h1>
             <Badge variant="info">Actualizado</Badge>
           </div>
           <p className="mt-2 max-w-2xl text-sm text-slate-200">{roleSummary}</p>

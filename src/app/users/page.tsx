@@ -73,49 +73,83 @@ export default function UsersPage() {
                   onAction={() => void loadData()}
                 />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left text-slate-500">
-                        <th className="pb-2 pr-3">Usuario</th>
-                        <th className="pb-2 pr-3">Email</th>
-                        <th className="pb-2 pr-3">Rol</th>
-                        <th className="pb-2 pr-3">Estado</th>
-                        <th className="pb-2 pr-3">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map(item => (
-                        <tr key={item.id} className="border-b border-slate-100">
-                          <td className="py-2 pr-3">{item.full_name ?? "Sin nombre"}</td>
-                          <td className="py-2 pr-3">{item.email ?? "-"}</td>
-                          <td className="py-2 pr-3">
-                            <select
-                              value={item.role ?? ROLES.EMPLEADO}
-                              onChange={event => void handleRoleChange(item.id, event.target.value as Role)}
-                              className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-                            >
-                              {roleOptions.map(role => (
-                                <option key={role} value={role}>
-                                  {role}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="py-2 pr-3">{item.is_active === false ? "Inactivo" : "Activo"}</td>
-                          <td className="py-2 pr-3">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => void handleToggleActive(item.id, item.is_active)}
-                            >
-                              {item.is_active === false ? "Activar" : "Desactivar"}
-                            </Button>
-                          </td>
+                <div className="space-y-3">
+                  <div className="space-y-2 md:hidden">
+                    {rows.map(item => (
+                      <div key={item.id} className="rounded-lg border border-slate-200 p-3">
+                        <p className="font-medium text-slate-900">{item.full_name ?? "Sin nombre"}</p>
+                        <p className="mt-1 break-all text-xs text-slate-500">{item.email ?? "-"}</p>
+                        <p className="mt-2 text-xs text-slate-600">
+                          Estado: {item.is_active === false ? "Inactivo" : "Activo"}
+                        </p>
+                        <div className="mt-3 grid gap-2">
+                          <select
+                            value={item.role ?? ROLES.EMPLEADO}
+                            onChange={event => void handleRoleChange(item.id, event.target.value as Role)}
+                            className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                          >
+                            {roleOptions.map(role => (
+                              <option key={role} value={role}>
+                                {role}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void handleToggleActive(item.id, item.is_active)}
+                          >
+                            {item.is_active === false ? "Activar" : "Desactivar"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-left text-slate-500">
+                          <th className="pb-2 pr-3">Usuario</th>
+                          <th className="pb-2 pr-3">Email</th>
+                          <th className="pb-2 pr-3">Rol</th>
+                          <th className="pb-2 pr-3">Estado</th>
+                          <th className="pb-2 pr-3">Acciones</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {rows.map(item => (
+                          <tr key={item.id} className="border-b border-slate-100">
+                            <td className="py-2 pr-3">{item.full_name ?? "Sin nombre"}</td>
+                            <td className="py-2 pr-3">{item.email ?? "-"}</td>
+                            <td className="py-2 pr-3">
+                              <select
+                                value={item.role ?? ROLES.EMPLEADO}
+                                onChange={event => void handleRoleChange(item.id, event.target.value as Role)}
+                                className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                              >
+                                {roleOptions.map(role => (
+                                  <option key={role} value={role}>
+                                    {role}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-2 pr-3">{item.is_active === false ? "Inactivo" : "Activo"}</td>
+                            <td className="py-2 pr-3">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => void handleToggleActive(item.id, item.is_active)}
+                              >
+                                {item.is_active === false ? "Activar" : "Desactivar"}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </Card>
