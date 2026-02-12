@@ -1,28 +1,30 @@
 "use client"
 
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+
 import ProtectedRoute from "@/components/ProtectedRoute"
+import { useToast } from "@/components/toast/ToastProvider"
 import { useRole } from "@/hooks/useRole"
+import { AuditEvent, DashboardMetric, fetchAuditEvents, fetchDashboardMetrics } from "@/services/dashboard.service"
 import Badge from "@/components/ui/Badge"
 import Button from "@/components/ui/Button"
 import Card from "@/components/ui/Card"
 import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 
-type Metric = {
-  label: string
-  value: string
-  trend: string
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("es-CO")
 }
 
-const metrics: Metric[] = [
-  { label: "Turnos activos", value: "18", trend: "+12% vs ayer" },
-  { label: "Cumplimiento", value: "94%", trend: "+2% semanal" },
-  { label: "Incidencias", value: "3", trend: "Sin bloqueos criticos" },
-  { label: "Locales monitoreados", value: "27", trend: "Cobertura completa" },
-]
-
 export default function DashboardPage() {
+  const router = useRouter()
+  const { showToast } = useToast()
   const { loading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
+
+  const [metrics, setMetrics] = useState<DashboardMetric[]>([])
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
+  const [loadingData, setLoadingData] = useState(true)
 
   const roleSummary = isSuperAdmin
     ? "Vista completa del sistema para administracion general."
@@ -30,13 +32,38 @@ export default function DashboardPage() {
       ? "Seguimiento operativo de turnos e insumos en tiempo real."
       : "Control personal de asistencia y evidencias de turno."
 
-  const quickActions = [
-    { label: "Ver turnos del dia", variant: "primary" as const },
-    { label: "Revisar incidencias", variant: "secondary" as const },
-    ...(isSuperAdmin ? [{ label: "Gestionar usuarios", variant: "ghost" as const }] : []),
-  ]
+  const quickActions = useMemo(
+    () => [
+      { label: "Ver turnos del dia", onClick: () => router.push("/shifts"), variant: "primary" as const },
+      {
+        label: "Revisar incidencias",
+        onClick: () => router.push("/shifts"),
+        variant: "secondary" as const,
+      },
+      ...(isSuperAdmin
+        ? [{ label: "Gestionar usuarios", onClick: () => router.push("/users"), variant: "ghost" as const }]
+        : []),
+    ],
+    [isSuperAdmin, router]
+  )
 
-  const pendingAlerts: string[] = []
+  const loadData = useCallback(async () => {
+    setLoadingData(true)
+    try {
+      const [metricRows, auditRows] = await Promise.all([fetchDashboardMetrics(), fetchAuditEvents(10)])
+      setMetrics(metricRows)
+      setAuditEvents(auditRows)
+    } catch (error: unknown) {
+      showToast("error", error instanceof Error ? error.message : "No se pudo cargar dashboard.")
+    } finally {
+      setLoadingData(false)
+    }
+  }, [showToast])
+
+  useEffect(() => {
+    if (loading) return
+    void loadData()
+  }, [loading, loadData])
 
   return (
     <ProtectedRoute>
@@ -50,7 +77,7 @@ export default function DashboardPage() {
           <p className="mt-2 max-w-2xl text-sm text-slate-200">{roleSummary}</p>
         </div>
 
-        {loading ? (
+        {loading || loadingData ? (
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -79,7 +106,7 @@ export default function DashboardPage() {
             <div className="grid gap-4 lg:grid-cols-3">
               <Card
                 title="Estado de operacion"
-                subtitle="La plataforma mantiene actividad estable durante la ultima jornada. Recomendado: revisar cierres de turno pendientes antes de las 19:00."
+                subtitle="Monitoreo diario con trazabilidad y control por rol."
                 className="lg:col-span-2"
               >
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -90,8 +117,10 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">Evidencias</p>
-                    <p className="text-sm font-semibold text-slate-800">Ultima carga hace 8 min</p>
+                    <p className="text-xs text-slate-500">Auditoria</p>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {auditEvents.length} eventos recientes
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -99,7 +128,12 @@ export default function DashboardPage() {
               <Card title="Acciones rapidas" subtitle="Atajos disponibles segun tu rol.">
                 <div className="mt-4 space-y-2">
                   {quickActions.map(action => (
-                    <Button key={action.label} fullWidth variant={action.variant}>
+                    <Button
+                      key={action.label}
+                      fullWidth
+                      variant={action.variant}
+                      onClick={action.onClick}
+                    >
                       {action.label}
                     </Button>
                   ))}
@@ -107,18 +141,23 @@ export default function DashboardPage() {
               </Card>
             </div>
 
-            {pendingAlerts.length === 0 ? (
+            {auditEvents.length === 0 ? (
               <EmptyState
-                title="Sin alertas criticas"
-                description="No hay incidencias pendientes de atencion inmediata."
+                title="Sin eventos de auditoria"
+                description="No hay movimientos recientes para mostrar."
                 actionLabel="Actualizar tablero"
-                onAction={() => window.location.reload()}
+                onAction={() => void loadData()}
               />
             ) : (
-              <Card title="Alertas pendientes">
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
-                  {pendingAlerts.map(alert => (
-                    <li key={alert}>{alert}</li>
+              <Card title="Timeline de auditoria" subtitle="Ultimos eventos operativos registrados.">
+                <ul className="space-y-2 text-sm text-slate-700">
+                  {auditEvents.map(item => (
+                    <li key={item.id} className="rounded-lg border border-slate-200 p-2">
+                      <p className="font-medium">{item.action}</p>
+                      <p className="text-xs text-slate-500">
+                        {formatDateTime(item.created_at)} | Actor: {item.actor_id ?? "sistema"}
+                      </p>
+                    </li>
                   ))}
                 </ul>
               </Card>
@@ -126,7 +165,7 @@ export default function DashboardPage() {
 
             {isEmpleado && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                Tienes 1 turno pendiente de cierre. Recuerda adjuntar evidencia al finalizar.
+                Revisa tus turnos activos y finaliza con evidencia al cierre.
               </div>
             )}
           </>

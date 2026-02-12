@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import "./globals.css"
 
+import ClientProviders from "@/components/ClientProviders"
 import LayoutShell from "@/components/LayoutShell"
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="min-h-screen bg-slate-100 text-slate-900">
-        <LayoutShell>{children}</LayoutShell>
+        <ClientProviders>
+          <LayoutShell>{children}</LayoutShell>
+        </ClientProviders>
       </body>
     </html>
   )
