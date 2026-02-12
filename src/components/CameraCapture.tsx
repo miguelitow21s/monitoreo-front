@@ -1,52 +1,129 @@
-import React, { useRef, useState } from 'react';
+"use client"
+
+import { useEffect, useRef, useState } from "react"
 
 interface CameraCaptureProps {
-  onCapture: (image: string) => void;
+  onCapture: (image: Blob) => void
 }
 
-const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState('');
+export default function CameraCapture({ onCapture }: CameraCaptureProps) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+
+  const [error, setError] = useState<string | null>(null)
+  const [ready, setReady] = useState(false)
+  const [captured, setCaptured] = useState(false)
+
+  // 🔧 DECLARAR PRIMERO
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach(track => track.stop())
+    streamRef.current = null
+  }
+
+  useEffect(() => {
+    return () => {
+      stopCamera()
+    }
+  }, [])
 
   const startCamera = async () => {
-    setError('');
+    setError(null)
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+        },
+      })
+
+      streamRef.current = stream
+
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setStreaming(true);
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        setReady(true)
       }
-    } catch {
-      setError('No se pudo acceder a la cámara');
+    } catch (err: unknown) {
+  if (err instanceof DOMException) {
+    switch (err.name) {
+      case "NotAllowedError":
+        setError("Permiso de cámara denegado")
+        break
+      case "NotFoundError":
+        setError("No se encontró cámara disponible")
+        break
+      default:
+        setError("Error al acceder a la cámara")
     }
-  };
+  } else {
+    setError("Error al acceder a la cámara")
+  }
+}
+  }
+
 
   const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext('2d');
-      if (context) {
-        context.drawImage(videoRef.current, 0, 0, 320, 240);
-        const image = canvasRef.current.toDataURL('image/png');
-        onCapture(image);
+    if (!videoRef.current || !canvasRef.current || captured) return
+
+    const canvas = canvasRef.current
+    const video = videoRef.current
+
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    ctx.drawImage(video, 0, 0)
+
+    canvas.toBlob(blob => {
+      if (blob) {
+        onCapture(blob)
+        setCaptured(true)
+        stopCamera()
       }
-    }
-  };
+    }, "image/jpeg", 0.9)
+  }
+
+  if (captured) {
+    return (
+      <div className="text-sm text-green-600">
+        Evidencia fotográfica capturada
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col items-center">
-      {!streaming && (
-        <button onClick={startCamera} className="bg-blue-600 text-white px-4 py-2 rounded mb-4">Iniciar cámara</button>
+    <div className="flex flex-col items-center gap-3">
+      {error && <div className="text-sm text-red-600">{error}</div>}
+
+      {!ready && (
+        <button
+          onClick={startCamera}
+          className="rounded bg-blue-600 px-4 py-2 text-white"
+        >
+          Activar cámara
+        </button>
       )}
-      {error && <div className="text-red-500 mb-2">{error}</div>}
-      <video ref={videoRef} width={320} height={240} autoPlay className="mb-4" />
-      <canvas ref={canvasRef} width={320} height={240} className="hidden" />
-      {streaming && (
-        <button onClick={capturePhoto} className="bg-green-600 text-white px-4 py-2 rounded">Capturar foto</button>
+
+      <video
+        ref={videoRef}
+        className="w-full max-w-xs rounded border"
+        playsInline
+        muted
+      />
+
+      <canvas ref={canvasRef} className="hidden" />
+
+      {ready && !captured && (
+        <button
+          onClick={capturePhoto}
+          className="rounded bg-green-600 px-4 py-2 text-white"
+        >
+          Capturar evidencia
+        </button>
       )}
     </div>
-  );
-};
-
-export default CameraCapture;
+  )
+}

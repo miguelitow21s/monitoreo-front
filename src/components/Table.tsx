@@ -1,31 +1,61 @@
-import React from 'react';
+"use client"
 
-interface TableProps {
-  columns: string[];
-  data: any[];
+type Column<T> = {
+  key: keyof T
+  label: string
 }
 
-const Table: React.FC<TableProps> = ({ columns, data }) => (
-  <div className="overflow-x-auto">
-    <table className="min-w-full bg-white rounded shadow">
-      <thead>
-        <tr>
-          {columns.map((col) => (
-            <th key={col} className="px-4 py-2 text-left bg-gray-100 font-bold">{col}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((row, idx) => (
-          <tr key={idx} className="border-b">
-            {columns.map((col) => (
-              <td key={col} className="px-4 py-2">{row[col]}</td>
+interface TableProps<T> {
+  columns: Column<T>[]
+  data: T[]
+}
+
+export default function Table<T extends Record<string, unknown>>({
+  columns,
+  data,
+}: TableProps<T>) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full rounded bg-white shadow">
+        <thead>
+          <tr>
+            {columns.map(col => (
+              <th
+                key={String(col.key)}
+                className="bg-gray-100 px-4 py-2 text-left text-sm font-semibold"
+              >
+                {col.label}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
+        </thead>
 
-export default Table;
+        <tbody>
+          {data.length === 0 && (
+            <tr>
+              <td
+                colSpan={columns.length}
+                className="px-4 py-6 text-center text-sm text-gray-500"
+              >
+                No hay datos para mostrar
+              </td>
+            </tr>
+          )}
+
+          {data.map((row, idx) => (
+            <tr key={idx} className="border-b last:border-0">
+              {columns.map(col => (
+                <td
+                  key={String(col.key)}
+                  className="px-4 py-2 text-sm"
+                >
+                  {String(row[col.key] ?? "")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}

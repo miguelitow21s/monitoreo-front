@@ -1,25 +1,30 @@
-import { useAuth } from '../hooks/useSession';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+"use client"
+
+import ProtectedRoute from "@/components/ProtectedRoute"
+import RoleGuard from "@/components/RoleGuard"
+import { ROLES } from "@/utils/permissions"
 
 export default function SuppliesPage() {
-  const { session, role } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!session) {
-      router.push('/auth/login');
-    }
-  }, [session, router]);
-
-  if (!session) return null;
-
   return (
-    <div className="p-8">
-      <h2 className="text-2xl font-bold mb-4">Insumos</h2>
-      <div className="bg-white rounded shadow p-6">
-        <p>Gestión de insumos (solo Supervisora).</p>
-      </div>
-    </div>
-  );
+    <ProtectedRoute>
+      <RoleGuard allowedRoles={[ROLES.SUPERVISORA]}>
+        <div className="p-6 space-y-4">
+          <h1 className="text-2xl font-bold">Insumos</h1>
+
+          <div className="rounded border bg-white p-4">
+            <p className="text-sm text-gray-700">
+              Registro y control de entrega de insumos por restaurante.
+            </p>
+
+            {/* Base para CRUD real */}
+            <div className="mt-4">
+              <button className="rounded bg-blue-600 px-4 py-2 text-white">
+                Registrar entrega de insumos
+              </button>
+            </div>
+          </div>
+        </div>
+      </RoleGuard>
+    </ProtectedRoute>
+  )
 }

@@ -1,41 +1,80 @@
-import React, { useEffect, useState } from 'react';
+"use client"
 
-interface GPSGuardProps {
-  onLocation: (coords: { lat: number; lng: number }) => void;
-  geofence: { lat: number; lng: number; radius: number };
+import { useEffect, useState } from "react"
+
+interface Coordinates {
+  lat: number
+  lng: number
 }
 
-const GPSGuard: React.FC<GPSGuardProps> = ({ onLocation, geofence }) => {
-  const [error, setError] = useState('');
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [inside, setInside] = useState(false);
+interface GPSGuardProps {
+  onLocation: (coords: Coordinates) => void
+}
+
+export default function GPSGuard({ onLocation }: GPSGuardProps) {
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      setError('GPS no disponible');
-      return;
+      setError("El dispositivo no soporta GPS")
+      setLoading(false)
+      return
     }
+
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setCoords({ lat, lng });
-        onLocation({ lat, lng });
-        const dist = Math.sqrt(
-          Math.pow(lat - geofence.lat, 2) + Math.pow(lng - geofence.lng, 2)
-        );
-        setInside(dist <= geofence.radius);
+      position => {
+        const coords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        }
+
+        onLocation(coords)
+        setLoading(false)
       },
-      () => setError('No se pudo obtener ubicación'),
-      { enableHighAccuracy: true }
-    );
-  }, [geofence, onLocation]);
+      err => {
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            setError("Permiso de ubicación denegado")
+            break
+          case err.POSITION_UNAVAILABLE:
+            setError("Ubicación no disponible")
+            break
+          case err.TIMEOUT:
+            setError("Tiempo de espera agotado")
+            break
+          default:
+            setError("Error obteniendo ubicación")
+        }
+        setLoading(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    )
+  }, [onLocation])
 
-  if (error) return <div className="text-red-500">{error}</div>;
-  if (!coords) return <div className="text-gray-500">Obteniendo ubicación...</div>;
-  if (!inside) return <div className="text-red-600">Fuera del área permitida</div>;
+  if (loading) {
+    return (
+      <div className="text-sm text-gray-500">
+        Obteniendo ubicación…
+      </div>
+    )
+  }
 
-  return <div className="text-green-600">Ubicación validada</div>;
-};
+  if (error) {
+    return (
+      <div className="text-sm text-red-600">
+        {error}
+      </div>
+    )
+  }
 
-export default GPSGuard;
+  return (
+    <div className="text-sm text-green-600">
+      Ubicación capturada
+    </div>
+  )
+}

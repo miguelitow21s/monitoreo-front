@@ -1,26 +1,202 @@
 @import "tailwindcss";
 
+/* =========================
+   VARIABLES DE DISEÑO
+   ========================= */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --background: #f5f6f8;
+  --foreground: #111827;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --card: #ffffff;
+  --card-foreground: #111827;
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+
+  --muted: #6b7280;
+  --border: #e5e7eb;
+
+  --radius: 0.75rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0b0f19;
+    --foreground: #e5e7eb;
+
+    --card: #111827;
+    --card-foreground: #e5e7eb;
+
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+
+    --muted: #9ca3af;
+    --border: #1f2933;
   }
 }
 
+/* =========================
+   BASE
+   ========================= */
+html,
 body {
-  background: var(--background);
+  min-height: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scroll elegante */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+  border-radius: 9999px;
+}
+
+/* =========================
+   COMPONENTES GLOBALES (CSS PURO)
+   ========================= */
+
+/* Card */
+.card {
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Botones */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+}
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover {
+  background-color: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.btn-danger {
+  background-color: #dc2626;
+  color: white;
+}
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  outline: none;
+  transition: all 0.2s ease;
+}
+.input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+/* =========================
+   TABLAS
+   ========================= */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.table tr:hover {
+  background-color: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+/* =========================
+   ANIMACIONES
+   ========================= */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out both;
+}
+
+/* =========================
+   LAYOUT HELPERS
+   ========================= */
+.page-container {
+  max-width: 80rem;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* =========================
+   RESPONSIVE
+   ========================= */
+@media (max-width: 768px) {
+  .page-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
 }

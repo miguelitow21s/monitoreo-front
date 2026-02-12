@@ -1,18 +1,26 @@
-import { useSession } from '../hooks/useSession';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+"use client"
 
-export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const session = useSession();
-  const router = useRouter();
+import { ReactNode } from "react"
+import { useAuth } from "@/hooks/useAuth"
 
-  useEffect(() => {
-    if (!session) {
-      router.push('/auth/login');
-    }
-  }, [session, router]);
+interface ProtectedRouteProps {
+  children: ReactNode
+}
 
-  if (!session) return null;
+export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { loading, isAuthenticated } = useAuth()
 
-  return <>{children}</>;
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-gray-500">
+        Cargando sesión…
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return null
+  }
+
+  return <>{children}</>
 }

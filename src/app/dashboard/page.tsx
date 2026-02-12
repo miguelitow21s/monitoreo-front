@@ -1,25 +1,66 @@
-"use client";
+"use client"
 
-import { useAuth } from "@/hooks/useSession";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import ProtectedRoute from "@/components/ProtectedRoute"
+import { useRole } from "@/hooks/useRole"
 
 export default function DashboardPage() {
-  const { session, loading } = useAuth();
-  const router = useRouter();
+  const {
+    loading,
+    isEmpleado,
+    isSupervisora,
+    isSuperAdmin,
+  } = useRole()
 
-  useEffect(() => {
-    if (!loading && !session) {
-      router.replace("/auth/login");
-    }
-  }, [session, loading, router]);
-
-  if (loading) return null;
-  if (!session) return null;
+  if (loading) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center text-sm text-gray-500">
+        Cargando dashboard…
+      </div>
+    )
+  }
 
   return (
-    <div>
-      <h1>Dashboard</h1>
-    </div>
-  );
+    <ProtectedRoute>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-gray-800">
+          Dashboard
+        </h1>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {isEmpleado && (
+            <div className="rounded-lg bg-white p-5 shadow">
+              <h2 className="mb-2 font-semibold text-gray-700">
+                Empleado
+              </h2>
+              <p className="text-sm text-gray-600">
+                Inicia y finaliza tus turnos asignados.
+              </p>
+            </div>
+          )}
+
+          {isSupervisora && (
+            <div className="rounded-lg bg-white p-5 shadow">
+              <h2 className="mb-2 font-semibold text-gray-700">
+                Supervisión
+              </h2>
+              <p className="text-sm text-gray-600">
+                Controla turnos activos e incidencias.
+              </p>
+            </div>
+          )}
+
+          {isSuperAdmin && (
+            <div className="rounded-lg bg-white p-5 shadow">
+              <h2 className="mb-2 font-semibold text-gray-700">
+                Administración
+              </h2>
+              <p className="text-sm text-gray-600">
+                Gestiona restaurantes, usuarios y reportes.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </ProtectedRoute>
+  )
 }

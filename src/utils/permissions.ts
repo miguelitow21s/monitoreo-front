@@ -1,30 +1,41 @@
 export const ROLES = {
-  SUPERADMIN: 'superadmin',
-  SUPERVISORA: 'supervisora',
-  EMPLEADO: 'empleado',
-};
+  SUPER_ADMIN: "super_admin",
+  SUPERVISORA: "supervisora",
+  EMPLEADO: "empleado",
+} as const
 
-export const rolePermissions = {
-  [ROLES.SUPERADMIN]: [
-    '/dashboard',
-    '/restaurants',
-    '/users',
-    '/shifts',
-    '/reports',
-  ],
-  [ROLES.SUPERVISORA]: [
-    '/dashboard',
-    '/shifts',
-    '/supplies',
-    '/incidents',
-  ],
-  [ROLES.EMPLEADO]: [
-    '/dashboard',
-    '/shifts',
-    '/history',
-  ],
-};
+export type Role = (typeof ROLES)[keyof typeof ROLES]
 
-export function isRouteAllowed(role: string, pathname: string) {
-  return rolePermissions[role]?.includes(pathname);
+const permissions: Record<Role, string[]> = {
+  super_admin: [
+    "/dashboard",
+    "/restaurants",
+    "/users",
+    "/shifts",
+    "/supplies",
+    "/reports",
+  ],
+  supervisora: [
+    "/dashboard",
+    "/shifts",
+    "/supplies",
+    "/reports",
+  ],
+  empleado: [
+    "/dashboard",
+    "/shifts",
+  ],
+}
+
+/**
+ * 🔐 Type guard: valida si un string es un Role válido
+ */
+export function isRole(value: string): value is Role {
+  return Object.values(ROLES).includes(value as Role)
+}
+
+export function hasAccess(role: Role, pathname: string): boolean {
+  return permissions[role].some(route =>
+    pathname.startsWith(route)
+  )
 }

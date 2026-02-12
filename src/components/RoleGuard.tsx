@@ -1,24 +1,24 @@
-import { useAuth } from '../hooks/useSession';
-import { ROLES, isRouteAllowed } from '../utils/permissions';
-import { useRouter, usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+"use client"
 
-export default function RoleGuard({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
-  const { session, role } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
+import { ReactNode } from "react"
+import { useAuth } from "@/hooks/useAuth"
+import { Role } from "@/utils/permissions"
 
-  useEffect(() => {
-    if (!session) {
-      router.push('/auth/login');
-    } else if (role && !allowedRoles.includes(role)) {
-      router.push('/unauthorized');
-    } else if (role && !isRouteAllowed(role, pathname)) {
-      router.push('/unauthorized');
-    }
-  }, [session, role, allowedRoles, pathname, router]);
+interface RoleGuardProps {
+  allowedRoles: Role[]
+  children: ReactNode
+}
 
-  if (!session || !role || !allowedRoles.includes(role) || !isRouteAllowed(role, pathname)) return null;
+export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
+  const { user, loading } = useAuth()
 
-  return <>{children}</>;
+  if (loading) return null
+
+  const role = user?.user_metadata?.role as Role | undefined
+
+  if (!role || !allowedRoles.includes(role)) {
+    return null
+  }
+
+  return <>{children}</>
 }
