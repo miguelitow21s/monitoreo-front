@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react"
 
+import Button from "@/components/ui/Button"
+
 interface CameraCaptureProps {
-  onCapture: (image: Blob) => void
+  onCapture: (image: Blob | null) => void
 }
 
 export default function CameraCapture({ onCapture }: CameraCaptureProps) {
@@ -20,6 +22,13 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     streamRef.current = null
   }
 
+  const resetCapture = () => {
+    setCaptured(false)
+    setReady(false)
+    setError(null)
+    onCapture(null)
+  }
+
   useEffect(() => {
     return () => stopCamera()
   }, [])
@@ -27,9 +36,19 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
   const startCamera = async () => {
     setError(null)
 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError("El dispositivo no soporta camara en este navegador.")
+      return
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
       })
 
       streamRef.current = stream
@@ -41,18 +60,17 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
       }
     } catch (err: unknown) {
       if (err instanceof DOMException) {
-        switch (err.name) {
-          case "NotAllowedError":
-            setError("Permiso de camara denegado")
-            break
-          case "NotFoundError":
-            setError("No se encontro una camara disponible")
-            break
-          default:
-            setError("Error al acceder a la camara")
+        if (err.name === "NotAllowedError") {
+          setError("Permiso de camara denegado.")
+        } else if (err.name === "NotFoundError") {
+          setError("No se encontro una camara disponible.")
+        } else if (err.name === "NotReadableError") {
+          setError("No fue posible acceder al dispositivo de camara.")
+        } else {
+          setError("Error al activar la camara.")
         }
       } else {
-        setError("Error al acceder a la camara")
+        setError("Error al activar la camara.")
       }
     }
   }
@@ -62,16 +80,25 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
 
     const canvas = canvasRef.current
     const video = videoRef.current
+
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
 
     const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    if (!ctx) {
+      setError("No se pudo capturar la evidencia.")
+      return
+    }
 
     ctx.drawImage(video, 0, 0)
+
     canvas.toBlob(
       blob => {
-        if (!blob) return
+        if (!blob) {
+          setError("No se pudo generar la evidencia.")
+          return
+        }
+
         onCapture(blob)
         setCaptured(true)
         stopCamera()
@@ -81,33 +108,47 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     )
   }
 
-  if (captured) {
-    return <div className="text-sm text-emerald-600">Evidencia fotografica capturada</div>
-  }
-
   return (
-    <div className="flex flex-col items-center gap-3">
-      {error && <div className="text-sm text-red-600">{error}</div>}
-
-      {!ready && (
-        <button
-          onClick={startCamera}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-        >
-          Activar camara
-        </button>
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
       )}
 
-      <video ref={videoRef} className="w-full max-w-sm rounded-lg border border-slate-300" playsInline muted />
+      {!ready && !captured && (
+        <Button onClick={startCamera} size="sm">
+          Activar camara
+        </Button>
+      )}
+
+      {!captured && (
+        <video
+          ref={videoRef}
+          className="w-full max-w-sm rounded-lg border border-slate-300 bg-slate-900"
+          playsInline
+          muted
+        />
+      )}
+
       <canvas ref={canvasRef} className="hidden" />
 
-      {ready && (
-        <button
-          onClick={capturePhoto}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
-        >
+      {ready && !captured && (
+        <Button variant="secondary" size="sm" onClick={capturePhoto}>
           Capturar evidencia
-        </button>
+        </Button>
+      )}
+
+      {captured && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Evidencia fotografica capturada.
+        </div>
+      )}
+
+      {captured && (
+        <Button variant="ghost" size="sm" onClick={resetCapture}>
+          Tomar nueva foto
+        </Button>
       )}
     </div>
   )
