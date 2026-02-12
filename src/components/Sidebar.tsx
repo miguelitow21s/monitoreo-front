@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import type { Dispatch, SetStateAction } from "react"
+import type { Dispatch, ReactNode, SetStateAction } from "react"
 
 import { useRole } from "@/hooks/useRole"
 
@@ -13,10 +13,82 @@ type SidebarProps = {
   onCloseMobile: () => void
 }
 
+type NavKey = "dashboard" | "shifts" | "supplies" | "restaurants" | "users" | "reports"
+
 type NavItem = {
   href: string
   label: string
-  icon: string
+  key: NavKey
+}
+
+function Icon({ name }: { name: NavKey }) {
+  const base = "h-4 w-4"
+
+  if (name === "dashboard") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="4" rx="1" />
+        <rect x="14" y="10" width="7" height="11" rx="1" />
+        <rect x="3" y="13" width="7" height="8" rx="1" />
+      </svg>
+    )
+  }
+
+  if (name === "shifts") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    )
+  }
+
+  if (name === "supplies") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
+        <path d="M3 7h18" />
+        <path d="M5 7l1 13h12l1-13" />
+        <path d="M9 7V4h6v3" />
+      </svg>
+    )
+  }
+
+  if (name === "restaurants") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
+        <path d="M4 21V10l8-6 8 6v11" />
+        <path d="M9 21v-6h6v6" />
+      </svg>
+    )
+  }
+
+  if (name === "users") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3 20a6 6 0 0 1 12 0" />
+        <path d="M17 11a3 3 0 1 0 0-6" />
+        <path d="M21 20a5 5 0 0 0-4-5" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
+      <path d="M4 5h16v14H4z" />
+      <path d="M8 9h8M8 13h8M8 17h5" />
+    </svg>
+  )
+}
+
+function Tooltip({ show, children }: { show: boolean; children: ReactNode }) {
+  if (!show) return null
+  return (
+    <span className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 hidden -translate-y-1/2 rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white shadow-lg md:block">
+      {children}
+    </span>
+  )
 }
 
 export default function Sidebar({
@@ -28,21 +100,21 @@ export default function Sidebar({
   const pathname = usePathname()
   const { isEmpleado, isSupervisora, isSuperAdmin, loading } = useRole()
 
-  const items: NavItem[] = [{ href: "/dashboard", label: "Dashboard", icon: "DB" }]
+  const items: NavItem[] = [{ href: "/dashboard", label: "Dashboard", key: "dashboard" }]
 
   if (isEmpleado) {
-    items.push({ href: "/shifts", label: "Mi turno", icon: "TR" })
+    items.push({ href: "/shifts", label: "Mi turno", key: "shifts" })
   }
 
   if (isSupervisora) {
-    items.push({ href: "/shifts", label: "Turnos", icon: "TN" })
-    items.push({ href: "/supplies", label: "Insumos", icon: "IN" })
+    items.push({ href: "/shifts", label: "Turnos", key: "shifts" })
+    items.push({ href: "/supplies", label: "Insumos", key: "supplies" })
   }
 
   if (isSuperAdmin) {
-    items.push({ href: "/restaurants", label: "Restaurantes", icon: "RS" })
-    items.push({ href: "/users", label: "Usuarios", icon: "US" })
-    items.push({ href: "/reports", label: "Reportes", icon: "RP" })
+    items.push({ href: "/restaurants", label: "Restaurantes", key: "restaurants" })
+    items.push({ href: "/users", label: "Usuarios", key: "users" })
+    items.push({ href: "/reports", label: "Reportes", key: "reports" })
   }
 
   const desktopWidth = collapsed ? "md:w-20" : "md:w-64"
@@ -83,32 +155,37 @@ export default function Sidebar({
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-4 pt-2">
             {loading && (
-              <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">
-                Cargando menu...
-              </div>
+              <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">Cargando menu...</div>
             )}
 
             {!loading &&
               items.map(item => {
                 const active = pathname.startsWith(item.href)
                 const compact = collapsed ? "md:justify-center md:px-0" : ""
-                const title = collapsed ? item.label : undefined
+                const showTooltip = collapsed
+
                 return (
                   <Link
                     key={`${item.href}-${item.label}`}
                     href={item.href}
-                    title={title}
                     onClick={onCloseMobile}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition ${compact} ${
+                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition ${compact} ${
                       active
                         ? "bg-slate-900 text-white shadow-sm"
-                        : "text-slate-700 hover:bg-slate-100"
+                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                     }`}
                   >
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-current/20 text-[10px] font-bold">
-                      {item.icon}
+                    <span
+                      className={`absolute bottom-1 top-1 left-0 w-1 rounded-r-full transition ${
+                        active ? "bg-cyan-300" : "bg-transparent group-hover:bg-slate-300"
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-current/20">
+                      <Icon name={item.key} />
                     </span>
                     <span className={collapsed ? "md:hidden" : ""}>{item.label}</span>
+                    <Tooltip show={showTooltip}>{item.label}</Tooltip>
                   </Link>
                 )
               })}

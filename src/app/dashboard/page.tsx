@@ -2,35 +2,27 @@
 
 import ProtectedRoute from "@/components/ProtectedRoute"
 import { useRole } from "@/hooks/useRole"
+import Badge from "@/components/ui/Badge"
+import Button from "@/components/ui/Button"
+import Card from "@/components/ui/Card"
+import EmptyState from "@/components/ui/EmptyState"
+import Skeleton from "@/components/ui/Skeleton"
 
-type MetricCardProps = {
+type Metric = {
   label: string
   value: string
   trend: string
 }
 
-function MetricCard({ label, value, trend }: MetricCardProps) {
-  return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
-      <p className="mt-2 text-xs text-emerald-600">{trend}</p>
-    </article>
-  )
-}
+const metrics: Metric[] = [
+  { label: "Turnos activos", value: "18", trend: "+12% vs ayer" },
+  { label: "Cumplimiento", value: "94%", trend: "+2% semanal" },
+  { label: "Incidencias", value: "3", trend: "Sin bloqueos criticos" },
+  { label: "Locales monitoreados", value: "27", trend: "Cobertura completa" },
+]
 
 export default function DashboardPage() {
   const { loading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
-
-  if (loading) {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-28 animate-pulse rounded-2xl bg-slate-200" />
-        ))}
-      </div>
-    )
-  }
 
   const roleSummary = isSuperAdmin
     ? "Vista completa del sistema para administracion general."
@@ -38,65 +30,106 @@ export default function DashboardPage() {
       ? "Seguimiento operativo de turnos e insumos en tiempo real."
       : "Control personal de asistencia y evidencias de turno."
 
+  const quickActions = [
+    { label: "Ver turnos del dia", variant: "primary" as const },
+    { label: "Revisar incidencias", variant: "secondary" as const },
+    ...(isSuperAdmin ? [{ label: "Gestionar usuarios", variant: "ghost" as const }] : []),
+  ]
+
+  const pendingAlerts: string[] = []
+
   return (
     <ProtectedRoute>
       <section className="space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 px-6 py-6 text-white shadow-sm">
           <p className="text-xs uppercase tracking-[0.16em] text-slate-300">Panel principal</p>
-          <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Dashboard Operativo</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold sm:text-3xl">Dashboard Operativo</h1>
+            <Badge variant="info">Actualizado</Badge>
+          </div>
           <p className="mt-2 max-w-2xl text-sm text-slate-200">{roleSummary}</p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Turnos activos" value="18" trend="+12% vs ayer" />
-          <MetricCard label="Cumplimiento" value="94%" trend="+2% semanal" />
-          <MetricCard label="Incidencias" value="3" trend="Sin nuevos bloqueos" />
-          <MetricCard label="Locales monitoreados" value="27" trend="Cobertura completa" />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-            <h2 className="text-base font-semibold text-slate-900">Estado de operacion</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              La plataforma mantiene actividad estable durante la ultima jornada.
-              Recomendado: revisar cierres de turno pendientes antes de las 19:00.
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">Supervision</p>
-                <p className="text-sm font-semibold text-slate-800">
-                  {isSuperAdmin || isSupervisora ? "Habilitada" : "Solo lectura"}
-                </p>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">Evidencias</p>
-                <p className="text-sm font-semibold text-slate-800">Ultima carga hace 8 min</p>
-              </div>
+        {loading ? (
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-28" />
+              ))}
             </div>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-slate-900">Acciones rapidas</h2>
-            <div className="mt-4 space-y-2">
-              <button className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700">
-                Ver turnos del dia
-              </button>
-              <button className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                Revisar incidencias
-              </button>
-              {isSuperAdmin && (
-                <button className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                  Gestionar usuarios
-                </button>
-              )}
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Skeleton className="h-56 lg:col-span-2" />
+              <Skeleton className="h-56" />
             </div>
-          </article>
-        </div>
-
-        {isEmpleado && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            Tienes 1 turno pendiente de cierre. Recuerda adjuntar evidencia al finalizar.
           </div>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {metrics.map(metric => (
+                <Card
+                  key={metric.label}
+                  title={metric.label}
+                  value={metric.value}
+                  trend={metric.trend}
+                  variant="stat"
+                />
+              ))}
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Card
+                title="Estado de operacion"
+                subtitle="La plataforma mantiene actividad estable durante la ultima jornada. Recomendado: revisar cierres de turno pendientes antes de las 19:00."
+                className="lg:col-span-2"
+              >
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Supervision</p>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {isSuperAdmin || isSupervisora ? "Habilitada" : "Solo lectura"}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-xs text-slate-500">Evidencias</p>
+                    <p className="text-sm font-semibold text-slate-800">Ultima carga hace 8 min</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="Acciones rapidas" subtitle="Atajos disponibles segun tu rol.">
+                <div className="mt-4 space-y-2">
+                  {quickActions.map(action => (
+                    <Button key={action.label} fullWidth variant={action.variant}>
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+              </Card>
+            </div>
+
+            {pendingAlerts.length === 0 ? (
+              <EmptyState
+                title="Sin alertas criticas"
+                description="No hay incidencias pendientes de atencion inmediata."
+                actionLabel="Actualizar tablero"
+                onAction={() => window.location.reload()}
+              />
+            ) : (
+              <Card title="Alertas pendientes">
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                  {pendingAlerts.map(alert => (
+                    <li key={alert}>{alert}</li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+
+            {isEmpleado && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Tienes 1 turno pendiente de cierre. Recuerda adjuntar evidencia al finalizar.
+              </div>
+            )}
+          </>
         )}
       </section>
     </ProtectedRoute>
