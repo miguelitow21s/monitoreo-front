@@ -46,7 +46,11 @@ export async function startShift(payload: StartShiftPayload) {
     throw new Error("Datos incompletos para iniciar turno.")
   }
 
-  const { data, error } = await supabase.rpc("start_shift", payload)
+  const { data, error } = await supabase.rpc("start_shift", {
+    lat,
+    lng,
+    evidence_path: evidencePath,
+  })
   if (error) throw error
   return data
 }
@@ -57,7 +61,12 @@ export async function endShift(payload: EndShiftPayload) {
     throw new Error("Datos incompletos para finalizar turno.")
   }
 
-  const { data, error } = await supabase.rpc("end_shift", payload)
+  const { data, error } = await supabase.rpc("end_shift", {
+    shift_id: shiftId,
+    lat,
+    lng,
+    evidence_path: evidencePath,
+  })
   if (error) throw error
   return data
 }
