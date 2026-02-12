@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
@@ -100,6 +101,15 @@ export default function LoginPage() {
         >
           {submitting ? "Ingresando..." : "Entrar"}
         </button>
+
+        <div className="mt-4 flex items-center justify-between text-xs">
+          <Link href="/auth/forgot-password" className="text-slate-600 underline hover:text-slate-900">
+            Olvide mi contrasena
+          </Link>
+          <Link href="/auth/register" className="text-slate-600 underline hover:text-slate-900">
+            Registrarme
+          </Link>
+        </div>
       </form>
     </div>
   )

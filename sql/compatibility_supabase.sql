@@ -289,14 +289,59 @@ begin
   for each row execute function public.profiles_update();
 end $$;
 
--- 7) SUPPLIES compatibility columns
+-- 7) SELF REGISTRATION RPC (empleado)
+create or replace function public.register_employee(
+  p_user_id uuid,
+  p_email text,
+  p_full_name text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_role_id integer;
+begin
+  if p_user_id is null or p_email is null then
+    raise exception 'Parametros incompletos para registro.';
+  end if;
+
+  if not exists (
+    select 1 from auth.users au where au.id = p_user_id
+  ) then
+    raise exception 'Usuario auth invalido.';
+  end if;
+
+  select id
+    into v_role_id
+  from public.roles
+  where name::text = 'empleado'
+  limit 1;
+
+  if v_role_id is null then
+    raise exception 'No existe rol empleado en public.roles.';
+  end if;
+
+  insert into public.users (id, email, role_id, full_name, is_active)
+  values (p_user_id, p_email, v_role_id, p_full_name, false)
+  on conflict (id) do update
+  set
+    full_name = coalesce(excluded.full_name, public.users.full_name),
+    updated_at = now();
+end;
+$$;
+
+grant execute on function public.register_employee(uuid, text, text) to anon, authenticated;
+
+-- 8) SUPPLIES compatibility columns
 alter table public.supplies
   add column if not exists stock integer not null default 0;
 
 alter table public.supplies
   add column if not exists restaurant_id integer references public.restaurants(id) on delete set null;
 
--- 8) RPC compatibility wrappers expected by frontend
+-- 9) RPC compatibility wrappers expected by frontend
 create or replace function public.get_my_active_shift()
 returns table (
   id integer,
@@ -391,68 +436,61 @@ begin
 end;
 $$;
 
--- 9) STORAGE bucket and baseline policies for evidence uploads
-insert into storage.buckets (id, name, public)
-values ('evidence', 'evidence', false)
-on conflict (id) do nothing;
+-- 10) STORAGE bucket and policies (guarded: can fail if caller is not owner)
+do $$
+begin
+  begin
+    insert into storage.buckets (id, name, public)
+    values ('evidence', 'evidence', false)
+    on conflict (id) do nothing;
+  exception when insufficient_privilege then
+    raise notice 'Sin permisos para crear bucket evidence desde SQL Editor. Crealo manualmente en Storage > Buckets.';
+  end;
 
-alter table storage.objects enable row level security;
+  if exists (
+    select 1
+    from pg_tables
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and tableowner = current_user
+  ) then
+    execute 'alter table storage.objects enable row level security';
 
--- Remove old policies with same names if they exist
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'evidence_select'
-  ) THEN
-    DROP POLICY evidence_select ON storage.objects;
-  END IF;
+    if exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects' and policyname = 'evidence_select'
+    ) then
+      execute 'drop policy evidence_select on storage.objects';
+    end if;
 
-  IF EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'evidence_insert'
-  ) THEN
-    DROP POLICY evidence_insert ON storage.objects;
-  END IF;
+    if exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects' and policyname = 'evidence_insert'
+    ) then
+      execute 'drop policy evidence_insert on storage.objects';
+    end if;
 
-  IF EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'evidence_update'
-  ) THEN
-    DROP POLICY evidence_update ON storage.objects;
-  END IF;
+    if exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects' and policyname = 'evidence_update'
+    ) then
+      execute 'drop policy evidence_update on storage.objects';
+    end if;
 
-  IF EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'evidence_delete'
-  ) THEN
-    DROP POLICY evidence_delete ON storage.objects;
-  END IF;
-END $$;
+    if exists (
+      select 1 from pg_policies
+      where schemaname = 'storage' and tablename = 'objects' and policyname = 'evidence_delete'
+    ) then
+      execute 'drop policy evidence_delete on storage.objects';
+    end if;
 
-create policy evidence_select
-on storage.objects
-for select
-to authenticated
-using (bucket_id = 'evidence');
-
-create policy evidence_insert
-on storage.objects
-for insert
-to authenticated
-with check (bucket_id = 'evidence' and owner_id = auth.uid()::text);
-
-create policy evidence_update
-on storage.objects
-for update
-to authenticated
-using (bucket_id = 'evidence' and owner_id = auth.uid()::text)
-with check (bucket_id = 'evidence' and owner_id = auth.uid()::text);
-
-create policy evidence_delete
-on storage.objects
-for delete
-to authenticated
-using (bucket_id = 'evidence' and owner_id = auth.uid()::text);
+    execute 'create policy evidence_select on storage.objects for select to authenticated using (bucket_id = ''evidence'')';
+    execute 'create policy evidence_insert on storage.objects for insert to authenticated with check (bucket_id = ''evidence'' and owner_id = auth.uid()::text)';
+    execute 'create policy evidence_update on storage.objects for update to authenticated using (bucket_id = ''evidence'' and owner_id = auth.uid()::text) with check (bucket_id = ''evidence'' and owner_id = auth.uid()::text)';
+    execute 'create policy evidence_delete on storage.objects for delete to authenticated using (bucket_id = ''evidence'' and owner_id = auth.uid()::text)';
+  else
+    raise notice 'Sin ownership sobre storage.objects. Configura policies de evidence manualmente en Storage > Policies.';
+  end if;
+end $$;
 
 commit;
