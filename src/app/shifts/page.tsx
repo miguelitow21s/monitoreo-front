@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 
@@ -401,7 +401,7 @@ export default function ShiftsPage() {
                   return (
                     <Card
                       key={row.id}
-                      title={`Turno ${row.id.slice(0, 8)}`}
+                      title={`Turno ${String(row.id).slice(0, 8)}`}
                       subtitle={`Inicio: ${formatDateTime(row.start_time)} | Estado: ${row.status}`}
                     >
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -493,3 +493,4 @@ export default function ShiftsPage() {
     </ProtectedRoute>
   )
 }
+
