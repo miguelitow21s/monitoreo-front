@@ -24,7 +24,7 @@ export default function Card({
   return (
     <article
       className={[
-        "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm",
+        "rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_14px_32px_rgba(15,23,42,0.06)] backdrop-blur sm:p-5",
         className ?? "",
       ].join(" ")}
     >

@@ -14,8 +14,8 @@ type HeaderProps = {
 
 const roleLabel: Record<string, string> = {
   super_admin: "Super Admin",
-  supervisora: "Supervisora",
-  empleado: "Empleado",
+  supervisora: "Supervisor",
+  empleado: "Employee",
 }
 
 export default function Header({
@@ -27,33 +27,33 @@ export default function Header({
   const { role } = useRole()
 
   const leftClass = collapsed ? "md:left-20" : "md:left-64"
-  const emailLabel = useMemo(() => user?.email ?? "Sin usuario", [user?.email])
-  const roleText = role ? roleLabel[role] ?? role : "Sin rol"
+  const emailLabel = useMemo(() => user?.email ?? "No user", [user?.email])
+  const roleText = role ? roleLabel[role] ?? role : "No role"
 
   return (
     <header
-      className={`fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur ${leftClass}`}
+      className={`fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/90 px-3 shadow-[0_1px_0_rgba(15,23,42,0.06)] backdrop-blur sm:px-4 ${leftClass}`}
     >
       <div className="flex items-center gap-2">
         <button
           onClick={onToggleMobile}
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-700 md:hidden"
-          aria-label="Abrir menu"
+          aria-label="Open menu"
         >
-          ==
+          <span className="text-base">|||</span>
         </button>
         <button
           onClick={onToggleDesktop}
           className="hidden h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-700 md:inline-flex"
-          aria-label="Expandir o colapsar sidebar"
+          aria-label="Expand or collapse sidebar"
         >
           {collapsed ? ">>" : "<<"}
         </button>
         <div>
           <h1 className="max-w-[180px] truncate text-sm font-semibold text-slate-900 md:max-w-none md:text-base">
-            Plataforma de Control Operativo
+            Operations Control Platform
           </h1>
-          <p className="hidden text-xs text-slate-500 md:block">Monitoreo de turnos y supervision</p>
+          <p className="hidden text-xs text-slate-500 md:block">Shift tracking and field supervision</p>
         </div>
       </div>
 
@@ -70,13 +70,13 @@ export default function Header({
           onClick={logout}
           className="rounded-lg bg-slate-900 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-slate-700 md:px-3 md:text-xs"
         >
-          Salir
+          Sign out
         </button>
         <Link
           href="/account/password"
           className="rounded-lg border border-slate-300 px-2.5 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 md:px-3 md:text-xs"
         >
-          Contrasena
+          Password
         </Link>
       </div>
     </header>

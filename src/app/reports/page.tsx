@@ -51,7 +51,7 @@ export default function ReportsPage() {
       )
       setRows(reportRows)
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo cargar reportes.")
+      showToast("error", error instanceof Error ? error.message : "Could not load reports.")
     } finally {
       setLoading(false)
     }
@@ -76,9 +76,9 @@ export default function ReportsPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Reportes</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
 
-          <Card title="Filtros del reporte" subtitle="Consulta por rango de fechas y restaurante.">
+          <Card title="Report filters" subtitle="Filter by date range and restaurant.">
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               <input
                 type="date"
@@ -97,7 +97,7 @@ export default function ReportsPage() {
                 onChange={event => setRestaurantId(event.target.value)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
-                <option value="">Todos los restaurantes</option>
+                <option value="">All restaurants</option>
                 {restaurants.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -105,35 +105,35 @@ export default function ReportsPage() {
                 ))}
               </select>
               <Button variant="secondary" onClick={() => void loadReport()}>
-                Aplicar
+                Apply
               </Button>
               <Button variant="ghost" onClick={() => exportReportCsv(rows)}>
-                Exportar Excel (CSV)
+                Export Excel (CSV)
               </Button>
             </div>
           </Card>
 
-          <Card title="Resumen" subtitle="Indicadores del filtro actual.">
+          <Card title="Summary" subtitle="Current filter indicators.">
             <div className="mt-3 grid gap-2 md:grid-cols-3">
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Total turnos: {rows.length}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Finalizados: {totalCompleted}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Activos: {totalActive}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">Total shifts: {rows.length}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">Completed: {totalCompleted}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">Active: {totalActive}</div>
             </div>
             <div className="mt-3">
               <Button variant="primary" onClick={exportPdf}>
-                Exportar PDF
+                Export PDF
               </Button>
             </div>
           </Card>
 
-          <Card title="Resultado del reporte" subtitle="Enlaces de solo lectura por registro.">
+          <Card title="Report results" subtitle="Read-only row details.">
             {loading ? (
               <Skeleton className="h-28" />
             ) : rows.length === 0 ? (
               <EmptyState
-                title="Sin resultados"
-                description="No hay filas para el filtro seleccionado."
-                actionLabel="Reintentar"
+                title="No results"
+                description="No rows for the selected filter."
+                actionLabel="Retry"
                 onAction={() => void loadReport()}
               />
             ) : (
@@ -141,15 +141,15 @@ export default function ReportsPage() {
                 <div className="space-y-2 md:hidden">
                   {rows.map(item => (
                     <div key={item.id} className="rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs text-slate-500">Turno {String(item.id).slice(0, 8)}</p>
-                      <p className="mt-1 text-sm text-slate-700">Restaurante: {item.restaurant_id ?? "-"}</p>
+                      <p className="text-xs text-slate-500">Shift {String(item.id).slice(0, 8)}</p>
+                      <p className="mt-1 text-sm text-slate-700">Restaurant: {item.restaurant_id ?? "-"}</p>
                       <p className="mt-1 text-sm text-slate-700">
-                        Inicio: {new Date(item.start_time).toLocaleString("es-CO")}
+                        Start: {new Date(item.start_time).toLocaleString("en-US")}
                       </p>
                       <p className="mt-1 text-sm text-slate-700">
-                        Fin: {item.end_time ? new Date(item.end_time).toLocaleString("es-CO") : "-"}
+                        End: {item.end_time ? new Date(item.end_time).toLocaleString("en-US") : "-"}
                       </p>
-                      <p className="mt-1 text-sm text-slate-700">Estado: {item.status}</p>
+                      <p className="mt-1 text-sm text-slate-700">Status: {item.status}</p>
                     </div>
                   ))}
                 </div>
@@ -158,12 +158,12 @@ export default function ReportsPage() {
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 text-left text-slate-500">
-                        <th className="pb-2 pr-3">Turno</th>
-                        <th className="pb-2 pr-3">Restaurante</th>
-                        <th className="pb-2 pr-3">Inicio</th>
-                        <th className="pb-2 pr-3">Fin</th>
-                        <th className="pb-2 pr-3">Estado</th>
-                        <th className="pb-2 pr-3">Detalle</th>
+                        <th className="pb-2 pr-3">Shift</th>
+                        <th className="pb-2 pr-3">Restaurant</th>
+                        <th className="pb-2 pr-3">Start</th>
+                        <th className="pb-2 pr-3">End</th>
+                        <th className="pb-2 pr-3">Status</th>
+                        <th className="pb-2 pr-3">Detail</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -171,13 +171,13 @@ export default function ReportsPage() {
                         <tr key={item.id} className="border-b border-slate-100">
                           <td className="py-2 pr-3">{String(item.id).slice(0, 8)}</td>
                           <td className="py-2 pr-3">{item.restaurant_id ?? "-"}</td>
-                          <td className="py-2 pr-3">{new Date(item.start_time).toLocaleString("es-CO")}</td>
+                          <td className="py-2 pr-3">{new Date(item.start_time).toLocaleString("en-US")}</td>
                           <td className="py-2 pr-3">
-                            {item.end_time ? new Date(item.end_time).toLocaleString("es-CO") : "-"}
+                            {item.end_time ? new Date(item.end_time).toLocaleString("en-US") : "-"}
                           </td>
                           <td className="py-2 pr-3">{item.status}</td>
                           <td className="py-2 pr-3">
-                            <span className="text-xs text-slate-500">Solo lectura</span>
+                            <span className="text-xs text-slate-500">Read only</span>
                           </td>
                         </tr>
                       ))}

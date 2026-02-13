@@ -37,7 +37,7 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     setError(null)
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError("El dispositivo no soporta camara en este navegador.")
+      setError("This device does not support camera access in this browser.")
       return
     }
 
@@ -61,16 +61,16 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     } catch (err: unknown) {
       if (err instanceof DOMException) {
         if (err.name === "NotAllowedError") {
-          setError("Permiso de camara denegado.")
+          setError("Camera permission denied.")
         } else if (err.name === "NotFoundError") {
-          setError("No se encontro una camara disponible.")
+          setError("No camera device was found.")
         } else if (err.name === "NotReadableError") {
-          setError("No fue posible acceder al dispositivo de camara.")
+          setError("Could not access camera device.")
         } else {
-          setError("Error al activar la camara.")
+          setError("Error enabling camera.")
         }
       } else {
-        setError("Error al activar la camara.")
+        setError("Error enabling camera.")
       }
     }
   }
@@ -86,7 +86,7 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
 
     const ctx = canvas.getContext("2d")
     if (!ctx) {
-      setError("No se pudo capturar la evidencia.")
+      setError("Could not capture evidence photo.")
       return
     }
 
@@ -95,7 +95,7 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     canvas.toBlob(
       blob => {
         if (!blob) {
-          setError("No se pudo generar la evidencia.")
+          setError("Could not generate evidence file.")
           return
         }
 
@@ -118,7 +118,7 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
 
       {!ready && !captured && (
         <Button onClick={startCamera} size="sm">
-          Activar camara
+          Enable camera
         </Button>
       )}
 
@@ -135,19 +135,19 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
 
       {ready && !captured && (
         <Button variant="secondary" size="sm" onClick={capturePhoto}>
-          Capturar evidencia
+          Capture evidence
         </Button>
       )}
 
       {captured && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Evidencia fotografica capturada.
+          Evidence photo captured.
         </div>
       )}
 
       {captured && (
         <Button variant="ghost" size="sm" onClick={resetCapture}>
-          Tomar nueva foto
+          Take another photo
         </Button>
       )}
     </div>

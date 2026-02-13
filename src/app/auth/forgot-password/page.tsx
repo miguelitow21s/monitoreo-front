@@ -33,9 +33,9 @@ export default function ForgotPasswordPage() {
       })
 
       if (resetError) throw resetError
-      setMessage("Revisa tu correo para continuar con el cambio de contrasena.")
+      setMessage("Check your email to continue password reset.")
     } catch (err: unknown) {
-      setError(errorMessage(err, "No se pudo enviar el correo de recuperacion."))
+      setError(errorMessage(err, "Could not send password recovery email."))
     } finally {
       setSubmitting(false)
     }
@@ -48,11 +48,11 @@ export default function ForgotPasswordPage() {
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Recuperacion de acceso
+          Access recovery
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">Olvide mi contrasena</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">Forgot password</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Te enviaremos un enlace para restablecerla.
+          We will send you a link to reset it.
         </p>
 
         <div className="mt-6 space-y-3">
@@ -60,7 +60,7 @@ export default function ForgotPasswordPage() {
             type="email"
             required
             autoComplete="email"
-            placeholder="Correo electronico"
+            placeholder="Email address"
             value={email}
             onChange={e => setEmail(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -75,16 +75,15 @@ export default function ForgotPasswordPage() {
           disabled={submitting}
           className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
         >
-          {submitting ? "Enviando..." : "Enviar enlace"}
+          {submitting ? "Sending..." : "Send link"}
         </button>
 
         <div className="mt-4 text-right text-xs">
           <Link href="/auth/login" className="text-slate-600 underline hover:text-slate-900">
-            Volver a login
+            Back to login
           </Link>
         </div>
       </form>
     </div>
   )
 }
-

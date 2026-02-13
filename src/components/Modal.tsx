@@ -41,7 +41,7 @@ export default function Modal({ open, onClose, children }: ModalProps) {
       >
         <button
           onClick={onClose}
-          aria-label="Cerrar"
+          aria-label="Close"
           className="absolute right-3 top-3 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
         >
           X

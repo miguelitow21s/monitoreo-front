@@ -36,7 +36,7 @@ const HISTORY_PAGE_SIZE = 8
 function formatDateTime(value: string | null) {
   if (!value) return "-"
   const date = new Date(value)
-  return date.toLocaleString("es-CO", {
+  return date.toLocaleString("en-US", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -92,9 +92,9 @@ export default function ShiftsPage() {
 
   const submitBlockers = useMemo(() => {
     const blockers: string[] = []
-    if (!coords) blockers.push("Debes capturar ubicacion GPS.")
-    if (!photo) blockers.push("Debes capturar evidencia fotografica.")
-    if (processing) blockers.push("Hay una accion en proceso.")
+    if (!coords) blockers.push("You must capture GPS location.")
+    if (!photo) blockers.push("You must capture photo evidence.")
+    if (processing) blockers.push("There is an action in progress.")
     return blockers
   }, [coords, photo, processing])
 
@@ -114,7 +114,7 @@ export default function ShiftsPage() {
       setHistoryTotalPages(historyResult.totalPages)
       setScheduledShifts(scheduledResult)
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo cargar la informacion de turnos."))
+      showToast("error", extractErrorMessage(error, "Could not load shift information."))
     } finally {
       setLoadingData(false)
     }
@@ -126,7 +126,7 @@ export default function ShiftsPage() {
       const rows = await getActiveShiftsForSupervision(30)
       setSupervisorRows(rows)
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudieron cargar turnos activos."))
+      showToast("error", extractErrorMessage(error, "Could not load active shifts."))
     } finally {
       setLoadingSupervisor(false)
     }
@@ -143,15 +143,15 @@ export default function ShiftsPage() {
   }, [canOperateSupervisor, loadSupervisorData])
 
   const uploadEvidence = async (prefix: "shift-start" | "shift-end") => {
-    if (!photo) throw new Error("Debe capturar evidencia fotografica.")
-    if (!coords) throw new Error("Debe capturar ubicacion GPS antes de la evidencia.")
+    if (!photo) throw new Error("You must capture photo evidence.")
+    if (!coords) throw new Error("You must capture GPS location before evidence.")
 
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
     if (userError) throw userError
-    if (!user?.id) throw new Error("No se encontro usuario autenticado.")
+    if (!user?.id) throw new Error("Authenticated user not found.")
 
     const timestamp = new Date().toISOString().replaceAll(":", "-")
     const coordTag = `${coords.lat.toFixed(6)}_${coords.lng.toFixed(6)}`
@@ -179,24 +179,24 @@ export default function ShiftsPage() {
       const latestActive = await getMyActiveShift()
       if (latestActive) {
         setActiveShift(latestActive)
-        throw new Error("Ya existe un turno activo. Debes finalizarlo antes de iniciar otro.")
+        throw new Error("An active shift already exists. You must finish it before starting another one.")
       }
 
       const evidencePath = await uploadEvidence("shift-start")
       const shiftId = await startShift({ lat: coords.lat, lng: coords.lng, evidencePath })
 
       if (startObservation.trim()) {
-        await createShiftIncident(String(shiftId), `[INICIO] ${startObservation.trim()}`)
+        await createShiftIncident(String(shiftId), `[START] ${startObservation.trim()}`)
       }
 
-      showToast("success", "Turno iniciado correctamente.")
+      showToast("success", "Shift started successfully.")
       resetEvidenceAndLocation()
       setStartObservation("")
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadSupervisorData()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No fue posible iniciar el turno."))
+      showToast("error", extractErrorMessage(error, "Could not start shift."))
     } finally {
       setProcessing(false)
     }
@@ -216,17 +216,17 @@ export default function ShiftsPage() {
       })
 
       if (endObservation.trim()) {
-        await createShiftIncident(activeShift.id, `[CIERRE] ${endObservation.trim()}`)
+        await createShiftIncident(activeShift.id, `[END] ${endObservation.trim()}`)
       }
 
-      showToast("success", "Turno finalizado correctamente.")
+      showToast("success", "Shift finished successfully.")
       resetEvidenceAndLocation()
       setEndObservation("")
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadSupervisorData()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No fue posible finalizar el turno."))
+      showToast("error", extractErrorMessage(error, "Could not finish shift."))
     } finally {
       setProcessing(false)
     }
@@ -235,17 +235,17 @@ export default function ShiftsPage() {
   const handleStatusChange = async (shiftId: string, status: string) => {
     try {
       await updateShiftStatus(shiftId, status)
-      showToast("success", `Turno actualizado a ${status}.`)
+      showToast("success", `Shift updated to ${status}.`)
       await loadSupervisorData()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo actualizar el estado del turno."))
+      showToast("error", extractErrorMessage(error, "Could not update shift status."))
     }
   }
 
   const handleCreateIncident = async (shiftId: string) => {
     const note = (incidentNotes[shiftId] ?? "").trim()
     if (!note) {
-      showToast("info", "Escribe una incidencia antes de registrar.")
+      showToast("info", "Write an incident before saving.")
       return
     }
 
@@ -256,9 +256,9 @@ export default function ShiftsPage() {
         ...prev,
         [shiftId]: [incident, ...(prev[shiftId] ?? [])],
       }))
-      showToast("success", "Incidencia registrada.")
+      showToast("success", "Incident saved.")
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo registrar la incidencia."))
+      showToast("error", extractErrorMessage(error, "Could not save incident."))
     }
   }
 
@@ -275,18 +275,18 @@ export default function ShiftsPage() {
   const handleCreateEmployeeIncident = async () => {
     const note = employeeIncident.trim()
     if (!activeShift || !note) {
-      showToast("info", "Escribe una novedad para registrar.")
+      showToast("info", "Write a note before saving.")
       return
     }
 
     setCreatingEmployeeIncident(true)
     try {
-      await createShiftIncident(activeShift.id, `[EMPLEADO] ${note}`)
+      await createShiftIncident(activeShift.id, `[EMPLOYEE] ${note}`)
       setEmployeeIncident("")
-      showToast("success", "Novedad registrada correctamente.")
+      showToast("success", "Note saved successfully.")
       await loadSupervisorData()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo registrar la novedad."))
+      showToast("error", extractErrorMessage(error, "Could not save note."))
     } finally {
       setCreatingEmployeeIncident(false)
     }
@@ -295,11 +295,11 @@ export default function ShiftsPage() {
   return (
     <ProtectedRoute>
       <div className="space-y-6">
-        <Card title="Turnos" subtitle="Operacion de empleado y supervision en un mismo modulo." />
+        <Card title="Shifts" subtitle="Employee operation and supervision in one module." />
 
         {canOperateEmployee && (
           <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-900">Operacion de empleado</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Employee operations</h2>
 
             {loadingData ? (
               <Skeleton className="h-24" />
@@ -307,25 +307,25 @@ export default function ShiftsPage() {
               <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    Turno activo desde <b>{formatDateTime(activeShift.start_time)}</b>
+                    Active shift since <b>{formatDateTime(activeShift.start_time)}</b>
                   </span>
-                  <Badge variant="success">Activo</Badge>
+                  <Badge variant="success">Active</Badge>
                 </div>
               </div>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                No tienes turnos activos en este momento.
+                You have no active shifts right now.
               </div>
             )}
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card title="Ubicacion GPS" subtitle="Debes tener coordenadas validas para ejecutar acciones.">
+              <Card title="GPS location" subtitle="You must have valid coordinates to run actions.">
                 <div className="mt-3">
                   <GPSGuard onLocation={setCoords} />
                 </div>
               </Card>
 
-              <Card title="Evidencia fotografica" subtitle="La foto se toma desde camara y se sube a Storage.">
+              <Card title="Photo evidence" subtitle="Photo is captured from camera and uploaded to Storage.">
                 <div className="mt-3">
                   <CameraCapture onCapture={setPhoto} />
                 </div>
@@ -333,8 +333,8 @@ export default function ShiftsPage() {
             </div>
 
             <Card
-              title="Accion principal"
-              subtitle={activeShift ? "Finalizar turno activo" : "Iniciar nuevo turno"}
+              title="Main action"
+              subtitle={activeShift ? "Finish active shift" : "Start new shift"}
             >
               <div className="mt-3">
                 <textarea
@@ -346,8 +346,8 @@ export default function ShiftsPage() {
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
                   placeholder={
                     activeShift
-                      ? "Observacion final (opcional)"
-                      : "Observacion inicial (opcional)"
+                      ? "Final observation (optional)"
+                      : "Initial observation (optional)"
                   }
                 />
               </div>
@@ -355,11 +355,11 @@ export default function ShiftsPage() {
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {!activeShift ? (
                   <Button onClick={handleStart} disabled={!canSubmit} variant="primary">
-                    {processing ? "Iniciando..." : "Iniciar turno"}
+                    {processing ? "Starting..." : "Start shift"}
                   </Button>
                 ) : (
                   <Button onClick={handleEnd} disabled={!canSubmit} variant="danger">
-                    {processing ? "Finalizando..." : "Finalizar turno"}
+                    {processing ? "Finishing..." : "Finish shift"}
                   </Button>
                 )}
               </div>
@@ -374,14 +374,14 @@ export default function ShiftsPage() {
             </Card>
 
             {activeShift && (
-              <Card title="Reportar novedad" subtitle="Si ocurre algo durante el turno, registralo aqui.">
+              <Card title="Report note" subtitle="If something happens during the shift, register it here.">
                 <div className="space-y-2">
                   <textarea
                     value={employeeIncident}
                     onChange={event => setEmployeeIncident(event.target.value)}
                     rows={3}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
-                    placeholder="Describe la novedad o incidente..."
+                    placeholder="Describe the note or incident..."
                   />
                   <Button
                     size="sm"
@@ -389,13 +389,13 @@ export default function ShiftsPage() {
                     disabled={creatingEmployeeIncident}
                     onClick={() => void handleCreateEmployeeIncident()}
                   >
-                    {creatingEmployeeIncident ? "Guardando..." : "Registrar novedad"}
+                    {creatingEmployeeIncident ? "Saving..." : "Save note"}
                   </Button>
                 </div>
               </Card>
             )}
 
-            <Card title="Historial de turnos" subtitle="Vista paginada con estado y duracion.">
+            <Card title="Shift history" subtitle="Paginated view with status and duration.">
               {loadingData ? (
                 <div className="space-y-2">
                   {Array.from({ length: 4 }).map((_, index) => (
@@ -404,9 +404,9 @@ export default function ShiftsPage() {
                 </div>
               ) : history.length === 0 ? (
                 <EmptyState
-                  title="Sin historial"
-                  description="Cuando registres turnos, apareceran aqui."
-                  actionLabel="Recargar"
+                  title="No history"
+                  description="When you register shifts, they will appear here."
+                  actionLabel="Reload"
                   onAction={() => void loadEmployeeData(historyPage)}
                 />
               ) : (
@@ -415,10 +415,10 @@ export default function ShiftsPage() {
                     <table className="min-w-full border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                          <th className="pb-2 pr-3">Inicio</th>
-                          <th className="pb-2 pr-3">Fin</th>
-                          <th className="pb-2 pr-3">Estado</th>
-                          <th className="pb-2 pr-3">Duracion</th>
+                          <th className="pb-2 pr-3">Start</th>
+                          <th className="pb-2 pr-3">End</th>
+                          <th className="pb-2 pr-3">Status</th>
+                          <th className="pb-2 pr-3">Duration</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -428,7 +428,7 @@ export default function ShiftsPage() {
                             <td className="py-2 pr-3">{formatDateTime(shift.end_time)}</td>
                             <td className="py-2 pr-3">
                               <Badge variant={shift.end_time ? "neutral" : "success"}>
-                                {shift.end_time ? "Finalizado" : "Activo"}
+                                {shift.end_time ? "Completed" : "Active"}
                               </Badge>
                             </td>
                             <td className="py-2 pr-3">{formatDuration(shift.start_time, shift.end_time)}</td>
@@ -440,7 +440,7 @@ export default function ShiftsPage() {
 
                   <div className="mt-4 flex items-center justify-between">
                     <p className="text-xs text-slate-500">
-                      Pagina {historyPage} de {historyTotalPages}
+                      Page {historyPage} of {historyTotalPages}
                     </p>
                     <div className="flex gap-2">
                       <Button
@@ -449,7 +449,7 @@ export default function ShiftsPage() {
                         disabled={historyPage <= 1 || loadingData}
                         onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
                       >
-                        Anterior
+                        Previous
                       </Button>
                       <Button
                         variant="secondary"
@@ -457,7 +457,7 @@ export default function ShiftsPage() {
                         disabled={historyPage >= historyTotalPages || loadingData}
                         onClick={() => setHistoryPage(prev => prev + 1)}
                       >
-                        Siguiente
+                        Next
                       </Button>
                     </div>
                   </div>
@@ -465,15 +465,15 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card title="Turnos programados" subtitle="Agenda asignada para tus proximas jornadas.">
+            <Card title="Scheduled shifts" subtitle="Assigned agenda for your upcoming work periods.">
               {scheduledShifts.length === 0 ? (
-                <p className="text-sm text-slate-500">No tienes turnos programados.</p>
+                <p className="text-sm text-slate-500">You have no scheduled shifts.</p>
               ) : (
                 <div className="space-y-2">
                   {scheduledShifts.map(item => (
                     <div key={item.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
                       {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)} |{" "}
-                      Estado: {item.status}
+                      Status: {item.status}
                     </div>
                   ))}
                 </div>
@@ -484,15 +484,15 @@ export default function ShiftsPage() {
 
         {canOperateSupervisor && (
           <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-900">Panel de supervisora</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Supervisor panel</h2>
 
             {loadingSupervisor ? (
               <Skeleton className="h-40" />
             ) : supervisorRows.length === 0 ? (
               <EmptyState
-                title="Sin turnos activos"
-                description="Cuando haya actividad en curso la veras aqui."
-                actionLabel="Actualizar"
+                title="No active shifts"
+                description="When there is activity in progress, you will see it here."
+                actionLabel="Refresh"
                 onAction={() => void loadSupervisorData()}
               />
             ) : (
@@ -501,12 +501,12 @@ export default function ShiftsPage() {
                   return (
                     <Card
                       key={row.id}
-                      title={`Turno ${String(row.id).slice(0, 8)}`}
-                      subtitle={`Inicio: ${formatDateTime(row.start_time)} | Estado: ${row.status}`}
+                      title={`Shift ${String(row.id).slice(0, 8)}`}
+                      subtitle={`Start: ${formatDateTime(row.start_time)} | Status: ${row.status}`}
                     >
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="font-medium text-slate-700">Evidencia inicio</p>
+                          <p className="font-medium text-slate-700">Start evidence</p>
                           {row.start_evidence_path ? (
                             <Button
                               size="sm"
@@ -516,24 +516,24 @@ export default function ShiftsPage() {
                                   try {
                                     const signedUrl = await resolveEvidenceUrl(row.start_evidence_path)
                                     if (!signedUrl) {
-                                      showToast("info", "No se pudo generar URL de evidencia.")
+                                      showToast("info", "Could not generate evidence URL.")
                                       return
                                     }
                                     window.open(signedUrl, "_blank", "noopener,noreferrer")
                                   } catch (error: unknown) {
-                                    showToast("error", extractErrorMessage(error, "No se pudo abrir evidencia."))
+                                    showToast("error", extractErrorMessage(error, "Could not open evidence."))
                                   }
                                 })()
                               }}
                             >
-                              Ver evidencia inicial
+                              View start evidence
                             </Button>
                           ) : (
-                            <p className="text-slate-500">Sin evidencia registrada.</p>
+                            <p className="text-slate-500">No evidence registered.</p>
                           )}
                         </div>
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="font-medium text-slate-700">Evidencia cierre</p>
+                          <p className="font-medium text-slate-700">End evidence</p>
                           {row.end_evidence_path ? (
                             <Button
                               size="sm"
@@ -543,35 +543,35 @@ export default function ShiftsPage() {
                                   try {
                                     const signedUrl = await resolveEvidenceUrl(row.end_evidence_path)
                                     if (!signedUrl) {
-                                      showToast("info", "No se pudo generar URL de evidencia.")
+                                      showToast("info", "Could not generate evidence URL.")
                                       return
                                     }
                                     window.open(signedUrl, "_blank", "noopener,noreferrer")
                                   } catch (error: unknown) {
-                                    showToast("error", extractErrorMessage(error, "No se pudo abrir evidencia."))
+                                    showToast("error", extractErrorMessage(error, "Could not open evidence."))
                                   }
                                 })()
                               }}
                             >
-                              Ver evidencia final
+                              View end evidence
                             </Button>
                           ) : (
-                            <p className="text-slate-500">Pendiente de cierre.</p>
+                            <p className="text-slate-500">Pending close-out.</p>
                           )}
                         </div>
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button size="sm" variant="secondary" onClick={() => void handleStatusChange(row.id, "approved")}>
-                          Aprobar
+                          Approve
                         </Button>
                         <Button size="sm" variant="danger" onClick={() => void handleStatusChange(row.id, "rejected")}>
-                          Rechazar
+                          Reject
                         </Button>
                       </div>
 
                       <div className="mt-4 space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Registrar incidencia</label>
+                        <label className="text-sm font-medium text-slate-700">Register incident</label>
                         <textarea
                           value={incidentNotes[row.id] ?? ""}
                           onFocus={() => void loadIncidentsForShift(row.id)}
@@ -583,20 +583,20 @@ export default function ShiftsPage() {
                           }
                           rows={3}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
-                          placeholder="Describe la novedad observada..."
+                          placeholder="Describe the observed incident..."
                         />
                         <Button
                           size="sm"
                           variant="primary"
                           onClick={() => void handleCreateIncident(row.id)}
                         >
-                          Guardar incidencia
+                          Save incident
                         </Button>
                       </div>
 
                       {(incidentHistory[row.id] ?? []).length > 0 && (
                         <div className="mt-3 rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="mb-2 font-medium text-slate-700">Incidencias recientes</p>
+                          <p className="mb-2 font-medium text-slate-700">Recent incidents</p>
                           <ul className="space-y-1 text-slate-600">
                             {incidentHistory[row.id].map(incident => (
                               <li key={incident.id}>

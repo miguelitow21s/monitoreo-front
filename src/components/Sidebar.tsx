@@ -103,18 +103,18 @@ export default function Sidebar({
   const items: NavItem[] = [{ href: "/dashboard", label: "Dashboard", key: "dashboard" }]
 
   if (isEmpleado) {
-    items.push({ href: "/shifts", label: "Mi turno", key: "shifts" })
+    items.push({ href: "/shifts", label: "My Shift", key: "shifts" })
   }
 
   if (isSupervisora) {
-    items.push({ href: "/shifts", label: "Turnos", key: "shifts" })
-    items.push({ href: "/supplies", label: "Insumos", key: "supplies" })
+    items.push({ href: "/shifts", label: "Shifts", key: "shifts" })
+    items.push({ href: "/supplies", label: "Supplies", key: "supplies" })
   }
 
   if (isSuperAdmin) {
-    items.push({ href: "/restaurants", label: "Restaurantes", key: "restaurants" })
-    items.push({ href: "/users", label: "Usuarios", key: "users" })
-    items.push({ href: "/reports", label: "Reportes", key: "reports" })
+    items.push({ href: "/restaurants", label: "Restaurants", key: "restaurants" })
+    items.push({ href: "/users", label: "Users", key: "users" })
+    items.push({ href: "/reports", label: "Reports", key: "reports" })
   }
 
   const desktopWidth = collapsed ? "md:w-20" : "md:w-64"
@@ -131,7 +131,7 @@ export default function Sidebar({
       />
 
       <aside
-        className={`fixed left-0 top-0 z-50 h-screen w-72 transform border-r border-slate-200 bg-white transition-all duration-300 md:top-16 md:z-40 md:h-[calc(100vh-4rem)] md:translate-x-0 ${desktopWidth} ${mobileTranslate}`}
+        className={`fixed left-0 top-0 z-50 h-screen w-72 transform border-r border-slate-200/90 bg-white/95 backdrop-blur transition-all duration-300 md:top-16 md:z-40 md:h-[calc(100vh-4rem)] md:translate-x-0 ${desktopWidth} ${mobileTranslate}`}
       >
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 md:hidden">
@@ -140,7 +140,7 @@ export default function Sidebar({
               onClick={onCloseMobile}
               className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600"
             >
-              Cerrar
+              Close
             </button>
           </div>
 
@@ -149,13 +149,13 @@ export default function Sidebar({
               onClick={() => onToggle(v => !v)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100"
             >
-              {collapsed ? "Expandir" : "Colapsar"}
+              {collapsed ? "Expand" : "Collapse"}
             </button>
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-4 pt-2">
+          <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-5 pt-2">
             {loading && (
-              <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">Cargando menu...</div>
+              <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">Loading menu...</div>
             )}
 
             {!loading &&
@@ -169,9 +169,9 @@ export default function Sidebar({
                     key={`${item.href}-${item.label}`}
                     href={item.href}
                     onClick={onCloseMobile}
-                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition ${compact} ${
+                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${compact} ${
                       active
-                        ? "bg-slate-900 text-white shadow-sm"
+                        ? "bg-slate-900 text-white shadow-md shadow-slate-900/25"
                         : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                     }`}
                   >

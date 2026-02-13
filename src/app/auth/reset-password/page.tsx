@@ -25,12 +25,12 @@ export default function ResetPasswordPage() {
     setMessage(null)
 
     if (password.length < 8) {
-      setError("La contrasena debe tener minimo 8 caracteres.")
+      setError("Password must be at least 8 characters.")
       return
     }
 
     if (password !== confirmPassword) {
-      setError("Las contrasenas no coinciden.")
+      setError("Passwords do not match.")
       return
     }
 
@@ -40,10 +40,10 @@ export default function ResetPasswordPage() {
       const { error: updateError } = await supabase.auth.updateUser({ password })
       if (updateError) throw updateError
 
-      setMessage("Contrasena actualizada. Redirigiendo a login...")
+      setMessage("Password updated. Redirecting to login...")
       setTimeout(() => router.replace("/auth/login"), 1200)
     } catch (err: unknown) {
-      setError(errorMessage(err, "No se pudo actualizar la contrasena."))
+      setError(errorMessage(err, "Could not update password."))
     } finally {
       setSubmitting(false)
     }
@@ -56,11 +56,11 @@ export default function ResetPasswordPage() {
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Seguridad de cuenta
+          Account security
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">Restablecer contrasena</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">Reset password</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Define una contrasena nueva para tu cuenta.
+          Set a new password for your account.
         </p>
 
         <div className="mt-6 space-y-3">
@@ -69,7 +69,7 @@ export default function ResetPasswordPage() {
             required
             minLength={8}
             autoComplete="new-password"
-            placeholder="Nueva contrasena (min 8)"
+            placeholder="New password (min 8)"
             value={password}
             onChange={e => setPassword(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -79,7 +79,7 @@ export default function ResetPasswordPage() {
             required
             minLength={8}
             autoComplete="new-password"
-            placeholder="Confirmar nueva contrasena"
+            placeholder="Confirm new password"
             value={confirmPassword}
             onChange={e => setConfirmPassword(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -94,16 +94,15 @@ export default function ResetPasswordPage() {
           disabled={submitting}
           className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
         >
-          {submitting ? "Actualizando..." : "Guardar contrasena"}
+          {submitting ? "Updating..." : "Save password"}
         </button>
 
         <div className="mt-4 text-right text-xs">
           <Link href="/auth/login" className="text-slate-600 underline hover:text-slate-900">
-            Volver a login
+            Back to login
           </Link>
         </div>
       </form>
     </div>
   )
 }
-

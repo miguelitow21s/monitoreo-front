@@ -32,7 +32,7 @@ export function exportReportCsv(rows: ReportRow[]) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
-  link.download = `reporte-turnos-${Date.now()}.csv`
+  link.download = `shift-report-${Date.now()}.csv`
   link.click()
   URL.revokeObjectURL(url)
 }

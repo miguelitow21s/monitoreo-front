@@ -43,7 +43,7 @@ function normalizeActiveShift(data: unknown): ShiftRecord | null {
 export async function startShift(payload: StartShiftPayload) {
   const { lat, lng, evidencePath } = payload
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || !evidencePath) {
-    throw new Error("Datos incompletos para iniciar turno.")
+    throw new Error("Incomplete data to start shift.")
   }
 
   const { data, error } = await supabase.rpc("start_shift", {
@@ -58,7 +58,7 @@ export async function startShift(payload: StartShiftPayload) {
 export async function endShift(payload: EndShiftPayload) {
   const { shiftId, lat, lng, evidencePath } = payload
   if (!shiftId || !Number.isFinite(lat) || !Number.isFinite(lng) || !evidencePath) {
-    throw new Error("Datos incompletos para finalizar turno.")
+    throw new Error("Incomplete data to finish shift.")
   }
 
   const { data, error } = await supabase.rpc("end_shift", {
@@ -88,7 +88,7 @@ export async function getMyShiftHistory(page = 1, pageSize = 8): Promise<ShiftHi
     error: userError,
   } = await supabase.auth.getUser()
   if (userError) throw userError
-  if (!user?.id) throw new Error("No se encontro usuario autenticado.")
+  if (!user?.id) throw new Error("Authenticated user not found.")
 
   const { data, error, count } = await supabase
     .from("shifts")

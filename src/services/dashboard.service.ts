@@ -35,10 +35,10 @@ export async function fetchDashboardMetrics() {
   const completion = totalShifts > 0 ? Math.round(((totalShifts - activeShifts) / totalShifts) * 100) : 0
 
   const metrics: DashboardMetric[] = [
-    { label: "Turnos activos", value: String(activeShifts), trend: "Actualizacion en tiempo real" },
-    { label: "Cumplimiento", value: `${completion}%`, trend: "Turnos cerrados vs total" },
-    { label: "Incidencias", value: String(incidents), trend: "Reportes operativos acumulados" },
-    { label: "Locales monitoreados", value: String(restaurants), trend: "Cobertura total registrada" },
+    { label: "Active shifts", value: String(activeShifts), trend: "Real-time updates" },
+    { label: "Compliance", value: `${completion}%`, trend: "Closed shifts vs total" },
+    { label: "Incidents", value: String(incidents), trend: "Accumulated operational reports" },
+    { label: "Monitored sites", value: String(restaurants), trend: "Total registered coverage" },
   ]
 
   return metrics

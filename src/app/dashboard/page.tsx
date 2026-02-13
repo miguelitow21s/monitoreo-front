@@ -14,7 +14,7 @@ import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 
 function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("es-CO")
+  return new Date(value).toLocaleString("en-US")
 }
 
 export default function DashboardPage() {
@@ -27,21 +27,21 @@ export default function DashboardPage() {
   const [loadingData, setLoadingData] = useState(true)
 
   const roleSummary = isSuperAdmin
-    ? "Vista completa del sistema para administracion general."
+    ? "Complete system view for global administration."
     : isSupervisora
-      ? "Seguimiento operativo de turnos e insumos en tiempo real."
-      : "Control personal de asistencia y evidencias de turno."
+      ? "Real-time supervision of shifts and supplies."
+      : "Personal control of attendance and shift evidence."
 
   const quickActions = useMemo(
     () => [
-      { label: "Ver turnos del dia", onClick: () => router.push("/shifts"), variant: "primary" as const },
+      { label: "View today shifts", onClick: () => router.push("/shifts"), variant: "primary" as const },
       {
-        label: "Revisar incidencias",
+        label: "Review incidents",
         onClick: () => router.push("/shifts"),
         variant: "secondary" as const,
       },
       ...(isSuperAdmin
-        ? [{ label: "Gestionar usuarios", onClick: () => router.push("/users"), variant: "ghost" as const }]
+        ? [{ label: "Manage users", onClick: () => router.push("/users"), variant: "ghost" as const }]
         : []),
     ],
     [isSuperAdmin, router]
@@ -54,7 +54,7 @@ export default function DashboardPage() {
       setMetrics(metricRows)
       setAuditEvents(auditRows)
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo cargar dashboard.")
+      showToast("error", error instanceof Error ? error.message : "Could not load dashboard.")
     } finally {
       setLoadingData(false)
     }
@@ -69,10 +69,10 @@ export default function DashboardPage() {
     <ProtectedRoute>
       <section className="space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 px-4 py-5 text-white shadow-sm sm:px-6 sm:py-6">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-300">Panel principal</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-slate-300">Main panel</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-bold sm:text-3xl">Dashboard Operativo</h1>
-            <Badge variant="info">Actualizado</Badge>
+            <h1 className="text-xl font-bold sm:text-3xl">Operations Dashboard</h1>
+            <Badge variant="info">Updated</Badge>
           </div>
           <p className="mt-2 max-w-2xl text-sm text-slate-200">{roleSummary}</p>
         </div>
@@ -105,27 +105,27 @@ export default function DashboardPage() {
 
             <div className="grid gap-4 lg:grid-cols-3">
               <Card
-                title="Estado de operacion"
-                subtitle="Monitoreo diario con trazabilidad y control por rol."
+                title="Operations status"
+                subtitle="Daily monitoring with traceability and role-based control."
                 className="lg:col-span-2"
               >
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-xl bg-slate-50 p-3">
                     <p className="text-xs text-slate-500">Supervision</p>
                     <p className="text-sm font-semibold text-slate-800">
-                      {isSuperAdmin || isSupervisora ? "Habilitada" : "Solo lectura"}
+                      {isSuperAdmin || isSupervisora ? "Enabled" : "Read only"}
                     </p>
                   </div>
                   <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">Auditoria</p>
+                    <p className="text-xs text-slate-500">Audit</p>
                     <p className="text-sm font-semibold text-slate-800">
-                      {auditEvents.length} eventos recientes
+                      {auditEvents.length} recent events
                     </p>
                   </div>
                 </div>
               </Card>
 
-              <Card title="Acciones rapidas" subtitle="Atajos disponibles segun tu rol.">
+              <Card title="Quick actions" subtitle="Shortcuts available for your role.">
                 <div className="mt-4 space-y-2">
                   {quickActions.map(action => (
                     <Button
@@ -143,19 +143,19 @@ export default function DashboardPage() {
 
             {auditEvents.length === 0 ? (
               <EmptyState
-                title="Sin eventos de auditoria"
-                description="No hay movimientos recientes para mostrar."
-                actionLabel="Actualizar tablero"
+                title="No audit events"
+                description="No recent activity to show."
+                actionLabel="Refresh dashboard"
                 onAction={() => void loadData()}
               />
             ) : (
-              <Card title="Timeline de auditoria" subtitle="Ultimos eventos operativos registrados.">
+              <Card title="Audit timeline" subtitle="Latest operational events.">
                 <ul className="space-y-2 text-sm text-slate-700">
                   {auditEvents.map(item => (
                     <li key={item.id} className="rounded-lg border border-slate-200 p-2">
                       <p className="font-medium">{item.action}</p>
                       <p className="text-xs text-slate-500">
-                        {formatDateTime(item.created_at)} | Actor: {item.actor_id ?? "sistema"}
+                        {formatDateTime(item.created_at)} | Actor: {item.actor_id ?? "system"}
                       </p>
                     </li>
                   ))}
@@ -165,7 +165,7 @@ export default function DashboardPage() {
 
             {isEmpleado && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                Revisa tus turnos activos y finaliza con evidencia al cierre.
+                Check your active shifts and finish them with end-of-shift evidence.
               </div>
             )}
           </>

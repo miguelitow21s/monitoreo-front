@@ -23,7 +23,7 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
   const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setState("error")
-      setError("El dispositivo no soporta geolocalizacion.")
+      setError("This device does not support geolocation.")
       setCoords(null)
       onLocation(null)
       return
@@ -44,13 +44,13 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
         onLocation(nextCoords)
       },
       geolocationError => {
-        let message = "Error obteniendo ubicacion."
+        let message = "Could not get location."
         if (geolocationError.code === geolocationError.PERMISSION_DENIED) {
-          message = "Permiso de ubicacion denegado."
+          message = "Location permission denied."
         } else if (geolocationError.code === geolocationError.POSITION_UNAVAILABLE) {
-          message = "Ubicacion no disponible."
+          message = "Location unavailable."
         } else if (geolocationError.code === geolocationError.TIMEOUT) {
-          message = "Tiempo de espera agotado para GPS."
+          message = "GPS request timed out."
         }
 
         setError(message)
@@ -75,11 +75,11 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
 
   return (
     <div className="space-y-3">
-      {state === "loading" && <p className="text-sm text-slate-500">Obteniendo ubicacion GPS...</p>}
+      {state === "loading" && <p className="text-sm text-slate-500">Getting GPS location...</p>}
 
       {state === "ready" && coords && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          GPS activo. Lat: {coords.lat.toFixed(6)} | Lng: {coords.lng.toFixed(6)}
+          GPS active. Lat: {coords.lat.toFixed(6)} | Lng: {coords.lng.toFixed(6)}
         </div>
       )}
 
@@ -90,7 +90,7 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
       )}
 
       <Button variant="secondary" size="sm" onClick={requestLocation}>
-        Reintentar GPS
+        Retry GPS
       </Button>
     </div>
   )

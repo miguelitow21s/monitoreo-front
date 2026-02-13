@@ -28,17 +28,17 @@ export default function AccountPasswordPage() {
     setMessage(null)
 
     if (!user?.email) {
-      setError("No se encontro un usuario autenticado.")
+      setError("No authenticated user found.")
       return
     }
 
     if (newPassword.length < 8) {
-      setError("La nueva contrasena debe tener minimo 8 caracteres.")
+      setError("New password must be at least 8 characters.")
       return
     }
 
     if (newPassword !== confirmPassword) {
-      setError("La confirmacion no coincide con la nueva contrasena.")
+      setError("Confirmation does not match new password.")
       return
     }
 
@@ -49,7 +49,7 @@ export default function AccountPasswordPage() {
         email: user.email,
         password: currentPassword,
       })
-      if (signInError) throw new Error("La contrasena actual es incorrecta.")
+      if (signInError) throw new Error("Current password is incorrect.")
 
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
       if (updateError) throw updateError
@@ -57,9 +57,9 @@ export default function AccountPasswordPage() {
       setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
-      setMessage("Contrasena actualizada correctamente.")
+      setMessage("Password updated successfully.")
     } catch (err: unknown) {
-      setError(errorMessage(err, "No fue posible actualizar la contrasena."))
+      setError(errorMessage(err, "Could not update password."))
     } finally {
       setSubmitting(false)
     }
@@ -68,13 +68,13 @@ export default function AccountPasswordPage() {
   return (
     <ProtectedRoute>
       <div className="mx-auto w-full max-w-xl">
-        <Card title="Cambiar contrasena" subtitle="Actualiza credenciales de tu cuenta actual.">
+        <Card title="Change password" subtitle="Update credentials for your current account.">
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <input
               type="password"
               required
               autoComplete="current-password"
-              placeholder="Contrasena actual"
+              placeholder="Current password"
               value={currentPassword}
               onChange={e => setCurrentPassword(e.target.value)}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -84,7 +84,7 @@ export default function AccountPasswordPage() {
               required
               minLength={8}
               autoComplete="new-password"
-              placeholder="Nueva contrasena (min 8)"
+              placeholder="New password (min 8)"
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -94,7 +94,7 @@ export default function AccountPasswordPage() {
               required
               minLength={8}
               autoComplete="new-password"
-              placeholder="Confirmar nueva contrasena"
+              placeholder="Confirm new password"
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -105,7 +105,7 @@ export default function AccountPasswordPage() {
 
             <div className="pt-2">
               <Button type="submit" disabled={submitting} variant="primary">
-                {submitting ? "Guardando..." : "Guardar nueva contrasena"}
+                {submitting ? "Saving..." : "Save new password"}
               </Button>
             </div>
           </form>
@@ -114,4 +114,3 @@ export default function AccountPasswordPage() {
     </ProtectedRoute>
   )
 }
-

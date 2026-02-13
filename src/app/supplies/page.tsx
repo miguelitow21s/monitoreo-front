@@ -33,7 +33,7 @@ export default function SuppliesPage() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
 
   const [supplyName, setSupplyName] = useState("")
-  const [supplyUnit, setSupplyUnit] = useState("unidad")
+  const [supplyUnit, setSupplyUnit] = useState("unit")
   const [supplyStock, setSupplyStock] = useState("0")
 
   const [deliverySupplyId, setDeliverySupplyId] = useState("")
@@ -55,7 +55,7 @@ export default function SuppliesPage() {
       setDeliverySupplyId(prev => prev || suppliesRows[0]?.id || "")
       setDeliveryRestaurantId(prev => prev || restaurantRows[0]?.id || "")
     } catch (error: unknown) {
-      showToast("error", extractError(error, "No se pudo cargar el modulo de insumos."))
+      showToast("error", extractError(error, "Could not load supplies module."))
     } finally {
       setLoading(false)
     }
@@ -73,30 +73,30 @@ export default function SuppliesPage() {
   const handleCreateSupply = async () => {
     const parsedStock = Number(supplyStock)
     if (!supplyName.trim() || !Number.isFinite(parsedStock)) {
-      showToast("info", "Completa nombre y stock valido.")
+      showToast("info", "Complete name and valid stock.")
       return
     }
 
     try {
       const created = await createSupply({
         name: supplyName.trim(),
-        unit: supplyUnit.trim() || "unidad",
+        unit: supplyUnit.trim() || "unit",
         stock: parsedStock,
         restaurant_id: null,
       })
       setSupplies(prev => [created, ...prev])
       setSupplyName("")
       setSupplyStock("0")
-      showToast("success", "Insumo creado.")
+      showToast("success", "Supply created.")
     } catch (error: unknown) {
-      showToast("error", extractError(error, "No se pudo crear el insumo."))
+      showToast("error", extractError(error, "Could not create supply."))
     }
   }
 
   const handleRegisterDelivery = async () => {
     const parsedQuantity = Number(deliveryQuantity)
     if (!deliverySupplyId || !deliveryRestaurantId || !Number.isFinite(parsedQuantity)) {
-      showToast("info", "Selecciona insumo, restaurante y cantidad valida.")
+      showToast("info", "Select supply, restaurant and valid quantity.")
       return
     }
 
@@ -107,9 +107,9 @@ export default function SuppliesPage() {
         quantity: parsedQuantity,
       })
       setDeliveries(prev => [created, ...prev].slice(0, 40))
-      showToast("success", "Entrega registrada.")
+      showToast("success", "Delivery registered.")
     } catch (error: unknown) {
-      showToast("error", extractError(error, "No se pudo registrar la entrega."))
+      showToast("error", extractError(error, "Could not register delivery."))
     }
   }
 
@@ -117,37 +117,37 @@ export default function SuppliesPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Insumos</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Supplies</h1>
 
           {loading ? (
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title="Crear insumo" subtitle="Alta de producto base para inventario.">
+              <Card title="Create supply" subtitle="Add a base product for inventory.">
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <input
                     value={supplyName}
                     onChange={event => setSupplyName(event.target.value)}
-                    placeholder="Nombre"
+                    placeholder="Name"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <input
                     value={supplyUnit}
                     onChange={event => setSupplyUnit(event.target.value)}
-                    placeholder="Unidad"
+                    placeholder="Unit"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <input
                     value={supplyStock}
                     onChange={event => setSupplyStock(event.target.value)}
-                    placeholder="Stock inicial"
+                    placeholder="Initial stock"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
-                  <Button onClick={handleCreateSupply}>Guardar</Button>
+                  <Button onClick={handleCreateSupply}>Save</Button>
                 </div>
               </Card>
 
-              <Card title="Registrar entrega" subtitle="Asocia cantidad entregada a un restaurante.">
+              <Card title="Register delivery" subtitle="Associate delivered quantity to a restaurant.">
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <select
                     value={deliverySupplyId}
@@ -174,21 +174,21 @@ export default function SuppliesPage() {
                   <input
                     value={deliveryQuantity}
                     onChange={event => setDeliveryQuantity(event.target.value)}
-                    placeholder="Cantidad"
+                    placeholder="Quantity"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <Button variant="secondary" onClick={handleRegisterDelivery}>
-                    Registrar
+                    Register
                   </Button>
                 </div>
               </Card>
 
-              <Card title="Inventario actual" subtitle="Control de stock por insumo.">
+              <Card title="Current inventory" subtitle="Stock control by supply item.">
                 {supplies.length === 0 ? (
                   <EmptyState
-                    title="Sin insumos"
-                    description="Crea el primer insumo para comenzar."
-                    actionLabel="Recargar"
+                    title="No supplies"
+                    description="Create the first supply item to begin."
+                    actionLabel="Reload"
                     onAction={() => void loadData()}
                   />
                 ) : (
@@ -197,7 +197,7 @@ export default function SuppliesPage() {
                       {supplies.map(item => (
                         <div key={item.id} className="rounded-lg border border-slate-200 p-3">
                           <p className="font-medium text-slate-900">{item.name}</p>
-                          <p className="mt-1 text-sm text-slate-600">Unidad: {item.unit}</p>
+                          <p className="mt-1 text-sm text-slate-600">Unit: {item.unit}</p>
                           <p className="mt-1 text-sm text-slate-600">Stock: {item.stock}</p>
                         </div>
                       ))}
@@ -207,8 +207,8 @@ export default function SuppliesPage() {
                       <table className="min-w-full text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 text-left text-slate-500">
-                            <th className="pb-2 pr-3">Nombre</th>
-                            <th className="pb-2 pr-3">Unidad</th>
+                            <th className="pb-2 pr-3">Name</th>
+                            <th className="pb-2 pr-3">Unit</th>
                             <th className="pb-2 pr-3">Stock</th>
                           </tr>
                         </thead>
@@ -227,14 +227,14 @@ export default function SuppliesPage() {
                 )}
               </Card>
 
-              <Card title="Historial de entregas" subtitle="Ultimos movimientos registrados.">
+              <Card title="Delivery history" subtitle="Latest registered movements.">
                 {deliveries.length === 0 ? (
-                  <p className="text-sm text-slate-500">No hay entregas registradas.</p>
+                  <p className="text-sm text-slate-500">No deliveries registered.</p>
                 ) : (
                   <ul className="space-y-1 text-sm text-slate-700">
                     {deliveries.map(item => (
                       <li key={item.id}>
-                        {new Date(item.delivered_at).toLocaleString("es-CO")} - {item.quantity} unidades
+                        {new Date(item.delivered_at).toLocaleString("en-US")} - {item.quantity} units
                       </li>
                     ))}
                   </ul>
@@ -242,7 +242,7 @@ export default function SuppliesPage() {
               </Card>
 
               {inconsistencies.length > 0 && (
-                <Card title="Inconsistencias detectadas" subtitle="Stock negativo encontrado.">
+                <Card title="Detected inconsistencies" subtitle="Negative stock detected.">
                   <ul className="list-disc space-y-1 pl-5 text-sm text-red-700">
                     {inconsistencies.map(item => (
                       <li key={item.id}>

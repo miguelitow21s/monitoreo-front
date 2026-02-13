@@ -30,7 +30,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
-      setError("Credenciales invalidas")
+      setError("Invalid credentials")
       setSubmitting(false)
       return
     }
@@ -45,11 +45,11 @@ export default function LoginPage() {
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Acceso seguro
+          Secure access
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">Iniciar sesion</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">Sign in</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Ingresa tus credenciales para continuar en el sistema operativo.
+          Enter your credentials to continue.
         </p>
 
         <div className="mt-6 space-y-3">
@@ -57,7 +57,7 @@ export default function LoginPage() {
             type="email"
             required
             autoComplete="email"
-            placeholder="Correo electronico"
+            placeholder="Email address"
             value={email}
             onChange={e => {
               setEmail(e.target.value)
@@ -70,7 +70,7 @@ export default function LoginPage() {
             type="password"
             required
             autoComplete="current-password"
-            placeholder="Contrasena"
+            placeholder="Password"
             value={password}
             onChange={e => {
               setPassword(e.target.value)
@@ -87,15 +87,15 @@ export default function LoginPage() {
           disabled={submitting || loading}
           className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
         >
-          {submitting ? "Ingresando..." : "Entrar"}
+          {submitting ? "Signing in..." : "Sign in"}
         </button>
 
         <div className="mt-4 flex items-center justify-between text-xs">
           <Link href="/auth/forgot-password" className="text-slate-600 underline hover:text-slate-900">
-            Olvide mi contrasena
+            Forgot password
           </Link>
           <Link href="/auth/register" className="text-slate-600 underline hover:text-slate-900">
-            Registrarme
+            Register
           </Link>
         </div>
       </form>

@@ -41,9 +41,9 @@ export default function LayoutShell({ children }: LayoutShellProps) {
         onCloseMobile={() => setMobileOpen(false)}
       />
       <main
-        className={`min-h-screen px-4 pb-6 pt-20 transition-all duration-300 sm:px-6 md:pb-16 ${desktopOffset}`}
+        className={`min-h-screen px-3 pb-7 pt-20 transition-all duration-300 sm:px-5 md:pb-16 md:pt-22 lg:px-7 ${desktopOffset}`}
       >
-        {children}
+        <div className="mx-auto w-full max-w-[1400px]">{children}</div>
       </main>
       <Footer collapsed={collapsed} />
     </>
