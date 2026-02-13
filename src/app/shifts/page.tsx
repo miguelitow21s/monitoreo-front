@@ -78,6 +78,10 @@ export default function ShiftsPage() {
   const [historyPage, setHistoryPage] = useState(1)
   const [historyTotalPages, setHistoryTotalPages] = useState(1)
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([])
+  const [startObservation, setStartObservation] = useState("")
+  const [endObservation, setEndObservation] = useState("")
+  const [employeeIncident, setEmployeeIncident] = useState("")
+  const [creatingEmployeeIncident, setCreatingEmployeeIncident] = useState(false)
 
   const [supervisorRows, setSupervisorRows] = useState<SupervisorShiftRow[]>([])
   const [loadingSupervisor, setLoadingSupervisor] = useState(false)
@@ -179,10 +183,15 @@ export default function ShiftsPage() {
       }
 
       const evidencePath = await uploadEvidence("shift-start")
-      await startShift({ lat: coords.lat, lng: coords.lng, evidencePath })
+      const shiftId = await startShift({ lat: coords.lat, lng: coords.lng, evidencePath })
+
+      if (startObservation.trim()) {
+        await createShiftIncident(String(shiftId), `[INICIO] ${startObservation.trim()}`)
+      }
 
       showToast("success", "Turno iniciado correctamente.")
       resetEvidenceAndLocation()
+      setStartObservation("")
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadSupervisorData()
@@ -206,8 +215,13 @@ export default function ShiftsPage() {
         evidencePath,
       })
 
+      if (endObservation.trim()) {
+        await createShiftIncident(activeShift.id, `[CIERRE] ${endObservation.trim()}`)
+      }
+
       showToast("success", "Turno finalizado correctamente.")
       resetEvidenceAndLocation()
+      setEndObservation("")
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadSupervisorData()
@@ -258,6 +272,26 @@ export default function ShiftsPage() {
     }
   }
 
+  const handleCreateEmployeeIncident = async () => {
+    const note = employeeIncident.trim()
+    if (!activeShift || !note) {
+      showToast("info", "Escribe una novedad para registrar.")
+      return
+    }
+
+    setCreatingEmployeeIncident(true)
+    try {
+      await createShiftIncident(activeShift.id, `[EMPLEADO] ${note}`)
+      setEmployeeIncident("")
+      showToast("success", "Novedad registrada correctamente.")
+      await loadSupervisorData()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, "No se pudo registrar la novedad."))
+    } finally {
+      setCreatingEmployeeIncident(false)
+    }
+  }
+
   return (
     <ProtectedRoute>
       <div className="space-y-6">
@@ -302,6 +336,22 @@ export default function ShiftsPage() {
               title="Accion principal"
               subtitle={activeShift ? "Finalizar turno activo" : "Iniciar nuevo turno"}
             >
+              <div className="mt-3">
+                <textarea
+                  rows={3}
+                  value={activeShift ? endObservation : startObservation}
+                  onChange={event =>
+                    activeShift ? setEndObservation(event.target.value) : setStartObservation(event.target.value)
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                  placeholder={
+                    activeShift
+                      ? "Observacion final (opcional)"
+                      : "Observacion inicial (opcional)"
+                  }
+                />
+              </div>
+
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {!activeShift ? (
                   <Button onClick={handleStart} disabled={!canSubmit} variant="primary">
@@ -322,6 +372,28 @@ export default function ShiftsPage() {
                 </ul>
               )}
             </Card>
+
+            {activeShift && (
+              <Card title="Reportar novedad" subtitle="Si ocurre algo durante el turno, registralo aqui.">
+                <div className="space-y-2">
+                  <textarea
+                    value={employeeIncident}
+                    onChange={event => setEmployeeIncident(event.target.value)}
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                    placeholder="Describe la novedad o incidente..."
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={creatingEmployeeIncident}
+                    onClick={() => void handleCreateEmployeeIncident()}
+                  >
+                    {creatingEmployeeIncident ? "Guardando..." : "Registrar novedad"}
+                  </Button>
+                </div>
+              </Card>
+            )}
 
             <Card title="Historial de turnos" subtitle="Vista paginada con estado y duracion.">
               {loadingData ? (
