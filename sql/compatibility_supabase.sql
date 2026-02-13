@@ -369,6 +369,8 @@ create or replace function public.app_user_role(p_user_id uuid)
 returns text
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select r.name::text
   from public.users u
@@ -376,6 +378,8 @@ as $$
   where u.id = p_user_id
   limit 1;
 $$;
+
+grant execute on function public.app_user_role(uuid) to authenticated;
 
 create or replace function public.assign_scheduled_shift(
   p_employee_id uuid,
@@ -691,6 +695,290 @@ begin
   else
     raise notice 'Sin ownership sobre storage.objects. Configura policies de evidence manualmente en Storage > Policies.';
   end if;
+end $$;
+
+-- 11) RLS + POLICIES by role (BPMN aligned)
+create or replace function public.current_actor_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.app_user_role(auth.uid());
+$$;
+
+grant execute on function public.current_actor_role() to authenticated;
+
+alter table public.users enable row level security;
+alter table public.restaurants enable row level security;
+alter table public.restaurant_employees enable row level security;
+alter table public.shifts enable row level security;
+alter table public.incidents enable row level security;
+alter table public.scheduled_shifts enable row level security;
+alter table public.audit_logs enable row level security;
+alter table public.supplies enable row level security;
+alter table public.supply_deliveries enable row level security;
+alter table public.reports enable row level security;
+
+create or replace function public.set_supply_delivery_defaults()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.delivered_at is null then
+    new.delivered_at := now();
+  end if;
+
+  if new.delivered_by is null then
+    new.delivered_by := auth.uid();
+  end if;
+
+  return new;
+end;
+$$;
+
+do $$
+begin
+  if exists (select 1 from pg_trigger where tgname = 'tr_supply_deliveries_defaults') then
+    drop trigger tr_supply_deliveries_defaults on public.supply_deliveries;
+  end if;
+
+  create trigger tr_supply_deliveries_defaults
+  before insert on public.supply_deliveries
+  for each row execute function public.set_supply_delivery_defaults();
+end $$;
+
+do $$
+begin
+  -- users
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'users' and policyname = 'users_select_self_or_admin') then
+    drop policy users_select_self_or_admin on public.users;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'users' and policyname = 'users_update_admin') then
+    drop policy users_update_admin on public.users;
+  end if;
+  create policy users_select_self_or_admin
+  on public.users
+  for select
+  to authenticated
+  using (id = auth.uid() or public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  create policy users_update_admin
+  on public.users
+  for update
+  to authenticated
+  using (public.current_actor_role() = 'super_admin')
+  with check (public.current_actor_role() = 'super_admin');
+
+  -- restaurants
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'restaurants' and policyname = 'restaurants_select_authenticated') then
+    drop policy restaurants_select_authenticated on public.restaurants;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'restaurants' and policyname = 'restaurants_write_super_admin') then
+    drop policy restaurants_write_super_admin on public.restaurants;
+  end if;
+  create policy restaurants_select_authenticated
+  on public.restaurants
+  for select
+  to authenticated
+  using (true);
+
+  create policy restaurants_write_super_admin
+  on public.restaurants
+  for all
+  to authenticated
+  using (public.current_actor_role() = 'super_admin')
+  with check (public.current_actor_role() = 'super_admin');
+
+  -- restaurant_employees
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'restaurant_employees' and policyname = 'restaurant_employees_select_scoped') then
+    drop policy restaurant_employees_select_scoped on public.restaurant_employees;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'restaurant_employees' and policyname = 'restaurant_employees_write_admin') then
+    drop policy restaurant_employees_write_admin on public.restaurant_employees;
+  end if;
+  create policy restaurant_employees_select_scoped
+  on public.restaurant_employees
+  for select
+  to authenticated
+  using (
+    user_id = auth.uid()
+    or public.current_actor_role() in ('super_admin', 'supervisora')
+  );
+
+  create policy restaurant_employees_write_admin
+  on public.restaurant_employees
+  for all
+  to authenticated
+  using (public.current_actor_role() = 'super_admin')
+  with check (public.current_actor_role() = 'super_admin');
+
+  -- shifts
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'shifts' and policyname = 'shifts_select_by_role') then
+    drop policy shifts_select_by_role on public.shifts;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'shifts' and policyname = 'shifts_update_supervision') then
+    drop policy shifts_update_supervision on public.shifts;
+  end if;
+  create policy shifts_select_by_role
+  on public.shifts
+  for select
+  to authenticated
+  using (
+    employee_id = auth.uid()
+    or public.current_actor_role() in ('super_admin', 'supervisora')
+  );
+
+  create policy shifts_update_supervision
+  on public.shifts
+  for update
+  to authenticated
+  using (public.current_actor_role() in ('super_admin', 'supervisora'))
+  with check (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  -- incidents
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'incidents' and policyname = 'incidents_select_by_role') then
+    drop policy incidents_select_by_role on public.incidents;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'incidents' and policyname = 'incidents_insert_scoped') then
+    drop policy incidents_insert_scoped on public.incidents;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'incidents' and policyname = 'incidents_update_supervision') then
+    drop policy incidents_update_supervision on public.incidents;
+  end if;
+  create policy incidents_select_by_role
+  on public.incidents
+  for select
+  to authenticated
+  using (
+    public.current_actor_role() in ('super_admin', 'supervisora')
+    or exists (
+      select 1
+      from public.shifts s
+      where s.id = incidents.shift_id
+        and s.employee_id = auth.uid()
+    )
+  );
+
+  create policy incidents_insert_scoped
+  on public.incidents
+  for insert
+  to authenticated
+  with check (
+    created_by = auth.uid()
+    and (
+      public.current_actor_role() in ('super_admin', 'supervisora')
+      or exists (
+        select 1
+        from public.shifts s
+        where s.id = incidents.shift_id
+          and s.employee_id = auth.uid()
+      )
+    )
+  );
+
+  create policy incidents_update_supervision
+  on public.incidents
+  for update
+  to authenticated
+  using (public.current_actor_role() in ('super_admin', 'supervisora'))
+  with check (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  -- scheduled_shifts
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'scheduled_shifts' and policyname = 'scheduled_shifts_select_by_role') then
+    drop policy scheduled_shifts_select_by_role on public.scheduled_shifts;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'scheduled_shifts' and policyname = 'scheduled_shifts_write_supervision') then
+    drop policy scheduled_shifts_write_supervision on public.scheduled_shifts;
+  end if;
+  create policy scheduled_shifts_select_by_role
+  on public.scheduled_shifts
+  for select
+  to authenticated
+  using (
+    employee_id = auth.uid()
+    or public.current_actor_role() in ('super_admin', 'supervisora')
+  );
+
+  create policy scheduled_shifts_write_supervision
+  on public.scheduled_shifts
+  for all
+  to authenticated
+  using (public.current_actor_role() in ('super_admin', 'supervisora'))
+  with check (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  -- audit_logs
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'audit_logs' and policyname = 'audit_logs_select_supervision') then
+    drop policy audit_logs_select_supervision on public.audit_logs;
+  end if;
+  create policy audit_logs_select_supervision
+  on public.audit_logs
+  for select
+  to authenticated
+  using (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  -- supplies
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'supplies' and policyname = 'supplies_select_supervision') then
+    drop policy supplies_select_supervision on public.supplies;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'supplies' and policyname = 'supplies_write_supervision') then
+    drop policy supplies_write_supervision on public.supplies;
+  end if;
+  create policy supplies_select_supervision
+  on public.supplies
+  for select
+  to authenticated
+  using (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  create policy supplies_write_supervision
+  on public.supplies
+  for all
+  to authenticated
+  using (public.current_actor_role() in ('super_admin', 'supervisora'))
+  with check (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  -- supply_deliveries
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'supply_deliveries' and policyname = 'supply_deliveries_select_supervision') then
+    drop policy supply_deliveries_select_supervision on public.supply_deliveries;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'supply_deliveries' and policyname = 'supply_deliveries_insert_supervision') then
+    drop policy supply_deliveries_insert_supervision on public.supply_deliveries;
+  end if;
+  create policy supply_deliveries_select_supervision
+  on public.supply_deliveries
+  for select
+  to authenticated
+  using (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  create policy supply_deliveries_insert_supervision
+  on public.supply_deliveries
+  for insert
+  to authenticated
+  with check (
+    delivered_by = auth.uid()
+    and public.current_actor_role() in ('super_admin', 'supervisora')
+  );
+
+  -- reports
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'reports' and policyname = 'reports_select_supervision') then
+    drop policy reports_select_supervision on public.reports;
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'reports' and policyname = 'reports_write_super_admin') then
+    drop policy reports_write_super_admin on public.reports;
+  end if;
+  create policy reports_select_supervision
+  on public.reports
+  for select
+  to authenticated
+  using (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+  create policy reports_write_super_admin
+  on public.reports
+  for all
+  to authenticated
+  using (public.current_actor_role() = 'super_admin')
+  with check (public.current_actor_role() = 'super_admin');
 end $$;
 
 commit;
