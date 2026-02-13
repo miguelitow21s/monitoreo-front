@@ -56,8 +56,9 @@ export async function getShiftIncidents(shiftId: string) {
   return (data ?? []) as ShiftIncident[]
 }
 
-export function resolveEvidenceUrl(path: string | null | undefined) {
+export async function resolveEvidenceUrl(path: string | null | undefined, expiresInSeconds = 3600) {
   if (!path) return null
-  const { data } = supabase.storage.from("evidence").getPublicUrl(path)
-  return data.publicUrl
+  const { data, error } = await supabase.storage.from("evidence").createSignedUrl(path, expiresInSeconds)
+  if (error) throw error
+  return data.signedUrl
 }

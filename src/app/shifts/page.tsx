@@ -498,8 +498,6 @@ export default function ShiftsPage() {
             ) : (
               <div className="space-y-3">
                 {supervisorRows.map(row => {
-                  const startEvidenceUrl = resolveEvidenceUrl(row.start_evidence_path)
-                  const endEvidenceUrl = resolveEvidenceUrl(row.end_evidence_path)
                   return (
                     <Card
                       key={row.id}
@@ -509,30 +507,54 @@ export default function ShiftsPage() {
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">
                           <p className="font-medium text-slate-700">Evidencia inicio</p>
-                          {startEvidenceUrl ? (
-                            <a
-                              className="text-blue-700 underline"
-                              href={startEvidenceUrl}
-                              target="_blank"
-                              rel="noreferrer"
+                          {row.start_evidence_path ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => {
+                                void (async () => {
+                                  try {
+                                    const signedUrl = await resolveEvidenceUrl(row.start_evidence_path)
+                                    if (!signedUrl) {
+                                      showToast("info", "No se pudo generar URL de evidencia.")
+                                      return
+                                    }
+                                    window.open(signedUrl, "_blank", "noopener,noreferrer")
+                                  } catch (error: unknown) {
+                                    showToast("error", extractErrorMessage(error, "No se pudo abrir evidencia."))
+                                  }
+                                })()
+                              }}
                             >
                               Ver evidencia inicial
-                            </a>
+                            </Button>
                           ) : (
                             <p className="text-slate-500">Sin evidencia registrada.</p>
                           )}
                         </div>
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">
                           <p className="font-medium text-slate-700">Evidencia cierre</p>
-                          {endEvidenceUrl ? (
-                            <a
-                              className="text-blue-700 underline"
-                              href={endEvidenceUrl}
-                              target="_blank"
-                              rel="noreferrer"
+                          {row.end_evidence_path ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => {
+                                void (async () => {
+                                  try {
+                                    const signedUrl = await resolveEvidenceUrl(row.end_evidence_path)
+                                    if (!signedUrl) {
+                                      showToast("info", "No se pudo generar URL de evidencia.")
+                                      return
+                                    }
+                                    window.open(signedUrl, "_blank", "noopener,noreferrer")
+                                  } catch (error: unknown) {
+                                    showToast("error", extractErrorMessage(error, "No se pudo abrir evidencia."))
+                                  }
+                                })()
+                              }}
                             >
                               Ver evidencia final
-                            </a>
+                            </Button>
                           ) : (
                             <p className="text-slate-500">Pendiente de cierre.</p>
                           )}

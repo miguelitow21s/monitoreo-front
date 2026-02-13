@@ -42,14 +42,14 @@ export default function UsersPage() {
       setScheduled(scheduledData)
 
       const empleados = usersData.filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false)
-      if (!scheduleEmployeeId && empleados[0]?.id) setScheduleEmployeeId(empleados[0].id)
-      if (!scheduleRestaurantId && restaurantsData[0]?.id) setScheduleRestaurantId(restaurantsData[0].id)
+      setScheduleEmployeeId(prev => prev || empleados[0]?.id || "")
+      setScheduleRestaurantId(prev => prev || restaurantsData[0]?.id || "")
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : "No se pudo cargar usuarios.")
     } finally {
       setLoading(false)
     }
-  }, [showToast, scheduleEmployeeId, scheduleRestaurantId])
+  }, [showToast])
 
   useEffect(() => {
     void loadData()

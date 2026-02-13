@@ -245,6 +245,62 @@ create table if not exists public.scheduled_shifts (
 create index if not exists idx_scheduled_shifts_employee_start
   on public.scheduled_shifts (employee_id, scheduled_start);
 
+create extension if not exists btree_gist;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'scheduled_shifts_no_overlap_active'
+      and conrelid = 'public.scheduled_shifts'::regclass
+  ) then
+    alter table public.scheduled_shifts
+      add constraint scheduled_shifts_no_overlap_active
+      exclude using gist (
+        employee_id with =,
+        tstzrange(scheduled_start, scheduled_end, '[)') with &&
+      )
+      where (status in ('scheduled', 'started'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'restaurants_lat_check'
+      and conrelid = 'public.restaurants'::regclass
+  ) then
+    alter table public.restaurants
+      add constraint restaurants_lat_check
+      check (lat between -90 and 90);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'restaurants_lng_check'
+      and conrelid = 'public.restaurants'::regclass
+  ) then
+    alter table public.restaurants
+      add constraint restaurants_lng_check
+      check (lng between -180 and 180);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'restaurants_radius_check'
+      and conrelid = 'public.restaurants'::regclass
+  ) then
+    alter table public.restaurants
+      add constraint restaurants_radius_check
+      check (radius > 0);
+  end if;
+end $$;
+
 -- 6) USERS/PROFILES compatibility for frontend
 alter table public.users
   add column if not exists full_name text;
@@ -535,7 +591,108 @@ alter table public.supplies
 alter table public.supplies
   add column if not exists restaurant_id integer references public.restaurants(id) on delete set null;
 
--- 9) RPC compatibility wrappers expected by frontend
+-- 9) HARDEN CORE SHIFT FUNCTIONS (avoid inherited logic bugs)
+create or replace function public.start_shift(
+  employee_id uuid,
+  restaurant_id integer,
+  lat double precision,
+  lng double precision
+)
+returns integer
+language plpgsql
+as $$
+declare
+  v_rest_lat double precision;
+  v_rest_lng double precision;
+  v_rest_radius integer;
+  v_active_count integer;
+  v_shift_id integer;
+begin
+  select r.lat, r.lng, r.radius
+    into v_rest_lat, v_rest_lng, v_rest_radius
+  from public.restaurants r
+  where r.id = restaurant_id;
+
+  if v_rest_lat is null or v_rest_lng is null or v_rest_radius is null then
+    raise exception 'Restaurante invalido o sin geocerca configurada';
+  end if;
+
+  if earth_distance(ll_to_earth(v_rest_lat, v_rest_lng), ll_to_earth(lat, lng)) > v_rest_radius then
+    raise exception 'GPS fuera de radio';
+  end if;
+
+  select count(*)
+    into v_active_count
+  from public.shifts s
+  where s.employee_id = start_shift.employee_id
+    and s.state = 'activo';
+
+  if v_active_count > 0 then
+    raise exception 'Ya existe un turno activo';
+  end if;
+
+  insert into public.shifts (employee_id, restaurant_id, start_time, start_lat, start_lng, state, status)
+  values (employee_id, restaurant_id, now(), lat, lng, 'activo', 'active')
+  returning id into v_shift_id;
+
+  return v_shift_id;
+end;
+$$;
+
+create or replace function public.end_shift(
+  shift_id integer,
+  lat double precision,
+  lng double precision
+)
+returns void
+language plpgsql
+as $$
+declare
+  v_rest_lat double precision;
+  v_rest_lng double precision;
+  v_rest_radius integer;
+  v_restaurant_id integer;
+begin
+  select s.restaurant_id
+    into v_restaurant_id
+  from public.shifts s
+  where s.id = end_shift.shift_id;
+
+  if v_restaurant_id is null then
+    raise exception 'Turno no existe';
+  end if;
+
+  select r.lat, r.lng, r.radius
+    into v_rest_lat, v_rest_lng, v_rest_radius
+  from public.restaurants r
+  where r.id = v_restaurant_id;
+
+  if v_rest_lat is null or v_rest_lng is null or v_rest_radius is null then
+    raise exception 'Restaurante invalido o sin geocerca configurada';
+  end if;
+
+  if earth_distance(ll_to_earth(v_rest_lat, v_rest_lng), ll_to_earth(lat, lng)) > v_rest_radius then
+    raise exception 'GPS fuera de radio';
+  end if;
+
+  update public.shifts
+  set
+    end_time = now(),
+    end_lat = lat,
+    end_lng = lng,
+    state = 'finalizado',
+    status = 'completed',
+    updated_at = now()
+  where id = end_shift.shift_id
+    and end_time is null;
+
+  if not found then
+    raise exception 'Turno invalido o ya finalizado';
+  end if;
+end;
+$$;
+
+-- 10) RPC compatibility wrappers expected by frontend
 create or replace function public.get_my_active_shift()
 returns table (
   id integer,
@@ -640,7 +797,7 @@ begin
 end;
 $$;
 
--- 10) STORAGE bucket and policies (guarded: can fail if caller is not owner)
+-- 11) STORAGE bucket and policies (guarded: can fail if caller is not owner)
 do $$
 begin
   begin
@@ -697,7 +854,7 @@ begin
   end if;
 end $$;
 
--- 11) RLS + POLICIES by role (BPMN aligned)
+-- 12) RLS + POLICIES by role (BPMN aligned)
 create or replace function public.current_actor_role()
 returns text
 language sql
