@@ -3,7 +3,7 @@
 import { ReactNode, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
-import { useAuth } from "@/hooks/useAuth"
+import { useRole } from "@/hooks/useRole"
 import { Role } from "@/utils/permissions"
 
 interface RoleGuardProps {
@@ -13,9 +13,7 @@ interface RoleGuardProps {
 
 export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
   const router = useRouter()
-  const { user, loading } = useAuth()
-
-  const role = user?.user_metadata?.role as Role | undefined
+  const { role, loading } = useRole()
   const allowed = !!role && allowedRoles.includes(role)
 
   useEffect(() => {

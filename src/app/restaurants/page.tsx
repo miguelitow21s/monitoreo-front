@@ -69,17 +69,31 @@ export default function RestaurantsPage() {
   }, [loadData])
 
   const handleCreate = async () => {
-    if (!name.trim()) {
-      showToast("info", "El nombre es obligatorio.")
+    const parsedLat = parseNullableNumber(lat)
+    const parsedLng = parseNullableNumber(lng)
+    const parsedRadius = parseNullableNumber(radius)
+
+    if (!name.trim() || parsedLat === null || parsedLng === null || parsedRadius === null) {
+      showToast("info", "Completa nombre, latitud, longitud y radio.")
+      return
+    }
+
+    if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
+      showToast("info", "Latitud/longitud fuera de rango valido.")
+      return
+    }
+
+    if (parsedRadius <= 0) {
+      showToast("info", "El radio debe ser mayor que 0.")
       return
     }
 
     try {
       const created = await createRestaurant({
         name: name.trim(),
-        lat: parseNullableNumber(lat),
-        lng: parseNullableNumber(lng),
-        geofence_radius_m: parseNullableNumber(radius),
+        lat: parsedLat,
+        lng: parsedLng,
+        geofence_radius_m: parsedRadius,
       })
       setRows(prev => [created, ...prev])
       setName("")
@@ -178,11 +192,13 @@ export default function RestaurantsPage() {
                     value={assignUser}
                     onChange={event => setAssignUser(event.target.value)}
                   >
-                    {profiles.map(item => (
+                    {profiles
+                      .filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false)
+                      .map(item => (
                       <option key={item.id} value={item.id}>
                         {item.full_name ?? item.email ?? item.id}
                       </option>
-                    ))}
+                      ))}
                   </select>
                   <Button variant="secondary" onClick={handleAssign}>
                     Asociar

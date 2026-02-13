@@ -83,9 +83,17 @@ export async function getMyShiftHistory(page = 1, pageSize = 8): Promise<ShiftHi
   const from = (safePage - 1) * safePageSize
   const to = from + safePageSize - 1
 
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+  if (userError) throw userError
+  if (!user?.id) throw new Error("No se encontro usuario autenticado.")
+
   const { data, error, count } = await supabase
     .from("shifts")
     .select("id,start_time,end_time,status", { count: "exact" })
+    .eq("employee_id", user.id)
     .order("start_time", { ascending: false })
     .range(from, to)
 

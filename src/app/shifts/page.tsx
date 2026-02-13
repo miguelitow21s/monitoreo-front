@@ -28,6 +28,7 @@ import {
   ShiftRecord,
   startShift,
 } from "@/services/shifts.service"
+import { listMyScheduledShifts, ScheduledShift } from "@/services/scheduling.service"
 import { supabase } from "@/services/supabaseClient"
 
 const HISTORY_PAGE_SIZE = 8
@@ -76,6 +77,7 @@ export default function ShiftsPage() {
   const [processing, setProcessing] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
   const [historyTotalPages, setHistoryTotalPages] = useState(1)
+  const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([])
 
   const [supervisorRows, setSupervisorRows] = useState<SupervisorShiftRow[]>([])
   const [loadingSupervisor, setLoadingSupervisor] = useState(false)
@@ -98,13 +100,15 @@ export default function ShiftsPage() {
   const loadEmployeeData = useCallback(async (page: number) => {
     setLoadingData(true)
     try {
-      const [active, historyResult] = await Promise.all([
+      const [active, historyResult, scheduledResult] = await Promise.all([
         getMyActiveShift(),
         getMyShiftHistory(page, HISTORY_PAGE_SIZE),
+        listMyScheduledShifts(6),
       ])
       setActiveShift(active)
       setHistory(historyResult.rows)
       setHistoryTotalPages(historyResult.totalPages)
+      setScheduledShifts(scheduledResult)
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, "No se pudo cargar la informacion de turnos."))
     } finally {
@@ -136,8 +140,19 @@ export default function ShiftsPage() {
 
   const uploadEvidence = async (prefix: "shift-start" | "shift-end") => {
     if (!photo) throw new Error("Debe capturar evidencia fotografica.")
-    const fileName = `${prefix}-${Date.now()}.jpg`
-    const filePath = `users/${fileName}`
+    if (!coords) throw new Error("Debe capturar ubicacion GPS antes de la evidencia.")
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user?.id) throw new Error("No se encontro usuario autenticado.")
+
+    const timestamp = new Date().toISOString().replaceAll(":", "-")
+    const coordTag = `${coords.lat.toFixed(6)}_${coords.lng.toFixed(6)}`
+    const fileName = `${prefix}-${timestamp}-${coordTag}.jpg`
+    const filePath = `users/${user.id}/${prefix}/${fileName}`
 
     const { error } = await supabase.storage.from("evidence").upload(filePath, photo, {
       upsert: false,
@@ -375,6 +390,21 @@ export default function ShiftsPage() {
                     </div>
                   </div>
                 </>
+              )}
+            </Card>
+
+            <Card title="Turnos programados" subtitle="Agenda asignada para tus proximas jornadas.">
+              {scheduledShifts.length === 0 ? (
+                <p className="text-sm text-slate-500">No tienes turnos programados.</p>
+              ) : (
+                <div className="space-y-2">
+                  {scheduledShifts.map(item => (
+                    <div key={item.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                      {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)} |{" "}
+                      Estado: {item.status}
+                    </div>
+                  ))}
+                </div>
               )}
             </Card>
           </section>

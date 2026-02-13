@@ -225,6 +225,26 @@ create table if not exists public.restaurant_employees (
   unique (restaurant_id, user_id)
 );
 
+-- 5.1) SCHEDULED SHIFTS (planning by date/time)
+create table if not exists public.scheduled_shifts (
+  id bigserial primary key,
+  employee_id uuid not null references public.users(id) on delete cascade,
+  restaurant_id integer not null references public.restaurants(id) on delete cascade,
+  scheduled_start timestamptz not null,
+  scheduled_end timestamptz not null,
+  status text not null default 'scheduled',
+  notes text null,
+  started_shift_id integer null references public.shifts(id) on delete set null,
+  created_by uuid null references public.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint scheduled_shifts_time_check check (scheduled_end > scheduled_start),
+  constraint scheduled_shifts_status_check check (status in ('scheduled', 'started', 'completed', 'cancelled'))
+);
+
+create index if not exists idx_scheduled_shifts_employee_start
+  on public.scheduled_shifts (employee_id, scheduled_start);
+
 -- 6) USERS/PROFILES compatibility for frontend
 alter table public.users
   add column if not exists full_name text;
@@ -303,12 +323,23 @@ as $$
 declare
   v_role_id integer;
 begin
+  if auth.uid() is null then
+    raise exception 'No autenticado.';
+  end if;
+
+  if auth.uid() <> p_user_id then
+    raise exception 'No autorizado para registrar otro usuario.';
+  end if;
+
   if p_user_id is null or p_email is null then
     raise exception 'Parametros incompletos para registro.';
   end if;
 
   if not exists (
-    select 1 from auth.users au where au.id = p_user_id
+    select 1
+    from auth.users au
+    where au.id = p_user_id
+      and lower(coalesce(au.email, '')) = lower(p_email)
   ) then
     raise exception 'Usuario auth invalido.';
   end if;
@@ -332,7 +363,166 @@ begin
 end;
 $$;
 
-grant execute on function public.register_employee(uuid, text, text) to anon, authenticated;
+grant execute on function public.register_employee(uuid, text, text) to authenticated;
+
+create or replace function public.app_user_role(p_user_id uuid)
+returns text
+language sql
+stable
+as $$
+  select r.name::text
+  from public.users u
+  join public.roles r on r.id = u.role_id
+  where u.id = p_user_id
+  limit 1;
+$$;
+
+create or replace function public.assign_scheduled_shift(
+  p_employee_id uuid,
+  p_restaurant_id integer,
+  p_scheduled_start timestamptz,
+  p_scheduled_end timestamptz,
+  p_notes text default null
+)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_actor_id uuid;
+  v_actor_role text;
+  v_new_id bigint;
+begin
+  v_actor_id := auth.uid();
+  if v_actor_id is null then
+    raise exception 'No autenticado';
+  end if;
+
+  v_actor_role := public.app_user_role(v_actor_id);
+  if v_actor_role not in ('super_admin', 'supervisora') then
+    raise exception 'No autorizado para programar turnos';
+  end if;
+
+  if p_scheduled_end <= p_scheduled_start then
+    raise exception 'Rango horario invalido';
+  end if;
+
+  if not exists (select 1 from public.users where id = p_employee_id and is_active = true) then
+    raise exception 'Empleado invalido o inactivo';
+  end if;
+
+  if exists (
+    select 1
+    from public.scheduled_shifts s
+    where s.employee_id = p_employee_id
+      and s.status in ('scheduled', 'started')
+      and tstzrange(s.scheduled_start, s.scheduled_end, '[)') &&
+          tstzrange(p_scheduled_start, p_scheduled_end, '[)')
+  ) then
+    raise exception 'El empleado ya tiene un turno programado en ese rango';
+  end if;
+
+  insert into public.scheduled_shifts (
+    employee_id,
+    restaurant_id,
+    scheduled_start,
+    scheduled_end,
+    status,
+    notes,
+    created_by
+  )
+  values (
+    p_employee_id,
+    p_restaurant_id,
+    p_scheduled_start,
+    p_scheduled_end,
+    'scheduled',
+    p_notes,
+    v_actor_id
+  )
+  returning id into v_new_id;
+
+  return v_new_id;
+end;
+$$;
+
+grant execute on function public.assign_scheduled_shift(uuid, integer, timestamptz, timestamptz, text) to authenticated;
+
+create or replace function public.list_my_scheduled_shifts(p_limit integer default 10)
+returns table (
+  id bigint,
+  employee_id uuid,
+  restaurant_id integer,
+  scheduled_start timestamptz,
+  scheduled_end timestamptz,
+  status text,
+  notes text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    s.id,
+    s.employee_id,
+    s.restaurant_id,
+    s.scheduled_start,
+    s.scheduled_end,
+    s.status,
+    s.notes
+  from public.scheduled_shifts s
+  where s.employee_id = auth.uid()
+  order by s.scheduled_start desc
+  limit greatest(1, coalesce(p_limit, 10));
+$$;
+
+grant execute on function public.list_my_scheduled_shifts(integer) to authenticated;
+
+create or replace function public.list_scheduled_shifts(p_limit integer default 50)
+returns table (
+  id bigint,
+  employee_id uuid,
+  restaurant_id integer,
+  scheduled_start timestamptz,
+  scheduled_end timestamptz,
+  status text,
+  notes text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_actor_id uuid;
+  v_actor_role text;
+begin
+  v_actor_id := auth.uid();
+  if v_actor_id is null then
+    raise exception 'No autenticado';
+  end if;
+
+  v_actor_role := public.app_user_role(v_actor_id);
+  if v_actor_role not in ('super_admin', 'supervisora') then
+    raise exception 'No autorizado';
+  end if;
+
+  return query
+  select
+    s.id,
+    s.employee_id,
+    s.restaurant_id,
+    s.scheduled_start,
+    s.scheduled_end,
+    s.status,
+    s.notes
+  from public.scheduled_shifts s
+  order by s.scheduled_start desc
+  limit greatest(1, coalesce(p_limit, 50));
+end;
+$$;
+
+grant execute on function public.list_scheduled_shifts(integer) to authenticated;
 
 -- 8) SUPPLIES compatibility columns
 alter table public.supplies
@@ -375,6 +565,7 @@ declare
   v_employee_id uuid;
   v_restaurant_id integer;
   v_shift_id integer;
+  v_scheduled_id bigint;
 begin
   v_employee_id := auth.uid();
 
@@ -382,25 +573,27 @@ begin
     raise exception 'No autenticado';
   end if;
 
-  select re.restaurant_id
-    into v_restaurant_id
-  from public.restaurant_employees re
-  where re.user_id = v_employee_id
-  order by re.id asc
+  select s.id, s.restaurant_id
+    into v_scheduled_id, v_restaurant_id
+  from public.scheduled_shifts s
+  where s.employee_id = v_employee_id
+    and s.status = 'scheduled'
+    and now() between (s.scheduled_start - interval '15 minutes') and (s.scheduled_end + interval '15 minutes')
+  order by s.scheduled_start asc
   limit 1;
 
   if v_restaurant_id is null then
-    select r.id into v_restaurant_id
-    from public.restaurants r
-    order by r.id asc
-    limit 1;
-  end if;
-
-  if v_restaurant_id is null then
-    raise exception 'No hay restaurante configurado para iniciar turno';
+    raise exception 'No hay turno programado vigente para iniciar';
   end if;
 
   v_shift_id := public.start_shift(v_employee_id, v_restaurant_id, lat, lng);
+
+  update public.scheduled_shifts
+  set
+    status = 'started',
+    started_shift_id = v_shift_id,
+    updated_at = now()
+  where id = v_scheduled_id;
 
   if evidence_path is not null then
     update public.shifts
@@ -426,6 +619,13 @@ set search_path = public
 as $$
 begin
   perform public.end_shift(shift_id, lat, lng);
+
+  update public.scheduled_shifts
+  set
+    status = 'completed',
+    updated_at = now()
+  where started_shift_id = shift_id
+    and status in ('scheduled', 'started');
 
   if evidence_path is not null then
     update public.shifts
