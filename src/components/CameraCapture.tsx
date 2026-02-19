@@ -6,9 +6,30 @@ import Button from "@/components/ui/Button"
 
 interface CameraCaptureProps {
   onCapture: (image: Blob | null) => void
+  overlayLines?: string[]
 }
 
-export default function CameraCapture({ onCapture }: CameraCaptureProps) {
+function drawEvidenceOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, lines: string[]) {
+  const nowLine = `Captured: ${new Date().toLocaleString("en-US")}`
+  const mergedLines = [nowLine, ...lines.filter(item => item.trim().length > 0)]
+  const paddingX = 12
+  const paddingY = 10
+  const lineHeight = 16
+  const boxHeight = paddingY * 2 + mergedLines.length * lineHeight
+
+  ctx.save()
+  ctx.fillStyle = "rgba(15, 23, 42, 0.72)"
+  ctx.fillRect(0, height - boxHeight, width, boxHeight)
+
+  ctx.font = "600 12px Arial, sans-serif"
+  ctx.fillStyle = "#ffffff"
+  mergedLines.forEach((line, index) => {
+    ctx.fillText(line, paddingX, height - boxHeight + paddingY + (index + 0.8) * lineHeight)
+  })
+  ctx.restore()
+}
+
+export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -91,6 +112,7 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     }
 
     ctx.drawImage(video, 0, 0)
+    drawEvidenceOverlay(ctx, canvas.width, canvas.height, overlayLines)
 
     canvas.toBlob(
       blob => {

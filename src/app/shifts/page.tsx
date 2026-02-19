@@ -12,6 +12,7 @@ import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 import { useRole } from "@/hooks/useRole"
 import { useToast } from "@/components/toast/ToastProvider"
+import { saveShiftHealthForm } from "@/services/compliance.service"
 import {
   createShiftIncident,
   getActiveShiftsForSupervision,
@@ -28,8 +29,22 @@ import {
   ShiftRecord,
   startShift,
 } from "@/services/shifts.service"
+import {
+  listMySupervisorPresence,
+  registerSupervisorPresence,
+  SupervisorPresenceLog,
+} from "@/services/supervisorPresence.service"
 import { listMyScheduledShifts, ScheduledShift } from "@/services/scheduling.service"
 import { supabase } from "@/services/supabaseClient"
+import {
+  completeOperationalTask,
+  createOperationalTask,
+  listMyOperationalTasks,
+  listSupervisorOperationalTasks,
+  markTaskInProgress,
+  OperationalTask,
+  TaskPriority,
+} from "@/services/tasks.service"
 
 const HISTORY_PAGE_SIZE = 8
 
@@ -65,6 +80,14 @@ function extractErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+async function sha256Hex(blob: Blob) {
+  const buffer = await blob.arrayBuffer()
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(item => item.toString(16).padStart(2, "0"))
+    .join("")
+}
+
 export default function ShiftsPage() {
   const { isEmpleado, isSupervisora, isSuperAdmin } = useRole()
   const { showToast } = useToast()
@@ -80,6 +103,10 @@ export default function ShiftsPage() {
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([])
   const [startObservation, setStartObservation] = useState("")
   const [endObservation, setEndObservation] = useState("")
+  const [startFitForWork, setStartFitForWork] = useState<boolean | null>(null)
+  const [endFitForWork, setEndFitForWork] = useState<boolean | null>(null)
+  const [startHealthDeclaration, setStartHealthDeclaration] = useState("")
+  const [endHealthDeclaration, setEndHealthDeclaration] = useState("")
   const [employeeIncident, setEmployeeIncident] = useState("")
   const [creatingEmployeeIncident, setCreatingEmployeeIncident] = useState(false)
 
@@ -87,19 +114,60 @@ export default function ShiftsPage() {
   const [loadingSupervisor, setLoadingSupervisor] = useState(false)
   const [incidentNotes, setIncidentNotes] = useState<Record<string, string>>({})
   const [incidentHistory, setIncidentHistory] = useState<Record<string, ShiftIncident[]>>({})
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
-  const canSubmit = !!coords && !!photo && !processing
+  const [employeeTasks, setEmployeeTasks] = useState<OperationalTask[]>([])
+  const [supervisorTasks, setSupervisorTasks] = useState<OperationalTask[]>([])
+  const [loadingTasks, setLoadingTasks] = useState(false)
+  const [taskCoords, setTaskCoords] = useState<Coordinates | null>(null)
+  const [taskPhoto, setTaskPhoto] = useState<Blob | null>(null)
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
+  const [processingTask, setProcessingTask] = useState(false)
+  const [newTaskByShift, setNewTaskByShift] = useState<Record<string, { title: string; description: string; priority: TaskPriority }>>({})
+  const [creatingTaskForShift, setCreatingTaskForShift] = useState<string | null>(null)
+
+  const [supervisorPresence, setSupervisorPresence] = useState<SupervisorPresenceLog[]>([])
+  const [presenceRestaurantId, setPresenceRestaurantId] = useState<number | null>(null)
+  const [presenceCoords, setPresenceCoords] = useState<Coordinates | null>(null)
+  const [presencePhoto, setPresencePhoto] = useState<Blob | null>(null)
+  const [presenceNotes, setPresenceNotes] = useState("")
+  const [presencePhase, setPresencePhase] = useState<"start" | "end">("start")
+  const [registeringPresence, setRegisteringPresence] = useState(false)
+
+  const healthAnswered = activeShift ? endFitForWork !== null : startFitForWork !== null
+  const healthDeclarationRequired =
+    activeShift ? endFitForWork === false : startFitForWork === false
+  const healthDeclarationProvided = activeShift
+    ? endHealthDeclaration.trim().length > 0
+    : startHealthDeclaration.trim().length > 0
+
+  const canSubmit = !!coords && !!photo && !processing && healthAnswered && (!healthDeclarationRequired || healthDeclarationProvided)
 
   const submitBlockers = useMemo(() => {
     const blockers: string[] = []
     if (!coords) blockers.push("You must capture GPS location.")
     if (!photo) blockers.push("You must capture photo evidence.")
+    if (!healthAnswered) {
+      blockers.push(
+        activeShift
+          ? "You must answer end-of-shift health condition."
+          : "You must answer start-of-shift health condition."
+      )
+    }
+    if (healthDeclarationRequired && !healthDeclarationProvided) {
+      blockers.push("You must provide a declaration when health condition is not optimal.")
+    }
     if (processing) blockers.push("There is an action in progress.")
     return blockers
-  }, [coords, photo, processing])
+  }, [coords, photo, healthAnswered, healthDeclarationRequired, healthDeclarationProvided, processing, activeShift])
 
   const canOperateEmployee = isEmpleado || isSuperAdmin
   const canOperateSupervisor = isSupervisora || isSuperAdmin
+  const shiftOverlayLines = [
+    `User: ${currentUserId ?? "unknown"}`,
+    `Phase: ${activeShift ? "shift-end" : "shift-start"}`,
+    coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "GPS: pending",
+  ]
 
   const loadEmployeeData = useCallback(async (page: number) => {
     setLoadingData(true)
@@ -142,28 +210,94 @@ export default function ShiftsPage() {
     void loadSupervisorData()
   }, [canOperateSupervisor, loadSupervisorData])
 
-  const uploadEvidence = async (prefix: "shift-start" | "shift-end") => {
-    if (!photo) throw new Error("You must capture photo evidence.")
-    if (!coords) throw new Error("You must capture GPS location before evidence.")
+  useEffect(() => {
+    if (presenceRestaurantId) return
+    const firstRestaurant = supervisorRows.find(row => typeof row.restaurant_id === "number")?.restaurant_id
+    if (firstRestaurant) setPresenceRestaurantId(firstRestaurant)
+  }, [supervisorRows, presenceRestaurantId])
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-    if (userError) throw userError
-    if (!user?.id) throw new Error("Authenticated user not found.")
+  useEffect(() => {
+    let mounted = true
+    const loadUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!mounted) return
+      setCurrentUserId(user?.id ?? null)
+    }
+    void loadUser()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
+  const loadTasks = useCallback(async () => {
+    setLoadingTasks(true)
+    try {
+      if (canOperateEmployee) {
+        const items = await listMyOperationalTasks(40)
+        setEmployeeTasks(items)
+      }
+      if (canOperateSupervisor) {
+        const items = await listSupervisorOperationalTasks(60)
+        setSupervisorTasks(items)
+      }
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, "Could not load operational tasks."))
+    } finally {
+      setLoadingTasks(false)
+    }
+  }, [canOperateEmployee, canOperateSupervisor, showToast])
+
+  const loadPresenceLogs = useCallback(async () => {
+    if (!canOperateSupervisor) return
+    try {
+      const rows = await listMySupervisorPresence(20)
+      setSupervisorPresence(rows)
+      if (!presenceRestaurantId && rows[0]?.restaurant_id) {
+        setPresenceRestaurantId(rows[0].restaurant_id)
+      }
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, "Could not load supervisor presence logs."))
+    }
+  }, [canOperateSupervisor, presenceRestaurantId, showToast])
+
+  useEffect(() => {
+    void loadTasks()
+  }, [loadTasks])
+
+  useEffect(() => {
+    if (!selectedTaskId) return
+    if (!employeeTasks.some(task => task.id === selectedTaskId)) {
+      setSelectedTaskId(null)
+    }
+  }, [employeeTasks, selectedTaskId])
+
+  useEffect(() => {
+    void loadPresenceLogs()
+  }, [loadPresenceLogs])
+
+  const uploadEvidence = async (
+    prefix: "shift-start" | "shift-end" | "task" | "supervisor-start" | "supervisor-end",
+    blob: Blob,
+    position: Coordinates
+  ) => {
+    if (!currentUserId) throw new Error("Authenticated user not found.")
     const timestamp = new Date().toISOString().replaceAll(":", "-")
-    const coordTag = `${coords.lat.toFixed(6)}_${coords.lng.toFixed(6)}`
+    const coordTag = `${position.lat.toFixed(6)}_${position.lng.toFixed(6)}`
     const fileName = `${prefix}-${timestamp}-${coordTag}.jpg`
-    const filePath = `users/${user.id}/${prefix}/${fileName}`
+    const filePath = `users/${currentUserId}/${prefix}/${fileName}`
 
-    const { error } = await supabase.storage.from("shift-evidence").upload(filePath, photo, {
+    const evidenceHash = await sha256Hex(blob)
+    const evidenceMimeType = blob.type || "image/jpeg"
+    const evidenceSizeBytes = blob.size
+
+    const { error } = await supabase.storage.from("shift-evidence").upload(filePath, blob, {
       upsert: false,
-      contentType: "image/jpeg",
+      contentType: evidenceMimeType,
     })
     if (error) throw error
-    return filePath
+    return { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes }
   }
 
   const resetEvidenceAndLocation = () => {
@@ -174,16 +308,31 @@ export default function ShiftsPage() {
   const handleStart = async () => {
     if (!canSubmit || !coords) return
     setProcessing(true)
+    let startedShiftId: number | null = null
 
     try {
+      if (startFitForWork === null) throw new Error("You must confirm if you are in optimal condition to work.")
+      if (!startFitForWork) {
+        throw new Error("You cannot start a shift if you report non-optimal condition. Contact supervisor.")
+      }
+
       const latestActive = await getMyActiveShift()
       if (latestActive) {
         setActiveShift(latestActive)
         throw new Error("An active shift already exists. You must finish it before starting another one.")
       }
 
-      const evidencePath = await uploadEvidence("shift-start")
-      const shiftId = await startShift({ lat: coords.lat, lng: coords.lng, evidencePath })
+      if (!photo) throw new Error("You must capture photo evidence.")
+      const { filePath: evidencePath } = await uploadEvidence("shift-start", photo, coords)
+      const shiftId = Number(await startShift({ lat: coords.lat, lng: coords.lng, evidencePath }))
+      startedShiftId = shiftId
+
+      await saveShiftHealthForm({
+        shiftId,
+        phase: "start",
+        fitForWork: startFitForWork,
+        declaration: startHealthDeclaration.trim() || null,
+      })
 
       if (startObservation.trim()) {
         await createShiftIncident(String(shiftId), `[START] ${startObservation.trim()}`)
@@ -192,10 +341,15 @@ export default function ShiftsPage() {
       showToast("success", "Shift started successfully.")
       resetEvidenceAndLocation()
       setStartObservation("")
+      setStartFitForWork(null)
+      setStartHealthDeclaration("")
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadSupervisorData()
     } catch (error: unknown) {
+      if (startedShiftId) {
+        await loadEmployeeData(1)
+      }
       showToast("error", extractErrorMessage(error, "Could not start shift."))
     } finally {
       setProcessing(false)
@@ -207,7 +361,20 @@ export default function ShiftsPage() {
     setProcessing(true)
 
     try {
-      const evidencePath = await uploadEvidence("shift-end")
+      if (endFitForWork === null) throw new Error("You must confirm end-of-shift condition.")
+      if (!endFitForWork && !endHealthDeclaration.trim()) {
+        throw new Error("You must describe incidents if end-of-shift condition is not optimal.")
+      }
+
+      await saveShiftHealthForm({
+        shiftId: Number(activeShift.id),
+        phase: "end",
+        fitForWork: endFitForWork,
+        declaration: endHealthDeclaration.trim() || null,
+      })
+
+      if (!photo) throw new Error("You must capture photo evidence.")
+      const { filePath: evidencePath } = await uploadEvidence("shift-end", photo, coords)
       await endShift({
         shiftId: activeShift.id,
         lat: coords.lat,
@@ -222,6 +389,8 @@ export default function ShiftsPage() {
       showToast("success", "Shift finished successfully.")
       resetEvidenceAndLocation()
       setEndObservation("")
+      setEndFitForWork(null)
+      setEndHealthDeclaration("")
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadSupervisorData()
@@ -292,6 +461,122 @@ export default function ShiftsPage() {
     }
   }
 
+  const handleCreateTaskForShift = async (row: SupervisorShiftRow) => {
+    const draft = newTaskByShift[row.id]
+    const title = draft?.title?.trim() ?? ""
+    const description = draft?.description?.trim() ?? ""
+
+    if (!title || !description) {
+      showToast("info", "Task title and description are required.")
+      return
+    }
+    if (!row.restaurant_id || !row.employee_id) {
+      showToast("error", "Shift does not have restaurant/employee relation.")
+      return
+    }
+
+    setCreatingTaskForShift(row.id)
+    try {
+      await createOperationalTask({
+        shiftId: Number(row.id),
+        restaurantId: Number(row.restaurant_id),
+        assignedEmployeeId: row.employee_id,
+        title,
+        description,
+        priority: draft?.priority ?? "normal",
+      })
+      setNewTaskByShift(prev => ({
+        ...prev,
+        [row.id]: { title: "", description: "", priority: "normal" },
+      }))
+      showToast("success", "Operational task created.")
+      await loadTasks()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, "Could not create task."))
+    } finally {
+      setCreatingTaskForShift(null)
+    }
+  }
+
+  const handleSetTaskInProgress = async (taskId: number) => {
+    try {
+      await markTaskInProgress(taskId)
+      showToast("success", "Task marked as in progress.")
+      await loadTasks()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, "Could not update task status."))
+    }
+  }
+
+  const handleCompleteTask = async () => {
+    if (!selectedTaskId) {
+      showToast("info", "Select a task to complete.")
+      return
+    }
+    if (!taskCoords || !taskPhoto) {
+      showToast("info", "Task completion requires GPS and photo evidence.")
+      return
+    }
+
+    setProcessingTask(true)
+    try {
+      const { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes } = await uploadEvidence("task", taskPhoto, taskCoords)
+      await completeOperationalTask({
+        taskId: selectedTaskId,
+        evidencePath: filePath,
+        evidenceHash,
+        evidenceMimeType,
+        evidenceSizeBytes,
+      })
+      setTaskCoords(null)
+      setTaskPhoto(null)
+      setSelectedTaskId(null)
+      showToast("success", "Task completed with evidence.")
+      await loadTasks()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, "Could not complete task."))
+    } finally {
+      setProcessingTask(false)
+    }
+  }
+
+  const handleRegisterPresence = async () => {
+    if (!presenceRestaurantId) {
+      showToast("info", "Select restaurant for supervisor check-in/out.")
+      return
+    }
+    if (!presenceCoords || !presencePhoto) {
+      showToast("info", "Supervisor check-in/out requires GPS and evidence photo.")
+      return
+    }
+
+    setRegisteringPresence(true)
+    try {
+      const prefix = presencePhase === "start" ? "supervisor-start" : "supervisor-end"
+      const { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes } = await uploadEvidence(prefix, presencePhoto, presenceCoords)
+      await registerSupervisorPresence({
+        restaurantId: presenceRestaurantId,
+        phase: presencePhase,
+        lat: presenceCoords.lat,
+        lng: presenceCoords.lng,
+        notes: presenceNotes.trim() || null,
+        evidencePath: filePath,
+        evidenceHash,
+        evidenceMimeType,
+        evidenceSizeBytes,
+      })
+      setPresenceNotes("")
+      setPresenceCoords(null)
+      setPresencePhoto(null)
+      showToast("success", "Supervisor presence registered.")
+      await loadPresenceLogs()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, "Could not register supervisor presence."))
+    } finally {
+      setRegisteringPresence(false)
+    }
+  }
+
   return (
     <ProtectedRoute>
       <div className="space-y-6">
@@ -327,7 +612,7 @@ export default function ShiftsPage() {
 
               <Card title="Photo evidence" subtitle="Photo is captured from camera and uploaded to Storage.">
                 <div className="mt-3">
-                  <CameraCapture onCapture={setPhoto} />
+                  <CameraCapture onCapture={setPhoto} overlayLines={shiftOverlayLines} />
                 </div>
               </Card>
             </div>
@@ -336,6 +621,54 @@ export default function ShiftsPage() {
               title="Main action"
               subtitle={activeShift ? "Finish active shift" : "Start new shift"}
             >
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <p className="font-medium text-slate-800">
+                  {activeShift
+                    ? "Do you finish the shift in optimal condition?"
+                    : "Do you start the shift in optimal condition?"}
+                </p>
+                <div className="mt-2 flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name={activeShift ? "end-fit-for-work" : "start-fit-for-work"}
+                      checked={activeShift ? endFitForWork === true : startFitForWork === true}
+                      onChange={() => {
+                        if (activeShift) setEndFitForWork(true)
+                        else setStartFitForWork(true)
+                      }}
+                    />
+                    <span>Yes</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name={activeShift ? "end-fit-for-work" : "start-fit-for-work"}
+                      checked={activeShift ? endFitForWork === false : startFitForWork === false}
+                      onChange={() => {
+                        if (activeShift) setEndFitForWork(false)
+                        else setStartFitForWork(false)
+                      }}
+                    />
+                    <span>No</span>
+                  </label>
+                </div>
+
+                {(activeShift ? endFitForWork === false : startFitForWork === false) && (
+                  <textarea
+                    rows={2}
+                    value={activeShift ? endHealthDeclaration : startHealthDeclaration}
+                    onChange={event =>
+                      activeShift
+                        ? setEndHealthDeclaration(event.target.value)
+                        : setStartHealthDeclaration(event.target.value)
+                    }
+                    className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                    placeholder="Describe health condition or incident."
+                  />
+                )}
+              </div>
+
               <div className="mt-3">
                 <textarea
                   rows={3}
@@ -394,6 +727,66 @@ export default function ShiftsPage() {
                 </div>
               </Card>
             )}
+
+            <Card title="Assigned tasks" subtitle="Operational tasks from supervision with mandatory evidence closure.">
+              {loadingTasks ? (
+                <Skeleton className="h-24" />
+              ) : employeeTasks.length === 0 ? (
+                <p className="text-sm text-slate-500">No pending tasks assigned.</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    {employeeTasks.map(task => (
+                      <div key={task.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                        <p className="font-semibold text-slate-800">{task.title}</p>
+                        <p className="mt-1 text-slate-600">{task.description}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Priority: {task.priority} | Status: {task.status} | Created: {formatDateTime(task.created_at)}
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          {task.status === "pending" && (
+                            <Button size="sm" variant="secondary" onClick={() => void handleSetTaskInProgress(task.id)}>
+                              Start task
+                            </Button>
+                          )}
+                          {task.status !== "completed" && (
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => setSelectedTaskId(task.id)}
+                            >
+                              {selectedTaskId === task.id ? "Selected" : "Select for completion"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedTaskId && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-sm font-medium text-slate-700">Task completion evidence (Task #{selectedTaskId})</p>
+                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                        <GPSGuard onLocation={setTaskCoords} />
+                        <CameraCapture
+                          onCapture={setTaskPhoto}
+                          overlayLines={[
+                            `User: ${currentUserId ?? "unknown"}`,
+                            `Task: ${selectedTaskId}`,
+                            taskCoords ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}` : "GPS: pending",
+                          ]}
+                        />
+                      </div>
+                      <div className="mt-3">
+                        <Button variant="primary" onClick={() => void handleCompleteTask()} disabled={processingTask}>
+                          {processingTask ? "Completing..." : "Complete task with evidence"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
 
             <Card title="Shift history" subtitle="Paginated view with status and duration.">
               {loadingData ? (
@@ -486,6 +879,105 @@ export default function ShiftsPage() {
           <section className="space-y-4">
             <h2 className="text-lg font-semibold text-slate-900">Supervisor panel</h2>
 
+            <Card title="Supervisor check-in/out" subtitle="Mandatory entry/exit record by restaurant with GPS + evidence.">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="space-y-2">
+                  <select
+                    value={presenceRestaurantId ?? ""}
+                    onChange={event => setPresenceRestaurantId(Number(event.target.value) || null)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">Select restaurant</option>
+                    {Array.from(
+                      new Set(
+                        supervisorRows
+                          .map(row => row.restaurant_id)
+                          .filter((value): value is number => typeof value === "number")
+                      )
+                    ).map(restaurantId => (
+                      <option key={restaurantId} value={restaurantId}>
+                        Restaurant #{restaurantId}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="flex gap-4 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="presence-phase"
+                        checked={presencePhase === "start"}
+                        onChange={() => setPresencePhase("start")}
+                      />
+                      Entry
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="presence-phase"
+                        checked={presencePhase === "end"}
+                        onChange={() => setPresencePhase("end")}
+                      />
+                      Exit
+                    </label>
+                  </div>
+
+                  <textarea
+                    rows={2}
+                    value={presenceNotes}
+                    onChange={event => setPresenceNotes(event.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="Presence notes (optional)"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <GPSGuard onLocation={setPresenceCoords} />
+                  <CameraCapture
+                    onCapture={setPresencePhoto}
+                    overlayLines={[
+                      `User: ${currentUserId ?? "unknown"}`,
+                      `Supervisor phase: ${presencePhase}`,
+                      presenceCoords
+                        ? `GPS: ${presenceCoords.lat.toFixed(6)}, ${presenceCoords.lng.toFixed(6)}`
+                        : "GPS: pending",
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Button variant="primary" onClick={() => void handleRegisterPresence()} disabled={registeringPresence}>
+                  {registeringPresence ? "Saving..." : "Register supervisor presence"}
+                </Button>
+                <span className="text-xs text-slate-500">
+                  Last records: {supervisorPresence.length}
+                </span>
+              </div>
+            </Card>
+
+            <Card title="Task monitor" subtitle="Recent tasks created or assigned in supervised restaurants.">
+              {loadingTasks ? (
+                <Skeleton className="h-20" />
+              ) : supervisorTasks.length === 0 ? (
+                <p className="text-sm text-slate-500">No operational tasks registered yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {supervisorTasks.slice(0, 8).map(task => (
+                    <div key={task.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                      <p className="font-medium text-slate-800">
+                        #{task.id} {task.title}
+                      </p>
+                      <p className="text-slate-600">Status: {task.status} | Priority: {task.priority}</p>
+                      <p className="text-xs text-slate-500">
+                        Employee: {task.assigned_employee_id.slice(0, 8)} | Shift: {task.shift_id}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
             {loadingSupervisor ? (
               <Skeleton className="h-40" />
             ) : supervisorRows.length === 0 ? (
@@ -568,6 +1060,70 @@ export default function ShiftsPage() {
                         <Button size="sm" variant="danger" onClick={() => void handleStatusChange(row.id, "rejected")}>
                           Reject
                         </Button>
+                      </div>
+
+                      <div className="mt-4 space-y-2 rounded-lg border border-slate-200 p-3">
+                        <p className="text-sm font-medium text-slate-700">Create task for this shift</p>
+                        <input
+                          value={newTaskByShift[row.id]?.title ?? ""}
+                          onChange={event =>
+                            setNewTaskByShift(prev => ({
+                              ...prev,
+                              [row.id]: {
+                                title: event.target.value,
+                                description: prev[row.id]?.description ?? "",
+                                priority: prev[row.id]?.priority ?? "normal",
+                              },
+                            }))
+                          }
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          placeholder="Task title"
+                        />
+                        <textarea
+                          value={newTaskByShift[row.id]?.description ?? ""}
+                          onChange={event =>
+                            setNewTaskByShift(prev => ({
+                              ...prev,
+                              [row.id]: {
+                                title: prev[row.id]?.title ?? "",
+                                description: event.target.value,
+                                priority: prev[row.id]?.priority ?? "normal",
+                              },
+                            }))
+                          }
+                          rows={2}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          placeholder="Task instructions and expected evidence..."
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={newTaskByShift[row.id]?.priority ?? "normal"}
+                            onChange={event =>
+                              setNewTaskByShift(prev => ({
+                                ...prev,
+                                [row.id]: {
+                                  title: prev[row.id]?.title ?? "",
+                                  description: prev[row.id]?.description ?? "",
+                                  priority: event.target.value as TaskPriority,
+                                },
+                              }))
+                            }
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            <option value="low">Low</option>
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                          </select>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => void handleCreateTaskForShift(row)}
+                            disabled={creatingTaskForShift === row.id}
+                          >
+                            {creatingTaskForShift === row.id ? "Saving..." : "Create task"}
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="mt-4 space-y-2">

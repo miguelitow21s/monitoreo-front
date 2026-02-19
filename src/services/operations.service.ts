@@ -2,7 +2,8 @@
 
 export interface SupervisorShiftRow {
   id: string
-  user_id?: string | null
+  employee_id?: string | null
+  restaurant_id?: number | null
   start_time: string
   end_time: string | null
   status: string
