@@ -1,4 +1,4 @@
-import { supabase } from "@/services/supabaseClient"
+﻿import { supabase } from "@/services/supabaseClient"
 
 export interface SupervisorShiftRow {
   id: string
@@ -58,7 +58,7 @@ export async function getShiftIncidents(shiftId: string) {
 
 export async function resolveEvidenceUrl(path: string | null | undefined, expiresInSeconds = 3600) {
   if (!path) return null
-  const { data, error } = await supabase.storage.from("evidence").createSignedUrl(path, expiresInSeconds)
+  const { data, error } = await supabase.storage.from("shift-evidence").createSignedUrl(path, expiresInSeconds)
   if (error) throw error
   return data.signedUrl
 }

@@ -158,7 +158,7 @@ export default function ShiftsPage() {
     const fileName = `${prefix}-${timestamp}-${coordTag}.jpg`
     const filePath = `users/${user.id}/${prefix}/${fileName}`
 
-    const { error } = await supabase.storage.from("evidence").upload(filePath, photo, {
+    const { error } = await supabase.storage.from("shift-evidence").upload(filePath, photo, {
       upsert: false,
       contentType: "image/jpeg",
     })
