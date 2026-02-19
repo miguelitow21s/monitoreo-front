@@ -12,7 +12,6 @@ import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 import { useRole } from "@/hooks/useRole"
 import { useToast } from "@/components/toast/ToastProvider"
-import { saveShiftHealthForm } from "@/services/compliance.service"
 import {
   createShiftIncident,
   getActiveShiftsForSupervision,
@@ -29,6 +28,7 @@ import {
   ShiftRecord,
   startShift,
 } from "@/services/shifts.service"
+import { uploadShiftEvidence } from "@/services/evidence.service"
 import {
   listMySupervisorPresence,
   registerSupervisorPresence,
@@ -78,6 +78,27 @@ function extractErrorMessage(error: unknown, fallback: string) {
     if (typeof message === "string" && message.trim().length > 0) return message
   }
   return fallback
+}
+
+function isConsentPendingError(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+
+  const status = (error as { status?: unknown }).status
+  if (status === 403) return true
+
+  const message = extractErrorMessage(error, "").toLowerCase()
+  return message.includes("consent") || message.includes("legal") || message.includes("tratamiento de datos")
+}
+
+function getCurrentScheduledRestaurantId(scheduledShifts: ScheduledShift[]) {
+  const now = Date.now()
+  const match = scheduledShifts.find(item => {
+    if (item.status !== "scheduled") return false
+    const start = new Date(item.scheduled_start).getTime() - 15 * 60 * 1000
+    const end = new Date(item.scheduled_end).getTime() + 15 * 60 * 1000
+    return now >= start && now <= end
+  })
+  return match?.restaurant_id
 }
 
 async function sha256Hex(blob: Blob) {
@@ -312,9 +333,6 @@ export default function ShiftsPage() {
 
     try {
       if (startFitForWork === null) throw new Error("You must confirm if you are in optimal condition to work.")
-      if (!startFitForWork) {
-        throw new Error("You cannot start a shift if you report non-optimal condition. Contact supervisor.")
-      }
 
       const latestActive = await getMyActiveShift()
       if (latestActive) {
@@ -323,15 +341,24 @@ export default function ShiftsPage() {
       }
 
       if (!photo) throw new Error("You must capture photo evidence.")
-      const { filePath: evidencePath } = await uploadEvidence("shift-start", photo, coords)
-      const shiftId = Number(await startShift({ lat: coords.lat, lng: coords.lng, evidencePath }))
+      const currentRestaurantId = getCurrentScheduledRestaurantId(scheduledShifts)
+      const shiftId = Number(
+        await startShift({
+          restaurantId: currentRestaurantId,
+          lat: coords.lat,
+          lng: coords.lng,
+          fitForWork: startFitForWork,
+          declaration: startHealthDeclaration.trim() || null,
+        })
+      )
       startedShiftId = shiftId
 
-      await saveShiftHealthForm({
+      await uploadShiftEvidence({
         shiftId,
-        phase: "start",
-        fitForWork: startFitForWork,
-        declaration: startHealthDeclaration.trim() || null,
+        type: "inicio",
+        file: photo,
+        lat: coords.lat,
+        lng: coords.lng,
       })
 
       if (startObservation.trim()) {
@@ -350,6 +377,10 @@ export default function ShiftsPage() {
       if (startedShiftId) {
         await loadEmployeeData(1)
       }
+      if (isConsentPendingError(error)) {
+        showToast("error", "Consentimiento pendiente: acepta tratamiento de datos para operar turnos.")
+        return
+      }
       showToast("error", extractErrorMessage(error, "Could not start shift."))
     } finally {
       setProcessing(false)
@@ -366,20 +397,20 @@ export default function ShiftsPage() {
         throw new Error("You must describe incidents if end-of-shift condition is not optimal.")
       }
 
-      await saveShiftHealthForm({
-        shiftId: Number(activeShift.id),
-        phase: "end",
-        fitForWork: endFitForWork,
-        declaration: endHealthDeclaration.trim() || null,
-      })
-
       if (!photo) throw new Error("You must capture photo evidence.")
-      const { filePath: evidencePath } = await uploadEvidence("shift-end", photo, coords)
+      await uploadShiftEvidence({
+        shiftId: Number(activeShift.id),
+        type: "fin",
+        file: photo,
+        lat: coords.lat,
+        lng: coords.lng,
+      })
       await endShift({
         shiftId: activeShift.id,
         lat: coords.lat,
         lng: coords.lng,
-        evidencePath,
+        fitForWork: endFitForWork,
+        declaration: endHealthDeclaration.trim() || null,
       })
 
       if (endObservation.trim()) {
@@ -395,6 +426,10 @@ export default function ShiftsPage() {
       await loadEmployeeData(1)
       await loadSupervisorData()
     } catch (error: unknown) {
+      if (isConsentPendingError(error)) {
+        showToast("error", "Consentimiento pendiente: acepta tratamiento de datos para operar turnos.")
+        return
+      }
       showToast("error", extractErrorMessage(error, "Could not finish shift."))
     } finally {
       setProcessing(false)

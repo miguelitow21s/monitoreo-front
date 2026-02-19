@@ -1,4 +1,5 @@
 import { supabase } from "@/services/supabaseClient"
+import { invokeEdge } from "@/services/edgeClient"
 
 export type ShiftStatus = "active" | "completed" | "cancelled" | string
 
@@ -10,16 +11,19 @@ export interface ShiftRecord {
 }
 
 interface StartShiftPayload {
+  restaurantId?: number
   lat: number
   lng: number
-  evidencePath: string
+  fitForWork: boolean
+  declaration: string | null
 }
 
 interface EndShiftPayload {
   shiftId: string
   lat: number
   lng: number
-  evidencePath: string
+  fitForWork: boolean
+  declaration: string | null
 }
 
 export interface ShiftHistoryResult {
@@ -41,34 +45,47 @@ function normalizeActiveShift(data: unknown): ShiftRecord | null {
 }
 
 export async function startShift(payload: StartShiftPayload) {
-  const { lat, lng, evidencePath } = payload
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !evidencePath) {
+  const { restaurantId, lat, lng, fitForWork, declaration } = payload
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || typeof fitForWork !== "boolean") {
     throw new Error("Incomplete data to start shift.")
   }
 
-  const { data, error } = await supabase.rpc("start_shift", {
-    lat,
-    lng,
-    evidence_path: evidencePath,
+  const data = await invokeEdge<unknown>("shifts_start", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      restaurant_id: restaurantId,
+      lat,
+      lng,
+      fit_for_work: fitForWork,
+      declaration,
+    },
   })
-  if (error) throw error
-  return data
+
+  if (typeof data === "number") return data
+  if (typeof data === "object" && data !== null) {
+    const shiftId = (data as { shift_id?: unknown; id?: unknown }).shift_id ?? (data as { id?: unknown }).id
+    if (typeof shiftId === "number") return shiftId
+    if (typeof shiftId === "string" && shiftId.trim()) return Number(shiftId)
+  }
+  throw new Error("Invalid response from shifts_start.")
 }
 
 export async function endShift(payload: EndShiftPayload) {
-  const { shiftId, lat, lng, evidencePath } = payload
-  if (!shiftId || !Number.isFinite(lat) || !Number.isFinite(lng) || !evidencePath) {
+  const { shiftId, lat, lng, fitForWork, declaration } = payload
+  if (!shiftId || !Number.isFinite(lat) || !Number.isFinite(lng) || typeof fitForWork !== "boolean") {
     throw new Error("Incomplete data to finish shift.")
   }
 
-  const { data, error } = await supabase.rpc("end_shift", {
-    shift_id: shiftId,
-    lat,
-    lng,
-    evidence_path: evidencePath,
+  return invokeEdge("shifts_end", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      shift_id: Number(shiftId),
+      lat,
+      lng,
+      fit_for_work: fitForWork,
+      declaration,
+    },
   })
-  if (error) throw error
-  return data
 }
 
 export async function getMyActiveShift() {

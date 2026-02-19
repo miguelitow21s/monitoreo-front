@@ -7,6 +7,10 @@ import ProtectedRoute from "@/components/ProtectedRoute"
 import { useToast } from "@/components/toast/ToastProvider"
 import { useRole } from "@/hooks/useRole"
 import { AuditEvent, DashboardMetric, fetchAuditEvents, fetchDashboardMetrics } from "@/services/dashboard.service"
+import {
+  IntegrationCheckResult,
+  runBackendIntegrationChecks,
+} from "@/services/integrationChecks.service"
 import Badge from "@/components/ui/Badge"
 import Button from "@/components/ui/Button"
 import Card from "@/components/ui/Card"
@@ -25,6 +29,8 @@ export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetric[]>([])
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   const [loadingData, setLoadingData] = useState(true)
+  const [runningChecks, setRunningChecks] = useState(false)
+  const [checkResults, setCheckResults] = useState<IntegrationCheckResult[]>([])
 
   const roleSummary = isSuperAdmin
     ? "Complete system view for global administration."
@@ -64,6 +70,24 @@ export default function DashboardPage() {
     if (loading) return
     void loadData()
   }, [loading, loadData])
+
+  const runChecks = useCallback(async () => {
+    setRunningChecks(true)
+    try {
+      const results = await runBackendIntegrationChecks()
+      setCheckResults(results)
+      const failures = results.filter(item => item.status === "fail").length
+      if (failures > 0) {
+        showToast("error", `${failures} backend integration checks failed.`)
+      } else {
+        showToast("success", "Backend integration checks completed.")
+      }
+    } catch (error: unknown) {
+      showToast("error", error instanceof Error ? error.message : "Could not run integration checks.")
+    } finally {
+      setRunningChecks(false)
+    }
+  }, [showToast])
 
   return (
     <ProtectedRoute>
@@ -140,6 +164,48 @@ export default function DashboardPage() {
                 </div>
               </Card>
             </div>
+
+            {(isSuperAdmin || isSupervisora) && (
+              <Card
+                title="Backend Integration Check"
+                subtitle="Runtime validation of Edge contracts before release."
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button onClick={() => void runChecks()} disabled={runningChecks} variant="secondary">
+                    {runningChecks ? "Running checks..." : "Run checks"}
+                  </Button>
+                  {checkResults.length > 0 && (
+                    <span className="text-xs text-slate-500">
+                      Last run: {new Date().toLocaleString("en-US")}
+                    </span>
+                  )}
+                </div>
+
+                {checkResults.length > 0 && (
+                  <ul className="mt-4 space-y-2 text-sm">
+                    {checkResults.map(item => (
+                      <li key={item.endpoint} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                        <div>
+                          <p className="font-medium text-slate-800">{item.endpoint}</p>
+                          <p className="text-xs text-slate-500">{item.detail}</p>
+                        </div>
+                        <Badge
+                          variant={
+                            item.status === "pass"
+                              ? "success"
+                              : item.status === "warn"
+                                ? "warning"
+                                : "danger"
+                          }
+                        >
+                          {item.status.toUpperCase()}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            )}
 
             {auditEvents.length === 0 ? (
               <EmptyState

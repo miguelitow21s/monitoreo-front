@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/hooks/useAuth"
-import { getActiveLegalTermsVersion, LegalTermsVersion, recordCurrentUserLegalAcceptance } from "@/services/compliance.service"
+import { acceptLegalConsent, getLegalConsentStatus, LegalConsentStatus } from "@/services/compliance.service"
 import { supabase } from "@/services/supabaseClient"
 
 export default function LoginPage() {
@@ -17,8 +17,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [acceptedDataTreatment, setAcceptedDataTreatment] = useState(false)
-  const [legalTerms, setLegalTerms] = useState<LegalTermsVersion | null>(null)
-  const [loadingLegalTerms, setLoadingLegalTerms] = useState(true)
+  const [legalStatus, setLegalStatus] = useState<LegalConsentStatus | null>(null)
+  const [loadingLegalStatus, setLoadingLegalStatus] = useState(false)
   const [showLegalContent, setShowLegalContent] = useState(false)
 
   useEffect(() => {
@@ -27,40 +27,12 @@ export default function LoginPage() {
     }
   }, [session, loading, router])
 
-  useEffect(() => {
-    let mounted = true
-
-    const loadLegalTerms = async () => {
-      try {
-        const activeTerms = await getActiveLegalTermsVersion()
-        if (!mounted) return
-        setLegalTerms(activeTerms)
-      } catch {
-        if (!mounted) return
-        setLegalTerms(null)
-      } finally {
-        if (mounted) setLoadingLegalTerms(false)
-      }
-    }
-
-    void loadLegalTerms()
-
-    return () => {
-      mounted = false
-    }
-  }, [])
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
     if (!acceptedDataTreatment) {
       setError("You must accept personal data processing authorization.")
-      return
-    }
-
-    if (!legalTerms) {
-      setError("No active legal terms found. Contact support.")
       return
     }
 
@@ -75,14 +47,22 @@ export default function LoginPage() {
     }
 
     try {
-      await recordCurrentUserLegalAcceptance(legalTerms.id, window.navigator.userAgent)
+      setLoadingLegalStatus(true)
+      const status = await getLegalConsentStatus()
+      setLegalStatus(status)
+
+      if (!status.accepted) {
+        await acceptLegalConsent(status.active_term?.id)
+      }
     } catch {
       await supabase.auth.signOut()
-      setError("Could not register legal acceptance. Please try again.")
+      setError("Could not validate legal consent. Please try again.")
       setSubmitting(false)
+      setLoadingLegalStatus(false)
       return
     }
 
+    setLoadingLegalStatus(false)
     router.replace("/dashboard")
   }
 
@@ -147,25 +127,26 @@ export default function LoginPage() {
 
           <div className="mt-2 flex items-center justify-between gap-2">
             <p className="text-[11px] text-slate-500">
-              {loadingLegalTerms
+              {loadingLegalStatus
                 ? "Loading legal terms..."
-                : legalTerms
-                  ? `${legalTerms.title} (v${legalTerms.version})`
-                  : "No active legal terms available."}
+                : legalStatus?.active_term
+                  ? `${legalStatus.active_term.title ?? "Active legal terms"} (v${legalStatus.active_term.version ?? "-"})`
+                  : "Legal terms will be validated after sign-in."}
             </p>
             <button
               type="button"
               className="text-[11px] font-semibold text-slate-700 underline"
               onClick={() => setShowLegalContent(prev => !prev)}
-              disabled={!legalTerms}
+              disabled={!legalStatus?.active_term}
             >
               {showLegalContent ? "Hide terms" : "View terms"}
             </button>
           </div>
 
-          {showLegalContent && legalTerms && (
+          {showLegalContent && legalStatus?.active_term && (
             <div className="mt-2 max-h-40 overflow-auto rounded border border-slate-200 bg-white p-2 text-[11px] text-slate-600">
-              {legalTerms.content}
+              Code: {legalStatus.active_term.code ?? "-"} | Title: {legalStatus.active_term.title ?? "-"} | Version:{" "}
+              {legalStatus.active_term.version ?? "-"}
             </div>
           )}
         </div>
@@ -174,7 +155,7 @@ export default function LoginPage() {
 
         <button
           type="submit"
-          disabled={submitting || loading || loadingLegalTerms || !acceptedDataTreatment}
+          disabled={submitting || loading || loadingLegalStatus || !acceptedDataTreatment}
           className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
         >
           {submitting ? "Signing in..." : "Sign in"}
