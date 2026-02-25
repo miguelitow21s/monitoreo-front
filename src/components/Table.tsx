@@ -37,7 +37,7 @@ export default function Table<T extends Record<string, unknown>>({
                 colSpan={columns.length}
                 className="px-4 py-6 text-center text-sm text-gray-500"
               >
-                No data to display
+                No hay datos para mostrar
               </td>
             </tr>
           )}

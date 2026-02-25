@@ -30,12 +30,12 @@ async function callEdge(endpoint: string, method: "GET" | "POST", body?: unknown
   } = await supabase.auth.getSession()
 
   if (!session?.access_token) {
-    throw new Error("No active session token.")
+    throw new Error("No hay token de sesion activo.")
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured.")
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL no esta configurada.")
   }
 
   const headers: Record<string, string> = {
@@ -75,16 +75,16 @@ export async function runBackendIntegrationChecks() {
 
   const health = await callEdge("health_ping", "GET")
   if (health.ok) {
-    results.push({ endpoint: "/health_ping", status: "pass", detail: "reachable" })
+    results.push({ endpoint: "/health_ping", status: "pass", detail: "accesible" })
   } else {
     results.push({ endpoint: "/health_ping", status: "fail", detail: `HTTP ${health.status}` })
   }
 
   const consent = await callEdge("legal_consent", "POST", { action: "status" })
   if (consent.ok) {
-    results.push({ endpoint: "/legal_consent", status: "pass", detail: "status retrieved" })
+    results.push({ endpoint: "/legal_consent", status: "pass", detail: "estado consultado" })
   } else if (isExpectedValidationOrBusinessStatus(consent.status)) {
-    results.push({ endpoint: "/legal_consent", status: "warn", detail: `reachable with HTTP ${consent.status}` })
+    results.push({ endpoint: "/legal_consent", status: "warn", detail: `accesible con HTTP ${consent.status}` })
   } else {
     results.push({ endpoint: "/legal_consent", status: "fail", detail: `HTTP ${consent.status}` })
   }
@@ -102,9 +102,9 @@ export async function runBackendIntegrationChecks() {
     crypto.randomUUID()
   )
   if (shiftsStart.ok) {
-    results.push({ endpoint: "/shifts_start", status: "pass", detail: "accepted request" })
+    results.push({ endpoint: "/shifts_start", status: "pass", detail: "solicitud aceptada" })
   } else if (isExpectedValidationOrBusinessStatus(shiftsStart.status)) {
-    results.push({ endpoint: "/shifts_start", status: "warn", detail: `reachable with HTTP ${shiftsStart.status}` })
+    results.push({ endpoint: "/shifts_start", status: "warn", detail: `accesible con HTTP ${shiftsStart.status}` })
   } else {
     results.push({ endpoint: "/shifts_start", status: "fail", detail: `HTTP ${shiftsStart.status}` })
   }
@@ -120,9 +120,9 @@ export async function runBackendIntegrationChecks() {
     crypto.randomUUID()
   )
   if (evidence.ok) {
-    results.push({ endpoint: "/evidence_upload", status: "pass", detail: "request_upload accepted" })
+    results.push({ endpoint: "/evidence_upload", status: "pass", detail: "request_upload aceptado" })
   } else if (isExpectedValidationOrBusinessStatus(evidence.status)) {
-    results.push({ endpoint: "/evidence_upload", status: "warn", detail: `reachable with HTTP ${evidence.status}` })
+    results.push({ endpoint: "/evidence_upload", status: "warn", detail: `accesible con HTTP ${evidence.status}` })
   } else {
     results.push({ endpoint: "/evidence_upload", status: "fail", detail: `HTTP ${evidence.status}` })
   }
@@ -140,9 +140,9 @@ export async function runBackendIntegrationChecks() {
     crypto.randomUUID()
   )
   if (shiftsEnd.ok) {
-    results.push({ endpoint: "/shifts_end", status: "pass", detail: "accepted request" })
+    results.push({ endpoint: "/shifts_end", status: "pass", detail: "solicitud aceptada" })
   } else if (isExpectedValidationOrBusinessStatus(shiftsEnd.status)) {
-    results.push({ endpoint: "/shifts_end", status: "warn", detail: `reachable with HTTP ${shiftsEnd.status}` })
+    results.push({ endpoint: "/shifts_end", status: "warn", detail: `accesible con HTTP ${shiftsEnd.status}` })
   } else {
     results.push({ endpoint: "/shifts_end", status: "fail", detail: `HTTP ${shiftsEnd.status}` })
   }

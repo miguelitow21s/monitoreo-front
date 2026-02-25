@@ -57,7 +57,7 @@ export default function SuppliesPage() {
       setDeliverySupplyId(prev => prev || suppliesRows[0]?.id || "")
       setDeliveryRestaurantId(prev => prev || restaurantRows[0]?.id || "")
     } catch (error: unknown) {
-      showToast("error", extractError(error, "Could not load supplies module."))
+      showToast("error", extractError(error, "No se pudo cargar el modulo de insumos."))
     } finally {
       setLoading(false)
     }
@@ -77,7 +77,7 @@ export default function SuppliesPage() {
   const handleCreateSupply = async () => {
     const parsedStock = Number(supplyStock)
     if (!supplyName.trim() || !Number.isFinite(parsedStock)) {
-      showToast("info", "Complete name and valid stock.")
+      showToast("info", "Completa nombre y stock valido.")
       return
     }
 
@@ -91,16 +91,16 @@ export default function SuppliesPage() {
       setSupplies(prev => [created, ...prev])
       setSupplyName("")
       setSupplyStock("0")
-      showToast("success", "Supply created.")
+      showToast("success", "Insumo creado.")
     } catch (error: unknown) {
-      showToast("error", extractError(error, "Could not create supply."))
+      showToast("error", extractError(error, "No se pudo crear el insumo."))
     }
   }
 
   const handleRegisterDelivery = async () => {
     const parsedQuantity = Number(deliveryQuantity)
     if (!deliverySupplyId || !deliveryRestaurantId || !Number.isFinite(parsedQuantity)) {
-      showToast("info", "Select supply, restaurant and valid quantity.")
+      showToast("info", "Selecciona insumo, restaurante y cantidad valida.")
       return
     }
 
@@ -111,9 +111,9 @@ export default function SuppliesPage() {
         quantity: parsedQuantity,
       })
       setDeliveries(prev => [created, ...prev].slice(0, 40))
-      showToast("success", "Delivery registered.")
+      showToast("success", "Entrega registrada.")
     } catch (error: unknown) {
-      showToast("error", extractError(error, "Could not register delivery."))
+      showToast("error", extractError(error, "No se pudo registrar la entrega."))
     }
   }
 
@@ -121,37 +121,37 @@ export default function SuppliesPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Supplies</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Insumos</h1>
 
           {loading || authLoading ? (
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title="Create supply" subtitle="Add a base product for inventory.">
+              <Card title="Crear insumo" subtitle="Agrega un producto base al inventario.">
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <input
                     value={supplyName}
                     onChange={event => setSupplyName(event.target.value)}
-                    placeholder="Name"
+                    placeholder="Nombre"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <input
                     value={supplyUnit}
                     onChange={event => setSupplyUnit(event.target.value)}
-                    placeholder="Unit"
+                    placeholder="Unidad"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <input
                     value={supplyStock}
                     onChange={event => setSupplyStock(event.target.value)}
-                    placeholder="Initial stock"
+                    placeholder="Stock inicial"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
-                  <Button onClick={handleCreateSupply}>Save</Button>
+                  <Button onClick={handleCreateSupply}>Guardar</Button>
                 </div>
               </Card>
 
-              <Card title="Register delivery" subtitle="Associate delivered quantity to a restaurant.">
+              <Card title="Registrar entrega" subtitle="Asocia la cantidad entregada a un restaurante.">
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <select
                     value={deliverySupplyId}
@@ -178,21 +178,21 @@ export default function SuppliesPage() {
                   <input
                     value={deliveryQuantity}
                     onChange={event => setDeliveryQuantity(event.target.value)}
-                    placeholder="Quantity"
+                    placeholder="Cantidad"
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <Button variant="secondary" onClick={handleRegisterDelivery}>
-                    Register
+                    Registrar
                   </Button>
                 </div>
               </Card>
 
-              <Card title="Current inventory" subtitle="Stock control by supply item.">
+              <Card title="Inventario actual" subtitle="Control de stock por insumo.">
                 {supplies.length === 0 ? (
                   <EmptyState
-                    title="No supplies"
-                    description="Create the first supply item to begin."
-                    actionLabel="Reload"
+                    title="Sin insumos"
+                    description="Crea el primer insumo para comenzar."
+                    actionLabel="Recargar"
                     onAction={() => void loadData()}
                   />
                 ) : (
@@ -201,7 +201,7 @@ export default function SuppliesPage() {
                       {supplies.map(item => (
                         <div key={item.id} className="rounded-lg border border-slate-200 p-3">
                           <p className="font-medium text-slate-900">{item.name}</p>
-                          <p className="mt-1 text-sm text-slate-600">Unit: {item.unit}</p>
+                          <p className="mt-1 text-sm text-slate-600">Unidad: {item.unit}</p>
                           <p className="mt-1 text-sm text-slate-600">Stock: {item.stock}</p>
                         </div>
                       ))}
@@ -211,8 +211,8 @@ export default function SuppliesPage() {
                       <table className="min-w-full text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 text-left text-slate-500">
-                            <th className="pb-2 pr-3">Name</th>
-                            <th className="pb-2 pr-3">Unit</th>
+                            <th className="pb-2 pr-3">Nombre</th>
+                            <th className="pb-2 pr-3">Unidad</th>
                             <th className="pb-2 pr-3">Stock</th>
                           </tr>
                         </thead>
@@ -231,14 +231,14 @@ export default function SuppliesPage() {
                 )}
               </Card>
 
-              <Card title="Delivery history" subtitle="Latest registered movements.">
+              <Card title="Historial de entregas" subtitle="Ultimos movimientos registrados.">
                 {deliveries.length === 0 ? (
-                  <p className="text-sm text-slate-500">No deliveries registered.</p>
+                  <p className="text-sm text-slate-500">No hay entregas registradas.</p>
                 ) : (
                   <ul className="space-y-1 text-sm text-slate-700">
                     {deliveries.map(item => (
                       <li key={item.id}>
-                        {new Date(item.delivered_at).toLocaleString("en-US")} - {item.quantity} units
+                        {new Date(item.delivered_at).toLocaleString("es-CO")} - {item.quantity} unidades
                       </li>
                     ))}
                   </ul>
@@ -246,7 +246,7 @@ export default function SuppliesPage() {
               </Card>
 
               {inconsistencies.length > 0 && (
-                <Card title="Detected inconsistencies" subtitle="Negative stock detected.">
+                <Card title="Inconsistencias detectadas" subtitle="Se detecto stock negativo.">
                   <ul className="list-disc space-y-1 pl-5 text-sm text-red-700">
                     {inconsistencies.map(item => (
                       <li key={item.id}>

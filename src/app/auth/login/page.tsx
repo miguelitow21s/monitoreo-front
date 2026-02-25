@@ -20,6 +20,10 @@ export default function LoginPage() {
   const [legalStatus, setLegalStatus] = useState<LegalConsentStatus | null>(null)
   const [loadingLegalStatus, setLoadingLegalStatus] = useState(false)
   const [showLegalContent, setShowLegalContent] = useState(false)
+  const [needsBackendConsent, setNeedsBackendConsent] = useState(false)
+  const [processingBackendConsent, setProcessingBackendConsent] = useState(false)
+  const [pendingAccessToken, setPendingAccessToken] = useState<string | null>(null)
+  const [blockAutoRedirect, setBlockAutoRedirect] = useState(false)
 
   const extractErrorMessage = (error: unknown) => {
     if (error instanceof Error && error.message) return error.message
@@ -27,31 +31,35 @@ export default function LoginPage() {
       const message = (error as { message?: unknown }).message
       if (typeof message === "string" && message.trim().length > 0) return message
     }
-    return "Could not validate legal consent. Please try again."
+    return "No se pudo validar el consentimiento legal. Intenta nuevamente."
   }
 
   useEffect(() => {
-    if (!loading && session) {
+    if (!loading && session && !blockAutoRedirect) {
       router.replace("/dashboard")
     }
-  }, [session, loading, router])
+  }, [session, loading, router, blockAutoRedirect])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setNeedsBackendConsent(false)
+    setPendingAccessToken(null)
 
     if (!acceptedDataTreatment) {
-      setError("You must accept personal data processing authorization.")
+      setError("Debes aceptar la autorizacion de tratamiento de datos personales.")
       return
     }
 
     setSubmitting(true)
+    setBlockAutoRedirect(true)
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
-      setError("Invalid credentials")
+      setError("Credenciales invalidas")
       setSubmitting(false)
+      setBlockAutoRedirect(false)
       return
     }
 
@@ -63,8 +71,9 @@ export default function LoginPage() {
 
     if (!accessToken) {
       await supabase.auth.signOut()
-      setError("Authenticated session was not established. Please sign in again.")
+      setError("No se pudo establecer sesion autenticada. Inicia sesion de nuevo.")
       setSubmitting(false)
+      setBlockAutoRedirect(false)
       return
     }
 
@@ -74,7 +83,13 @@ export default function LoginPage() {
       setLegalStatus(status)
 
       if (!status.accepted) {
-        await acceptLegalConsent(status.active_term?.id, accessToken)
+        setNeedsBackendConsent(true)
+        setPendingAccessToken(accessToken)
+        setShowLegalContent(true)
+        setError("Debes leer y aceptar los terminos y condiciones para continuar.")
+        setSubmitting(false)
+        setLoadingLegalStatus(false)
+        return
       }
     } catch (legalError: unknown) {
       await supabase.auth.signOut()
@@ -121,11 +136,34 @@ export default function LoginPage() {
       setError(message)
       setSubmitting(false)
       setLoadingLegalStatus(false)
+      setBlockAutoRedirect(false)
       return
     }
 
     setLoadingLegalStatus(false)
+    setBlockAutoRedirect(false)
     router.replace("/dashboard")
+  }
+
+  const handleAcceptBackendConsent = async () => {
+    if (!legalStatus?.active_term) {
+      setError("No se encontro termino legal activo para aceptar.")
+      return
+    }
+
+    setError(null)
+    setProcessingBackendConsent(true)
+    try {
+      await acceptLegalConsent(legalStatus.active_term.id, pendingAccessToken ?? undefined)
+      setNeedsBackendConsent(false)
+      setPendingAccessToken(null)
+      setBlockAutoRedirect(false)
+      router.replace("/dashboard")
+    } catch (legalError: unknown) {
+      setError(extractErrorMessage(legalError))
+    } finally {
+      setProcessingBackendConsent(false)
+    }
   }
 
   return (
@@ -135,11 +173,11 @@ export default function LoginPage() {
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Secure access
+          Acceso seguro
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">Sign in</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">Iniciar sesion</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Enter your credentials to continue.
+          Ingresa tus credenciales para continuar.
         </p>
 
         <div className="mt-6 space-y-3">
@@ -147,7 +185,7 @@ export default function LoginPage() {
             type="email"
             required
             autoComplete="email"
-            placeholder="Email address"
+            placeholder="Correo electronico"
             value={email}
             onChange={e => {
               setEmail(e.target.value)
@@ -160,7 +198,7 @@ export default function LoginPage() {
             type="password"
             required
             autoComplete="current-password"
-            placeholder="Password"
+            placeholder="Contrasena"
             value={password}
             onChange={e => {
               setPassword(e.target.value)
@@ -183,17 +221,17 @@ export default function LoginPage() {
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900"
             />
             <label htmlFor="accept-data-treatment" className="leading-5">
-              I authorize personal data processing for operational control and legal audit purposes.
+              Autorizo el tratamiento de mis datos personales para control operativo y fines de auditoria legal.
             </label>
           </div>
 
           <div className="mt-2 flex items-center justify-between gap-2">
             <p className="text-[11px] text-slate-500">
               {loadingLegalStatus
-                ? "Loading legal terms..."
+                ? "Cargando terminos legales..."
                 : legalStatus?.active_term
-                  ? `${legalStatus.active_term.title ?? "Active legal terms"} (v${legalStatus.active_term.version ?? "-"})`
-                  : "Legal terms will be validated after sign-in."}
+                  ? `${legalStatus.active_term.title ?? "Terminos legales activos"} (v${legalStatus.active_term.version ?? "-"})`
+                  : "Los terminos legales se validaran despues del inicio de sesion."}
             </p>
             <button
               type="button"
@@ -201,14 +239,26 @@ export default function LoginPage() {
               onClick={() => setShowLegalContent(prev => !prev)}
               disabled={!legalStatus?.active_term}
             >
-              {showLegalContent ? "Hide terms" : "View terms"}
+              {showLegalContent ? "Ocultar terminos" : "Ver terminos"}
             </button>
           </div>
 
           {showLegalContent && legalStatus?.active_term && (
-            <div className="mt-2 max-h-40 overflow-auto rounded border border-slate-200 bg-white p-2 text-[11px] text-slate-600">
-              Code: {legalStatus.active_term.code ?? "-"} | Title: {legalStatus.active_term.title ?? "-"} | Version:{" "}
-              {legalStatus.active_term.version ?? "-"}
+            <div className="mt-2 max-h-64 space-y-2 overflow-auto rounded border border-slate-200 bg-white p-3 text-[11px] text-slate-600">
+              <p>
+                <span className="font-semibold">Codigo:</span> {legalStatus.active_term.code ?? "-"} |{" "}
+                <span className="font-semibold">Titulo:</span> {legalStatus.active_term.title ?? "-"} |{" "}
+                <span className="font-semibold">Version:</span> {legalStatus.active_term.version ?? "-"}
+              </p>
+              <div className="whitespace-pre-wrap break-words rounded border border-slate-100 bg-slate-50 p-2 text-[11px] leading-5 text-slate-700">
+                {legalStatus.active_term.content?.trim() || "El contenido del documento legal no fue enviado por backend."}
+              </div>
+            </div>
+          )}
+
+          {needsBackendConsent && (
+            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+              Tienes sesion iniciada, pero falta aceptar los terminos activos en backend.
             </div>
           )}
         </div>
@@ -217,18 +267,36 @@ export default function LoginPage() {
 
         <button
           type="submit"
-          disabled={submitting || loading || loadingLegalStatus || !acceptedDataTreatment}
+          disabled={
+            submitting ||
+            loading ||
+            loadingLegalStatus ||
+            !acceptedDataTreatment ||
+            processingBackendConsent ||
+            needsBackendConsent
+          }
           className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
         >
-          {submitting ? "Signing in..." : "Sign in"}
+          {submitting ? "Ingresando..." : "Ingresar"}
         </button>
+
+        {needsBackendConsent && (
+          <button
+            type="button"
+            onClick={() => void handleAcceptBackendConsent()}
+            disabled={processingBackendConsent}
+            className="mt-3 w-full rounded-lg border border-slate-300 bg-white py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60"
+          >
+            {processingBackendConsent ? "Aceptando terminos..." : "Aceptar terminos y continuar"}
+          </button>
+        )}
 
         <div className="mt-4 flex items-center justify-between text-xs">
           <Link href="/auth/forgot-password" className="text-slate-600 underline hover:text-slate-900">
-            Forgot password
+            Olvide mi contrasena
           </Link>
           <Link href="/auth/register" className="text-slate-600 underline hover:text-slate-900">
-            Register
+            Registrarme
           </Link>
         </div>
       </form>

@@ -10,7 +10,7 @@ interface CameraCaptureProps {
 }
 
 function drawEvidenceOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, lines: string[]) {
-  const nowLine = `Captured: ${new Date().toLocaleString("en-US")}`
+  const nowLine = `Capturada: ${new Date().toLocaleString("es-CO")}`
   const mergedLines = [nowLine, ...lines.filter(item => item.trim().length > 0)]
   const paddingX = 12
   const paddingY = 10
@@ -58,7 +58,7 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
     setError(null)
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError("This device does not support camera access in this browser.")
+      setError("Este dispositivo no permite acceso a camara en este navegador.")
       return
     }
 
@@ -82,16 +82,16 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
     } catch (err: unknown) {
       if (err instanceof DOMException) {
         if (err.name === "NotAllowedError") {
-          setError("Camera permission denied.")
+          setError("Permiso de camara denegado.")
         } else if (err.name === "NotFoundError") {
-          setError("No camera device was found.")
+          setError("No se encontro camara disponible.")
         } else if (err.name === "NotReadableError") {
-          setError("Could not access camera device.")
+          setError("No se pudo acceder al dispositivo de camara.")
         } else {
-          setError("Error enabling camera.")
+          setError("Error al habilitar la camara.")
         }
       } else {
-        setError("Error enabling camera.")
+        setError("Error al habilitar la camara.")
       }
     }
   }
@@ -107,7 +107,7 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
 
     const ctx = canvas.getContext("2d")
     if (!ctx) {
-      setError("Could not capture evidence photo.")
+      setError("No se pudo capturar la foto de evidencia.")
       return
     }
 
@@ -117,7 +117,7 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
     canvas.toBlob(
       blob => {
         if (!blob) {
-          setError("Could not generate evidence file.")
+          setError("No se pudo generar el archivo de evidencia.")
           return
         }
 
@@ -140,7 +140,7 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
 
       {!ready && !captured && (
         <Button onClick={startCamera} size="sm">
-          Enable camera
+          Habilitar camara
         </Button>
       )}
 
@@ -157,19 +157,19 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
 
       {ready && !captured && (
         <Button variant="secondary" size="sm" onClick={capturePhoto}>
-          Capture evidence
+          Capturar evidencia
         </Button>
       )}
 
       {captured && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Evidence photo captured.
+          Foto de evidencia capturada.
         </div>
       )}
 
       {captured && (
         <Button variant="ghost" size="sm" onClick={resetCapture}>
-          Take another photo
+          Tomar otra foto
         </Button>
       )}
     </div>

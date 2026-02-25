@@ -54,11 +54,11 @@ export default function RegisterPage() {
       }
 
       setMessage(
-        "Registration successful. If email confirmation is required, verify your email before signing in."
+        "Registro exitoso. Si se requiere confirmacion por correo, valida tu email antes de iniciar sesion."
       )
       setTimeout(() => router.replace("/auth/login"), 1400)
     } catch (err: unknown) {
-      setError(errorMessage(err, "Could not complete registration."))
+      setError(errorMessage(err, "No se pudo completar el registro."))
     } finally {
       setSubmitting(false)
     }
@@ -71,17 +71,17 @@ export default function RegisterPage() {
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Employee registration
+          Registro de empleado
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">Create account</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">Crear cuenta</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Account is created with employee role. Activation is controlled by administration.
+          La cuenta se crea con rol empleado. La activacion la controla administracion.
         </p>
 
         <div className="mt-6 space-y-3">
           <input
             required
-            placeholder="Full name"
+            placeholder="Nombre completo"
             value={fullName}
             onChange={e => setFullName(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -90,7 +90,7 @@ export default function RegisterPage() {
             type="email"
             required
             autoComplete="email"
-            placeholder="Email address"
+            placeholder="Correo electronico"
             value={email}
             onChange={e => setEmail(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -100,7 +100,7 @@ export default function RegisterPage() {
             required
             minLength={8}
             autoComplete="new-password"
-            placeholder="Password (min 8)"
+            placeholder="Contrasena (min 8)"
             value={password}
             onChange={e => setPassword(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -115,12 +115,12 @@ export default function RegisterPage() {
           disabled={submitting}
           className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
         >
-          {submitting ? "Registering..." : "Create account"}
+          {submitting ? "Registrando..." : "Crear cuenta"}
         </button>
 
         <div className="mt-4 text-right text-xs">
           <Link href="/auth/login" className="text-slate-600 underline hover:text-slate-900">
-            Back to login
+            Volver al inicio de sesion
           </Link>
         </div>
       </form>

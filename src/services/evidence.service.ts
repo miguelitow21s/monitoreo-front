@@ -69,7 +69,7 @@ export async function uploadShiftEvidence(payload: {
   const uploadPath = resolveUploadPath(requested)
 
   if (!uploadUrl || !uploadPath) {
-    throw new Error("Invalid upload payload from backend (missing upload URL/path).")
+    throw new Error("Payload de carga invalido desde backend (falta upload URL/path).")
   }
 
   const uploadResponse = await fetch(uploadUrl, {
@@ -82,7 +82,7 @@ export async function uploadShiftEvidence(payload: {
   })
 
   if (!uploadResponse.ok) {
-    throw new Error(`Could not upload evidence binary (HTTP ${uploadResponse.status}).`)
+    throw new Error(`No se pudo subir el binario de evidencia (HTTP ${uploadResponse.status}).`)
   }
 
   await finalizeUpload({

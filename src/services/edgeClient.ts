@@ -46,13 +46,13 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
 
   if (error) {
     const status = (error as { status?: unknown }).status
-    throw toError(error.message ?? "Edge function request failed.", typeof status === "number" ? status : undefined)
+    throw toError(error.message ?? "Fallo la solicitud a Edge Function.", typeof status === "number" ? status : undefined)
   }
 
   const envelope = (data ?? null) as BackendEnvelope<T> | null
   if (envelope && typeof envelope === "object" && "success" in envelope) {
     if (!envelope.success) {
-      const message = envelope.error?.message ?? "Backend request rejected."
+      const message = envelope.error?.message ?? "La solicitud fue rechazada por backend."
       throw toError(message, undefined, envelope.error?.code, envelope.request_id ?? envelope.error?.request_id)
     }
     return (envelope.data ?? null) as T

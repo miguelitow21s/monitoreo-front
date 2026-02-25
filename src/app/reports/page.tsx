@@ -53,7 +53,7 @@ export default function ReportsPage() {
       )
       setRows(reportRows)
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not load reports.")
+      showToast("error", error instanceof Error ? error.message : "No se pudieron cargar los reportes.")
     } finally {
       setLoading(false)
     }
@@ -82,9 +82,9 @@ export default function ReportsPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Reportes</h1>
 
-          <Card title="Report filters" subtitle="Filter by date range and restaurant.">
+          <Card title="Filtros de reporte" subtitle="Filtra por rango de fechas y restaurante.">
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               <input
                 type="date"
@@ -103,7 +103,7 @@ export default function ReportsPage() {
                 onChange={event => setRestaurantId(event.target.value)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
-                <option value="">All restaurants</option>
+                <option value="">Todos los restaurantes</option>
                 {restaurants.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -111,35 +111,35 @@ export default function ReportsPage() {
                 ))}
               </select>
               <Button variant="secondary" onClick={() => void loadReport()}>
-                Apply
+                Aplicar
               </Button>
               <Button variant="ghost" onClick={() => exportReportCsv(rows)}>
-                Export Excel (CSV)
+                Exportar Excel (CSV)
               </Button>
             </div>
           </Card>
 
-          <Card title="Summary" subtitle="Current filter indicators.">
+          <Card title="Resumen" subtitle="Indicadores del filtro actual.">
             <div className="mt-3 grid gap-2 md:grid-cols-3">
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Total shifts: {rows.length}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Completed: {totalCompleted}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Active: {totalActive}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">Turnos totales: {rows.length}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">Finalizados: {totalCompleted}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">Activos: {totalActive}</div>
             </div>
             <div className="mt-3">
               <Button variant="primary" onClick={exportPdf}>
-                Export PDF
+                Exportar PDF
               </Button>
             </div>
           </Card>
 
-          <Card title="Report results" subtitle="Read-only row details.">
+          <Card title="Resultados del reporte" subtitle="Detalle de filas en modo solo lectura.">
             {loading || authLoading ? (
               <Skeleton className="h-28" />
             ) : rows.length === 0 ? (
               <EmptyState
-                title="No results"
-                description="No rows for the selected filter."
-                actionLabel="Retry"
+                title="Sin resultados"
+                description="No hay filas para el filtro seleccionado."
+                actionLabel="Reintentar"
                 onAction={() => void loadReport()}
               />
             ) : (
@@ -147,43 +147,43 @@ export default function ReportsPage() {
                 <div className="space-y-2 md:hidden">
                   {rows.map(item => (
                     <div key={item.id} className="rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs text-slate-500">Shift {String(item.id).slice(0, 8)}</p>
-                      <p className="mt-1 text-sm text-slate-700">Restaurant: {item.restaurant_id ?? "-"}</p>
+                      <p className="text-xs text-slate-500">Turno {String(item.id).slice(0, 8)}</p>
+                      <p className="mt-1 text-sm text-slate-700">Restaurante: {item.restaurant_id ?? "-"}</p>
                       <p className="mt-1 text-sm text-slate-700">
-                        Start: {new Date(item.start_time).toLocaleString("en-US")}
+                        Inicio: {new Date(item.start_time).toLocaleString("es-CO")}
                       </p>
                       <p className="mt-1 text-sm text-slate-700">
-                        End: {item.end_time ? new Date(item.end_time).toLocaleString("en-US") : "-"}
+                        Fin: {item.end_time ? new Date(item.end_time).toLocaleString("es-CO") : "-"}
                       </p>
-                      <p className="mt-1 text-sm text-slate-700">Status: {item.status}</p>
+                      <p className="mt-1 text-sm text-slate-700">Estado: {item.status}</p>
                     </div>
                   ))}
                 </div>
 
                 <div className="hidden overflow-x-auto md:block">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left text-slate-500">
-                        <th className="pb-2 pr-3">Shift</th>
-                        <th className="pb-2 pr-3">Restaurant</th>
-                        <th className="pb-2 pr-3">Start</th>
-                        <th className="pb-2 pr-3">End</th>
-                        <th className="pb-2 pr-3">Status</th>
-                        <th className="pb-2 pr-3">Detail</th>
-                      </tr>
-                    </thead>
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-left text-slate-500">
+                            <th className="pb-2 pr-3">Turno</th>
+                            <th className="pb-2 pr-3">Restaurante</th>
+                            <th className="pb-2 pr-3">Inicio</th>
+                            <th className="pb-2 pr-3">Fin</th>
+                            <th className="pb-2 pr-3">Estado</th>
+                            <th className="pb-2 pr-3">Detalle</th>
+                          </tr>
+                        </thead>
                     <tbody>
                       {rows.map(item => (
                         <tr key={item.id} className="border-b border-slate-100">
                           <td className="py-2 pr-3">{String(item.id).slice(0, 8)}</td>
                           <td className="py-2 pr-3">{item.restaurant_id ?? "-"}</td>
-                          <td className="py-2 pr-3">{new Date(item.start_time).toLocaleString("en-US")}</td>
+                          <td className="py-2 pr-3">{new Date(item.start_time).toLocaleString("es-CO")}</td>
                           <td className="py-2 pr-3">
-                            {item.end_time ? new Date(item.end_time).toLocaleString("en-US") : "-"}
+                            {item.end_time ? new Date(item.end_time).toLocaleString("es-CO") : "-"}
                           </td>
                           <td className="py-2 pr-3">{item.status}</td>
                           <td className="py-2 pr-3">
-                            <span className="text-xs text-slate-500">Read only</span>
+                            <span className="text-xs text-slate-500">Solo lectura</span>
                           </td>
                         </tr>
                       ))}

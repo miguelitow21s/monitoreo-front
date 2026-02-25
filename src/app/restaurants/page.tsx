@@ -60,7 +60,7 @@ export default function RestaurantsPage() {
       )
       setAssignments(Object.fromEntries(assignmentEntries))
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not load restaurants.")
+      showToast("error", error instanceof Error ? error.message : "No se pudieron cargar los restaurantes.")
     } finally {
       setLoading(false)
     }
@@ -78,17 +78,17 @@ export default function RestaurantsPage() {
     const parsedRadius = parseNullableNumber(radius)
 
     if (!name.trim() || parsedLat === null || parsedLng === null || parsedRadius === null) {
-      showToast("info", "Complete name, latitude, longitude and radius.")
+      showToast("info", "Completa nombre, latitud, longitud y radio.")
       return
     }
 
     if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
-      showToast("info", "Latitude/longitude are out of valid range.")
+      showToast("info", "Latitud/longitud fuera de rango valido.")
       return
     }
 
     if (parsedRadius <= 0) {
-      showToast("info", "Radius must be greater than 0.")
+      showToast("info", "El radio debe ser mayor a 0.")
       return
     }
 
@@ -103,9 +103,9 @@ export default function RestaurantsPage() {
       setName("")
       setLat("")
       setLng("")
-      showToast("success", "Restaurant created.")
+      showToast("success", "Restaurante creado.")
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not create restaurant.")
+      showToast("error", error instanceof Error ? error.message : "No se pudo crear el restaurante.")
     }
   }
 
@@ -114,15 +114,15 @@ export default function RestaurantsPage() {
     try {
       const updated = await updateRestaurant(restaurant.id, { geofence_radius_m: parsed })
       setRows(prev => prev.map(item => (item.id === updated.id ? updated : item)))
-      showToast("success", "Geofence updated.")
+      showToast("success", "Geocerca actualizada.")
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not update geofence.")
+      showToast("error", error instanceof Error ? error.message : "No se pudo actualizar la geocerca.")
     }
   }
 
   const handleAssign = async () => {
     if (!assignRestaurant || !assignUser) {
-      showToast("info", "Select restaurant and employee.")
+      showToast("info", "Selecciona restaurante y empleado.")
       return
     }
 
@@ -132,9 +132,9 @@ export default function RestaurantsPage() {
         ...prev,
         [assignRestaurant]: [created, ...(prev[assignRestaurant] ?? [])],
       }))
-      showToast("success", "Employee assigned to restaurant.")
+      showToast("success", "Empleado asignado al restaurante.")
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not assign employee.")
+      showToast("error", error instanceof Error ? error.message : "No se pudo asignar el empleado.")
     }
   }
 
@@ -142,43 +142,43 @@ export default function RestaurantsPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Restaurants</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Restaurantes</h1>
 
           {loading || authLoading ? (
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title="Create restaurant" subtitle="Include coordinates and geofence radius.">
+              <Card title="Crear restaurante" subtitle="Incluye coordenadas y radio de geocerca.">
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Name"
+                    placeholder="Nombre"
                     value={name}
                     onChange={event => setName(event.target.value)}
                   />
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Latitude"
+                    placeholder="Latitud"
                     value={lat}
                     onChange={event => setLat(event.target.value)}
                   />
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Longitude"
+                    placeholder="Longitud"
                     value={lng}
                     onChange={event => setLng(event.target.value)}
                   />
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Radius (m)"
+                    placeholder="Radio (m)"
                     value={radius}
                     onChange={event => setRadius(event.target.value)}
                   />
-                  <Button onClick={handleCreate}>Save</Button>
+                  <Button onClick={handleCreate}>Guardar</Button>
                 </div>
               </Card>
 
-              <Card title="Assign employees" subtitle="Associate operational users with restaurants.">
+              <Card title="Asignar empleados" subtitle="Asocia usuarios operativos con restaurantes.">
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -205,17 +205,17 @@ export default function RestaurantsPage() {
                       ))}
                   </select>
                   <Button variant="secondary" onClick={handleAssign}>
-                    Assign
+                    Asignar
                   </Button>
                 </div>
               </Card>
 
-              <Card title="Restaurant list" subtitle="Current operational setup.">
+              <Card title="Listado de restaurantes" subtitle="Configuracion operativa actual.">
                 {rows.length === 0 ? (
                   <EmptyState
-                    title="No restaurants"
-                    description="Create the first restaurant to begin operations."
-                    actionLabel="Reload"
+                    title="Sin restaurantes"
+                    description="Crea el primer restaurante para iniciar operacion."
+                    actionLabel="Recargar"
                     onAction={() => void loadData()}
                   />
                 ) : (
@@ -226,7 +226,7 @@ export default function RestaurantsPage() {
                           <div>
                             <p className="font-semibold text-slate-900">{item.name}</p>
                             <p className="text-sm text-slate-600">
-                              Lat: {item.lat ?? "-"} | Lng: {item.lng ?? "-"} | Radius:{" "}
+                              Lat: {item.lat ?? "-"} | Lng: {item.lng ?? "-"} | Radio:{" "}
                               {item.geofence_radius_m ?? "-"} m
                             </p>
                           </div>
@@ -241,7 +241,7 @@ export default function RestaurantsPage() {
                         </div>
                         {(assignments[item.id] ?? []).length > 0 && (
                           <p className="mt-2 text-xs text-slate-500">
-                            Assigned employees: {(assignments[item.id] ?? []).length}
+                            Empleados asignados: {(assignments[item.id] ?? []).length}
                           </p>
                         )}
                       </div>

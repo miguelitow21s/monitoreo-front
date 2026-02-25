@@ -16,6 +16,11 @@ import { listUserProfiles, updateUserProfileRole, updateUserProfileStatus, UserP
 import { ROLES, Role } from "@/utils/permissions"
 
 const roleOptions: Role[] = [ROLES.EMPLEADO, ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]
+const roleLabels: Record<Role, string> = {
+  [ROLES.EMPLEADO]: "Empleado",
+  [ROLES.SUPERVISORA]: "Supervisora",
+  [ROLES.SUPER_ADMIN]: "Superadmin",
+}
 
 export default function UsersPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
@@ -47,7 +52,7 @@ export default function UsersPage() {
       setScheduleEmployeeId(prev => prev || employees[0]?.id || "")
       setScheduleRestaurantId(prev => prev || restaurantsData[0]?.id || "")
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not load users.")
+      showToast("error", error instanceof Error ? error.message : "No se pudieron cargar los usuarios.")
     } finally {
       setLoading(false)
     }
@@ -63,9 +68,9 @@ export default function UsersPage() {
     try {
       const updated = await updateUserProfileRole(id, role)
       setRows(prev => prev.map(item => (item.id === id ? updated : item)))
-      showToast("success", "Role updated.")
+      showToast("success", "Rol actualizado.")
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not update role.")
+      showToast("error", error instanceof Error ? error.message : "No se pudo actualizar el rol.")
     }
   }
 
@@ -73,15 +78,15 @@ export default function UsersPage() {
     try {
       const updated = await updateUserProfileStatus(id, !(current ?? true))
       setRows(prev => prev.map(item => (item.id === id ? updated : item)))
-      showToast("success", "User status updated.")
+      showToast("success", "Estado de usuario actualizado.")
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not update status.")
+      showToast("error", error instanceof Error ? error.message : "No se pudo actualizar el estado.")
     }
   }
 
   const handleAssignScheduledShift = async () => {
     if (!scheduleEmployeeId || !scheduleRestaurantId || !scheduleStart || !scheduleEnd) {
-      showToast("info", "Complete employee, restaurant, start and end.")
+      showToast("info", "Completa empleado, restaurante, inicio y fin.")
       return
     }
 
@@ -89,7 +94,7 @@ export default function UsersPage() {
     const endIso = new Date(scheduleEnd).toISOString()
 
     if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
-      showToast("info", "End time must be after start time.")
+      showToast("info", "La hora de fin debe ser posterior a la hora de inicio.")
       return
     }
 
@@ -102,11 +107,11 @@ export default function UsersPage() {
         scheduledEndIso: endIso,
         notes: scheduleNotes.trim() || undefined,
       })
-      showToast("success", "Shift scheduled successfully.")
+      showToast("success", "Turno programado correctamente.")
       setScheduleNotes("")
       await loadData()
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "Could not schedule shift.")
+      showToast("error", error instanceof Error ? error.message : "No se pudo programar el turno.")
     } finally {
       setAssigning(false)
     }
@@ -116,18 +121,18 @@ export default function UsersPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Users</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Usuarios</h1>
 
           {loading || authLoading ? (
             <Skeleton className="h-28" />
           ) : (
             <div className="space-y-4">
-              <Card title="User management" subtitle="Role assignment and activation/deactivation.">
+              <Card title="Gestion de usuarios" subtitle="Asignacion de rol y activacion/desactivacion.">
                 {rows.length === 0 ? (
                   <EmptyState
-                    title="No users"
-                    description="No profiles available to manage."
-                    actionLabel="Reload"
+                    title="Sin usuarios"
+                    description="No hay perfiles disponibles para gestionar."
+                    actionLabel="Recargar"
                     onAction={() => void loadData()}
                   />
                 ) : (
@@ -135,10 +140,10 @@ export default function UsersPage() {
                     <div className="space-y-2 md:hidden">
                       {rows.map(item => (
                         <div key={item.id} className="rounded-lg border border-slate-200 p-3">
-                          <p className="font-medium text-slate-900">{item.full_name ?? "No name"}</p>
+                          <p className="font-medium text-slate-900">{item.full_name ?? "Sin nombre"}</p>
                           <p className="mt-1 break-all text-xs text-slate-500">{item.email ?? "-"}</p>
                           <p className="mt-2 text-xs text-slate-600">
-                            Status: {item.is_active === false ? "Inactive" : "Active"}
+                            Estado: {item.is_active === false ? "Inactivo" : "Activo"}
                           </p>
                           <div className="mt-3 grid gap-2">
                             <select
@@ -148,7 +153,7 @@ export default function UsersPage() {
                             >
                               {roleOptions.map(role => (
                                 <option key={role} value={role}>
-                                  {role}
+                                  {roleLabels[role]}
                                 </option>
                               ))}
                             </select>
@@ -157,7 +162,7 @@ export default function UsersPage() {
                               variant="secondary"
                               onClick={() => void handleToggleActive(item.id, item.is_active)}
                             >
-                              {item.is_active === false ? "Activate" : "Deactivate"}
+                              {item.is_active === false ? "Activar" : "Desactivar"}
                             </Button>
                           </div>
                         </div>
@@ -168,17 +173,17 @@ export default function UsersPage() {
                       <table className="min-w-full text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 text-left text-slate-500">
-                            <th className="pb-2 pr-3">User</th>
-                            <th className="pb-2 pr-3">Email</th>
-                            <th className="pb-2 pr-3">Role</th>
-                            <th className="pb-2 pr-3">Status</th>
-                            <th className="pb-2 pr-3">Actions</th>
+                            <th className="pb-2 pr-3">Usuario</th>
+                            <th className="pb-2 pr-3">Correo</th>
+                            <th className="pb-2 pr-3">Rol</th>
+                            <th className="pb-2 pr-3">Estado</th>
+                            <th className="pb-2 pr-3">Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
                           {rows.map(item => (
                             <tr key={item.id} className="border-b border-slate-100">
-                              <td className="py-2 pr-3">{item.full_name ?? "No name"}</td>
+                              <td className="py-2 pr-3">{item.full_name ?? "Sin nombre"}</td>
                               <td className="py-2 pr-3">{item.email ?? "-"}</td>
                               <td className="py-2 pr-3">
                                 <select
@@ -188,19 +193,19 @@ export default function UsersPage() {
                                 >
                                   {roleOptions.map(role => (
                                     <option key={role} value={role}>
-                                      {role}
+                                      {roleLabels[role]}
                                     </option>
                                   ))}
                                 </select>
                               </td>
-                              <td className="py-2 pr-3">{item.is_active === false ? "Inactive" : "Active"}</td>
+                              <td className="py-2 pr-3">{item.is_active === false ? "Inactivo" : "Activo"}</td>
                               <td className="py-2 pr-3">
                                 <Button
                                   size="sm"
                                   variant="secondary"
                                   onClick={() => void handleToggleActive(item.id, item.is_active)}
                                 >
-                                  {item.is_active === false ? "Activate" : "Deactivate"}
+                                  {item.is_active === false ? "Activar" : "Desactivar"}
                                 </Button>
                               </td>
                             </tr>
@@ -212,7 +217,7 @@ export default function UsersPage() {
                 )}
               </Card>
 
-              <Card title="Schedule shift" subtitle="Assign date, time and restaurant to an active employee.">
+              <Card title="Programar turno" subtitle="Asigna fecha, hora y restaurante a un empleado activo.">
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <select
                     value={scheduleEmployeeId}
@@ -255,7 +260,7 @@ export default function UsersPage() {
                   />
 
                   <Button onClick={() => void handleAssignScheduledShift()} disabled={assigning}>
-                    {assigning ? "Scheduling..." : "Schedule"}
+                    {assigning ? "Programando..." : "Programar"}
                   </Button>
                 </div>
 
@@ -263,20 +268,20 @@ export default function UsersPage() {
                   value={scheduleNotes}
                   onChange={event => setScheduleNotes(event.target.value)}
                   rows={2}
-                  placeholder="Shift notes (optional)"
+                  placeholder="Notas del turno (opcional)"
                   className="mt-2 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
                 />
 
                 {scheduled.length > 0 && (
                   <div className="mt-4 space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Recent scheduled shifts
+                      Turnos programados recientes
                     </p>
                     <div className="space-y-1">
                       {scheduled.slice(0, 8).map(item => (
                         <div key={item.id} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
-                          {new Date(item.scheduled_start).toLocaleString("en-US")} -{" "}
-                          {new Date(item.scheduled_end).toLocaleString("en-US")} | Status: {item.status}
+                          {new Date(item.scheduled_start).toLocaleString("es-CO")} -{" "}
+                          {new Date(item.scheduled_end).toLocaleString("es-CO")} | Estado: {item.status}
                         </div>
                       ))}
                     </div>

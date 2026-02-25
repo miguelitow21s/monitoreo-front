@@ -8,6 +8,7 @@ export interface LegalConsentStatus {
     code?: string
     title?: string
     version?: string
+    content?: string | null
   } | null
 }
 
@@ -88,9 +89,9 @@ async function invokeLegalConsentDirect<T>(
   idempotencyKey?: string
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!baseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured.")
+  if (!baseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL no esta configurada.")
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!anonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not configured.")
+  if (!anonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY no esta configurada.")
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
@@ -134,7 +135,7 @@ async function invokeLegalConsentDirect<T>(
     const sbRequestId = response.headers.get("sb-request-id") ?? undefined
     const requestId = payload?.request_id ?? payload?.error?.request_id ?? response.headers.get("x-request-id") ?? undefined
     const fallbackBodyMessage = rawBody?.trim().slice(0, 600)
-    const message = payload?.error?.message ?? fallbackBodyMessage ?? `legal_consent request failed (HTTP ${response.status})`
+    const message = payload?.error?.message ?? fallbackBodyMessage ?? `Fallo legal_consent (HTTP ${response.status})`
     throw toStatusError(message, response.status, requestId, sbRequestId, xRequestId, rawBody?.trim() || undefined)
   }
 
@@ -142,7 +143,7 @@ async function invokeLegalConsentDirect<T>(
     const requestId = payload.request_id ?? payload.error?.request_id
     const xRequestId = response.headers.get("x-request-id") ?? undefined
     const sbRequestId = response.headers.get("sb-request-id") ?? undefined
-    const message = payload.error?.message ?? "legal_consent rejected by backend."
+    const message = payload.error?.message ?? "legal_consent fue rechazado por backend."
     throw toStatusError(message, undefined, requestId, sbRequestId, xRequestId, rawBody?.trim() || undefined)
   }
 
@@ -156,7 +157,7 @@ async function invokeLegalConsentWithRetry<T>(
 ) {
   let token = accessToken ?? (await getLatestAccessToken())
   if (!token) {
-    throw toStatusError("Authenticated session token not available.", 401)
+    throw toStatusError("Token de sesion autenticada no disponible.", 401)
   }
 
   let authRefreshAttempted = false
@@ -196,14 +197,14 @@ async function getCurrentUserId() {
   } = await supabase.auth.getUser()
 
   if (error) throw error
-  if (!user?.id) throw new Error("Authenticated user not found.")
+  if (!user?.id) throw new Error("Usuario autenticado no encontrado.")
   return user.id
 }
 
 async function getActiveLegalTermFromTable() {
   const { data, error } = await supabase
     .from("legal_terms_versions")
-    .select("id,code,title,version")
+    .select("id,code,title,version,content")
     .eq("is_active", true)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -244,6 +245,7 @@ async function getLegalConsentStatusFallback() {
       code: activeTerm.code,
       title: activeTerm.title,
       version: activeTerm.version,
+      content: activeTerm.content,
     },
   } satisfies LegalConsentStatus
 }
@@ -253,7 +255,7 @@ async function acceptLegalConsentFallback(legalTermsId?: number) {
   const resolvedTermsId = legalTermsId ?? (await getActiveLegalTermFromTable())?.id
 
   if (!resolvedTermsId) {
-    throw new Error("No active legal terms version found.")
+    throw new Error("No se encontro una version activa de terminos legales.")
   }
 
   const acceptedAt = new Date().toISOString()
@@ -281,7 +283,26 @@ export async function getLegalConsentStatus(accessToken?: string) {
       { action: "status" },
       accessToken
     )
-    return (data ?? { accepted: false, accepted_at: null, active_term: null }) as LegalConsentStatus
+    const normalized = (data ?? { accepted: false, accepted_at: null, active_term: null }) as LegalConsentStatus
+
+    if (normalized.active_term && !normalized.active_term.content) {
+      try {
+        const activeTerm = await getActiveLegalTermFromTable()
+        if (activeTerm && (!normalized.active_term.id || normalized.active_term.id === activeTerm.id)) {
+          normalized.active_term = {
+            id: normalized.active_term.id ?? activeTerm.id,
+            code: normalized.active_term.code ?? activeTerm.code,
+            title: normalized.active_term.title ?? activeTerm.title,
+            version: normalized.active_term.version ?? activeTerm.version,
+            content: activeTerm.content ?? null,
+          }
+        }
+      } catch {
+        // Si falla la carga de contenido legal, mantenemos el estado base sin romper login.
+      }
+    }
+
+    return normalized
   } catch (error: unknown) {
     // Fallback only for transport-layer issues (CORS/network). AUTH errors must bubble up.
     if (getErrorStatus(error) === 401) {
