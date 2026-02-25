@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 
 import Button from "@/components/ui/Button"
+import { useI18n } from "@/hooks/useI18n"
 
 export interface Coordinates {
   lat: number
@@ -16,6 +17,7 @@ interface GPSGuardProps {
 }
 
 export default function GPSGuard({ onLocation }: GPSGuardProps) {
+  const { t } = useI18n()
   const [state, setState] = useState<GpsState>("idle")
   const [coords, setCoords] = useState<Coordinates | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -23,7 +25,7 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
   const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setState("error")
-      setError("Este dispositivo no soporta geolocalizacion.")
+      setError(t("Este dispositivo no soporta geolocalizacion.", "This device does not support geolocation."))
       setCoords(null)
       onLocation(null)
       return
@@ -44,13 +46,13 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
         onLocation(nextCoords)
       },
       geolocationError => {
-        let message = "No se pudo obtener la ubicacion."
+        let message = t("No se pudo obtener la ubicacion.", "Could not get location.")
         if (geolocationError.code === geolocationError.PERMISSION_DENIED) {
-          message = "Permiso de ubicacion denegado."
+          message = t("Permiso de ubicacion denegado.", "Location permission denied.")
         } else if (geolocationError.code === geolocationError.POSITION_UNAVAILABLE) {
-          message = "Ubicacion no disponible."
+          message = t("Ubicacion no disponible.", "Location unavailable.")
         } else if (geolocationError.code === geolocationError.TIMEOUT) {
-          message = "Tiempo agotado al solicitar GPS."
+          message = t("Tiempo agotado al solicitar GPS.", "GPS request timed out.")
         }
 
         setError(message)
@@ -75,11 +77,11 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
 
   return (
     <div className="space-y-3">
-      {state === "loading" && <p className="text-sm text-slate-500">Obteniendo ubicacion GPS...</p>}
+      {state === "loading" && <p className="text-sm text-slate-500">{t("Obteniendo ubicacion GPS...", "Getting GPS location...")}</p>}
 
       {state === "ready" && coords && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          GPS activo. Lat: {coords.lat.toFixed(6)} | Lng: {coords.lng.toFixed(6)}
+          {t("GPS activo.", "GPS ready.")} Lat: {coords.lat.toFixed(6)} | Lng: {coords.lng.toFixed(6)}
         </div>
       )}
 
@@ -90,7 +92,7 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
       )}
 
       <Button variant="secondary" size="sm" onClick={requestLocation}>
-        Reintentar GPS
+        {t("Reintentar GPS", "Retry GPS")}
       </Button>
     </div>
   )

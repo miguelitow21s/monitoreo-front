@@ -1,6 +1,7 @@
 "use client"
 
 import { ReactNode, useEffect, useRef } from "react"
+import { useI18n } from "@/hooks/useI18n"
 
 interface ModalProps {
   open: boolean
@@ -9,6 +10,7 @@ interface ModalProps {
 }
 
 export default function Modal({ open, onClose, children }: ModalProps) {
+  const { t } = useI18n()
   const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -41,10 +43,10 @@ export default function Modal({ open, onClose, children }: ModalProps) {
       >
         <button
           onClick={onClose}
-          aria-label="Cerrar"
+          aria-label={t("Cerrar", "Close")}
           className="absolute right-3 top-3 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
         >
-          X
+          {t("Cerrar", "Close")}
         </button>
         {children}
       </div>

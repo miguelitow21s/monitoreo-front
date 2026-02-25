@@ -4,10 +4,12 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/hooks/useAuth"
+import { useI18n } from "@/hooks/useI18n"
 
 export default function HomePage() {
   const router = useRouter()
   const { session, loading } = useAuth()
+  const { t } = useI18n()
 
   useEffect(() => {
     if (loading) return
@@ -16,7 +18,7 @@ export default function HomePage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center text-sm text-gray-500">
-      Redirigiendo...
+      {t("Redirigiendo...", "Redirecting...")}
     </div>
   )
 }

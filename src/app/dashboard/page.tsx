@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import { useToast } from "@/components/toast/ToastProvider"
 import { useAuth } from "@/hooks/useAuth"
+import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
 import { AuditEvent, DashboardMetric, fetchAuditEvents, fetchDashboardMetrics } from "@/services/dashboard.service"
 import {
@@ -25,6 +26,7 @@ function formatDateTime(value: string) {
 export default function DashboardPage() {
   const router = useRouter()
   const { showToast } = useToast()
+  const { t } = useI18n()
   const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { loading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
 
@@ -35,24 +37,24 @@ export default function DashboardPage() {
   const [checkResults, setCheckResults] = useState<IntegrationCheckResult[]>([])
 
   const roleSummary = isSuperAdmin
-    ? "Vista completa del sistema para administracion global."
+    ? t("Vista completa del sistema para administracion global.", "Full system view for global administration.")
     : isSupervisora
-      ? "Supervision en tiempo real de turnos e insumos."
-      : "Control personal de asistencia y evidencia de turnos."
+      ? t("Supervision en tiempo real de turnos e insumos.", "Real-time supervision of shifts and supplies.")
+      : t("Control personal de asistencia y evidencia de turnos.", "Personal attendance control and shift evidence.")
 
   const quickActions = useMemo(
     () => [
-      { label: "Ver turnos de hoy", onClick: () => router.push("/shifts"), variant: "primary" as const },
+      { label: t("Ver turnos de hoy", "View today's shifts"), onClick: () => router.push("/shifts"), variant: "primary" as const },
       {
-        label: "Revisar novedades",
+        label: t("Revisar novedades", "Review incidents"),
         onClick: () => router.push("/shifts"),
         variant: "secondary" as const,
       },
       ...(isSuperAdmin
-        ? [{ label: "Gestionar usuarios", onClick: () => router.push("/users"), variant: "ghost" as const }]
+        ? [{ label: t("Gestionar usuarios", "Manage users"), onClick: () => router.push("/users"), variant: "ghost" as const }]
         : []),
     ],
-    [isSuperAdmin, router]
+    [isSuperAdmin, router, t]
   )
 
   const loadData = useCallback(async () => {
@@ -65,11 +67,11 @@ export default function DashboardPage() {
       setMetrics(metricRows)
       setAuditEvents(auditRows)
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo cargar el panel.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudo cargar el panel.", "Could not load dashboard."))
     } finally {
       setLoadingData(false)
     }
-  }, [showToast, isSuperAdmin, isSupervisora])
+  }, [showToast, isSuperAdmin, isSupervisora, t])
 
   useEffect(() => {
     if (loading || authLoading) return
@@ -84,25 +86,25 @@ export default function DashboardPage() {
       setCheckResults(results)
       const failures = results.filter(item => item.status === "fail").length
       if (failures > 0) {
-        showToast("error", `${failures} validaciones de backend fallaron.`)
+        showToast("error", t(`${failures} validaciones de backend fallaron.`, `${failures} backend validations failed.`))
       } else {
-        showToast("success", "Validaciones de backend completadas.")
+        showToast("success", t("Validaciones de backend completadas.", "Backend validations completed."))
       }
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudieron ejecutar las validaciones.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudieron ejecutar las validaciones.", "Could not run validations."))
     } finally {
       setRunningChecks(false)
     }
-  }, [showToast])
+  }, [showToast, t])
 
   return (
     <ProtectedRoute>
       <section className="space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 px-4 py-5 text-white shadow-sm sm:px-6 sm:py-6">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-300">Panel principal</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-slate-300">{t("Panel principal", "Main panel")}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-bold sm:text-3xl">Panel operativo</h1>
-            <Badge variant="info">Actualizado</Badge>
+            <h1 className="text-xl font-bold sm:text-3xl">{t("Panel operativo", "Operations dashboard")}</h1>
+            <Badge variant="info">{t("Actualizado", "Updated")}</Badge>
           </div>
           <p className="mt-2 max-w-2xl text-sm text-slate-200">{roleSummary}</p>
         </div>
@@ -135,27 +137,27 @@ export default function DashboardPage() {
 
             <div className="grid gap-4 lg:grid-cols-3">
               <Card
-                title="Estado operativo"
-                subtitle="Monitoreo diario con trazabilidad y control por rol."
+                title={t("Estado operativo", "Operations status")}
+                subtitle={t("Monitoreo diario con trazabilidad y control por rol.", "Daily monitoring with traceability and role control.")}
                 className="lg:col-span-2"
               >
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">Supervision</p>
+                    <p className="text-xs text-slate-500">{t("Supervision", "Supervision")}</p>
                     <p className="text-sm font-semibold text-slate-800">
-                      {isSuperAdmin || isSupervisora ? "Habilitada" : "Solo lectura"}
+                      {isSuperAdmin || isSupervisora ? t("Habilitada", "Enabled") : t("Solo lectura", "Read only")}
                     </p>
                   </div>
                   <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">Auditoria</p>
+                    <p className="text-xs text-slate-500">{t("Auditoria", "Audit")}</p>
                     <p className="text-sm font-semibold text-slate-800">
-                      {auditEvents.length} eventos recientes
+                      {t(`${auditEvents.length} eventos recientes`, `${auditEvents.length} recent events`)}
                     </p>
                   </div>
                 </div>
               </Card>
 
-              <Card title="Acciones rapidas" subtitle="Atajos disponibles para tu rol.">
+              <Card title={t("Acciones rapidas", "Quick actions")} subtitle={t("Atajos disponibles para tu rol.", "Shortcuts available for your role.")}>
                 <div className="mt-4 space-y-2">
                   {quickActions.map(action => (
                     <Button
@@ -173,16 +175,16 @@ export default function DashboardPage() {
 
             {(isSuperAdmin || isSupervisora) && (
               <Card
-                title="Validacion de integracion backend"
-                subtitle="Validacion en tiempo real de contratos Edge antes de liberar."
+                title={t("Validacion de integracion backend", "Backend integration validation")}
+                subtitle={t("Validacion en tiempo real de contratos Edge antes de liberar.", "Real-time validation of Edge contracts before release.")}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Button onClick={() => void runChecks()} disabled={runningChecks} variant="secondary">
-                    {runningChecks ? "Ejecutando..." : "Ejecutar validaciones"}
+                    {runningChecks ? t("Ejecutando...", "Running...") : t("Ejecutar validaciones", "Run validations")}
                   </Button>
                   {checkResults.length > 0 && (
                     <span className="text-xs text-slate-500">
-                      Ultima ejecucion: {new Date().toLocaleString("es-CO")}
+                      {t("Ultima ejecucion", "Last run")}: {new Date().toLocaleString("es-CO")}
                     </span>
                   )}
                 </div>
@@ -204,7 +206,7 @@ export default function DashboardPage() {
                                 : "danger"
                           }
                         >
-                          {item.status === "pass" ? "OK" : item.status === "warn" ? "ALERTA" : "FALLO"}
+                          {item.status === "pass" ? "OK" : item.status === "warn" ? t("ALERTA", "WARN") : t("FALLO", "FAIL")}
                         </Badge>
                       </li>
                     ))}
@@ -215,19 +217,19 @@ export default function DashboardPage() {
 
             {auditEvents.length === 0 ? (
               <EmptyState
-                title="Sin eventos de auditoria"
-                description="No hay actividad reciente para mostrar."
-                actionLabel="Actualizar panel"
+                title={t("Sin eventos de auditoria", "No audit events")}
+                description={t("No hay actividad reciente para mostrar.", "No recent activity to show.")}
+                actionLabel={t("Actualizar panel", "Refresh dashboard")}
                 onAction={() => void loadData()}
               />
             ) : (
-              <Card title="Linea de tiempo de auditoria" subtitle="Ultimos eventos operativos.">
+              <Card title={t("Linea de tiempo de auditoria", "Audit timeline")} subtitle={t("Ultimos eventos operativos.", "Latest operational events.")}>
                 <ul className="space-y-2 text-sm text-slate-700">
                   {auditEvents.map(item => (
                     <li key={item.id} className="rounded-lg border border-slate-200 p-2">
                       <p className="font-medium">{item.action}</p>
                       <p className="text-xs text-slate-500">
-                        {formatDateTime(item.created_at)} | Actor: {item.actor_id ?? "sistema"}
+                        {formatDateTime(item.created_at)} | {t("Actor", "Actor")}: {item.actor_id ?? t("sistema", "system")}
                       </p>
                     </li>
                   ))}
@@ -237,7 +239,7 @@ export default function DashboardPage() {
 
             {isEmpleado && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                Revisa tus turnos activos y finalizalos con evidencia de salida.
+                {t("Revisa tus turnos activos y finalizalos con evidencia de salida.", "Review your active shifts and close them with exit evidence.")}
               </div>
             )}
           </>

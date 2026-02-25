@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
+import { useI18n } from "@/hooks/useI18n"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -28,6 +29,7 @@ function extractError(error: unknown, fallback: string) {
 
 export default function SuppliesPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
+  const { t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [supplies, setSupplies] = useState<Supply[]>([])
@@ -57,11 +59,11 @@ export default function SuppliesPage() {
       setDeliverySupplyId(prev => prev || suppliesRows[0]?.id || "")
       setDeliveryRestaurantId(prev => prev || restaurantRows[0]?.id || "")
     } catch (error: unknown) {
-      showToast("error", extractError(error, "No se pudo cargar el modulo de insumos."))
+      showToast("error", extractError(error, t("No se pudo cargar el modulo de insumos.", "Could not load supplies module.")))
     } finally {
       setLoading(false)
     }
-  }, [showToast])
+  }, [showToast, t])
 
   useEffect(() => {
     if (authLoading) return
@@ -77,7 +79,7 @@ export default function SuppliesPage() {
   const handleCreateSupply = async () => {
     const parsedStock = Number(supplyStock)
     if (!supplyName.trim() || !Number.isFinite(parsedStock)) {
-      showToast("info", "Completa nombre y stock valido.")
+      showToast("info", t("Completa nombre y stock valido.", "Enter a valid name and stock."))
       return
     }
 
@@ -91,16 +93,16 @@ export default function SuppliesPage() {
       setSupplies(prev => [created, ...prev])
       setSupplyName("")
       setSupplyStock("0")
-      showToast("success", "Insumo creado.")
+      showToast("success", t("Insumo creado.", "Supply created."))
     } catch (error: unknown) {
-      showToast("error", extractError(error, "No se pudo crear el insumo."))
+      showToast("error", extractError(error, t("No se pudo crear el insumo.", "Could not create supply.")))
     }
   }
 
   const handleRegisterDelivery = async () => {
     const parsedQuantity = Number(deliveryQuantity)
     if (!deliverySupplyId || !deliveryRestaurantId || !Number.isFinite(parsedQuantity)) {
-      showToast("info", "Selecciona insumo, restaurante y cantidad valida.")
+      showToast("info", t("Selecciona insumo, restaurante y cantidad valida.", "Select supply, restaurant, and valid quantity."))
       return
     }
 
@@ -111,9 +113,9 @@ export default function SuppliesPage() {
         quantity: parsedQuantity,
       })
       setDeliveries(prev => [created, ...prev].slice(0, 40))
-      showToast("success", "Entrega registrada.")
+      showToast("success", t("Entrega registrada.", "Delivery registered."))
     } catch (error: unknown) {
-      showToast("error", extractError(error, "No se pudo registrar la entrega."))
+      showToast("error", extractError(error, t("No se pudo registrar la entrega.", "Could not register delivery.")))
     }
   }
 
@@ -121,37 +123,37 @@ export default function SuppliesPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Insumos</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t("Insumos", "Supplies")}</h1>
 
           {loading || authLoading ? (
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title="Crear insumo" subtitle="Agrega un producto base al inventario.">
+              <Card title={t("Crear insumo", "Create supply")} subtitle={t("Agrega un producto base al inventario.", "Add a base product to inventory.")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <input
                     value={supplyName}
                     onChange={event => setSupplyName(event.target.value)}
-                    placeholder="Nombre"
+                    placeholder={t("Nombre", "Name")}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <input
                     value={supplyUnit}
                     onChange={event => setSupplyUnit(event.target.value)}
-                    placeholder="Unidad"
+                    placeholder={t("Unidad", "Unit")}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <input
                     value={supplyStock}
                     onChange={event => setSupplyStock(event.target.value)}
-                    placeholder="Stock inicial"
+                    placeholder={t("Stock inicial", "Initial stock")}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
-                  <Button onClick={handleCreateSupply}>Guardar</Button>
+                  <Button onClick={handleCreateSupply}>{t("Guardar", "Save")}</Button>
                 </div>
               </Card>
 
-              <Card title="Registrar entrega" subtitle="Asocia la cantidad entregada a un restaurante.">
+              <Card title={t("Registrar entrega", "Register delivery")} subtitle={t("Asocia la cantidad entregada a un restaurante.", "Associate delivered quantity to a restaurant.")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <select
                     value={deliverySupplyId}
@@ -178,21 +180,21 @@ export default function SuppliesPage() {
                   <input
                     value={deliveryQuantity}
                     onChange={event => setDeliveryQuantity(event.target.value)}
-                    placeholder="Cantidad"
+                    placeholder={t("Cantidad", "Quantity")}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                   <Button variant="secondary" onClick={handleRegisterDelivery}>
-                    Registrar
+                    {t("Registrar", "Register")}
                   </Button>
                 </div>
               </Card>
 
-              <Card title="Inventario actual" subtitle="Control de stock por insumo.">
+              <Card title={t("Inventario actual", "Current inventory")} subtitle={t("Control de stock por insumo.", "Stock control by supply.")}>
                 {supplies.length === 0 ? (
                   <EmptyState
-                    title="Sin insumos"
-                    description="Crea el primer insumo para comenzar."
-                    actionLabel="Recargar"
+                    title={t("Sin insumos", "No supplies")}
+                    description={t("Crea el primer insumo para comenzar.", "Create the first supply to start.")}
+                    actionLabel={t("Recargar", "Reload")}
                     onAction={() => void loadData()}
                   />
                 ) : (
@@ -201,8 +203,8 @@ export default function SuppliesPage() {
                       {supplies.map(item => (
                         <div key={item.id} className="rounded-lg border border-slate-200 p-3">
                           <p className="font-medium text-slate-900">{item.name}</p>
-                          <p className="mt-1 text-sm text-slate-600">Unidad: {item.unit}</p>
-                          <p className="mt-1 text-sm text-slate-600">Stock: {item.stock}</p>
+                          <p className="mt-1 text-sm text-slate-600">{t("Unidad", "Unit")}: {item.unit}</p>
+                          <p className="mt-1 text-sm text-slate-600">{t("Stock", "Stock")}: {item.stock}</p>
                         </div>
                       ))}
                     </div>
@@ -211,9 +213,9 @@ export default function SuppliesPage() {
                       <table className="min-w-full text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 text-left text-slate-500">
-                            <th className="pb-2 pr-3">Nombre</th>
-                            <th className="pb-2 pr-3">Unidad</th>
-                            <th className="pb-2 pr-3">Stock</th>
+                            <th className="pb-2 pr-3">{t("Nombre", "Name")}</th>
+                            <th className="pb-2 pr-3">{t("Unidad", "Unit")}</th>
+                            <th className="pb-2 pr-3">{t("Stock", "Stock")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -231,14 +233,14 @@ export default function SuppliesPage() {
                 )}
               </Card>
 
-              <Card title="Historial de entregas" subtitle="Ultimos movimientos registrados.">
+              <Card title={t("Historial de entregas", "Delivery history")} subtitle={t("Ultimos movimientos registrados.", "Latest registered movements.")}>
                 {deliveries.length === 0 ? (
-                  <p className="text-sm text-slate-500">No hay entregas registradas.</p>
+                  <p className="text-sm text-slate-500">{t("No hay entregas registradas.", "No deliveries registered.")}</p>
                 ) : (
                   <ul className="space-y-1 text-sm text-slate-700">
                     {deliveries.map(item => (
                       <li key={item.id}>
-                        {new Date(item.delivered_at).toLocaleString("es-CO")} - {item.quantity} unidades
+                        {new Date(item.delivered_at).toLocaleString("es-CO")} - {item.quantity} {t("unidades", "units")}
                       </li>
                     ))}
                   </ul>
@@ -246,7 +248,7 @@ export default function SuppliesPage() {
               </Card>
 
               {inconsistencies.length > 0 && (
-                <Card title="Inconsistencias detectadas" subtitle="Se detecto stock negativo.">
+                <Card title={t("Inconsistencias detectadas", "Detected inconsistencies")} subtitle={t("Se detecto stock negativo.", "Negative stock detected.")}>
                   <ul className="list-disc space-y-1 pl-5 text-sm text-red-700">
                     {inconsistencies.map(item => (
                       <li key={item.id}>

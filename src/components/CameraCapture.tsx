@@ -3,14 +3,21 @@
 import { useEffect, useRef, useState } from "react"
 
 import Button from "@/components/ui/Button"
+import { useI18n } from "@/hooks/useI18n"
 
 interface CameraCaptureProps {
   onCapture: (image: Blob | null) => void
   overlayLines?: string[]
 }
 
-function drawEvidenceOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, lines: string[]) {
-  const nowLine = `Capturada: ${new Date().toLocaleString("es-CO")}`
+function drawEvidenceOverlay(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  lines: string[],
+  capturedLabel: string
+) {
+  const nowLine = `${capturedLabel}: ${new Date().toLocaleString("es-CO")}`
   const mergedLines = [nowLine, ...lines.filter(item => item.trim().length > 0)]
   const paddingX = 12
   const paddingY = 10
@@ -30,6 +37,7 @@ function drawEvidenceOverlay(ctx: CanvasRenderingContext2D, width: number, heigh
 }
 
 export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCaptureProps) {
+  const { t } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -58,7 +66,7 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
     setError(null)
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError("Este dispositivo no permite acceso a camara en este navegador.")
+      setError(t("Este dispositivo no permite acceso a camara en este navegador.", "This device cannot access camera in this browser."))
       return
     }
 
@@ -82,16 +90,16 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
     } catch (err: unknown) {
       if (err instanceof DOMException) {
         if (err.name === "NotAllowedError") {
-          setError("Permiso de camara denegado.")
+          setError(t("Permiso de camara denegado.", "Camera permission denied."))
         } else if (err.name === "NotFoundError") {
-          setError("No se encontro camara disponible.")
+          setError(t("No se encontro camara disponible.", "No camera device found."))
         } else if (err.name === "NotReadableError") {
-          setError("No se pudo acceder al dispositivo de camara.")
+          setError(t("No se pudo acceder al dispositivo de camara.", "Could not access camera device."))
         } else {
-          setError("Error al habilitar la camara.")
+          setError(t("Error al habilitar la camara.", "Could not enable camera."))
         }
       } else {
-        setError("Error al habilitar la camara.")
+        setError(t("Error al habilitar la camara.", "Could not enable camera."))
       }
     }
   }
@@ -107,17 +115,17 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
 
     const ctx = canvas.getContext("2d")
     if (!ctx) {
-      setError("No se pudo capturar la foto de evidencia.")
+      setError(t("No se pudo capturar la foto de evidencia.", "Could not capture evidence photo."))
       return
     }
 
     ctx.drawImage(video, 0, 0)
-    drawEvidenceOverlay(ctx, canvas.width, canvas.height, overlayLines)
+    drawEvidenceOverlay(ctx, canvas.width, canvas.height, overlayLines, t("Capturada", "Captured"))
 
     canvas.toBlob(
       blob => {
         if (!blob) {
-          setError("No se pudo generar el archivo de evidencia.")
+          setError(t("No se pudo generar el archivo de evidencia.", "Could not generate evidence file."))
           return
         }
 
@@ -140,7 +148,7 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
 
       {!ready && !captured && (
         <Button onClick={startCamera} size="sm">
-          Habilitar camara
+          {t("Habilitar camara", "Enable camera")}
         </Button>
       )}
 
@@ -157,19 +165,19 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
 
       {ready && !captured && (
         <Button variant="secondary" size="sm" onClick={capturePhoto}>
-          Capturar evidencia
+          {t("Capturar evidencia", "Capture evidence")}
         </Button>
       )}
 
       {captured && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Foto de evidencia capturada.
+          {t("Foto de evidencia capturada.", "Evidence photo captured.")}
         </div>
       )}
 
       {captured && (
         <Button variant="ghost" size="sm" onClick={resetCapture}>
-          Tomar otra foto
+          {t("Tomar otra foto", "Take another photo")}
         </Button>
       )}
     </div>
