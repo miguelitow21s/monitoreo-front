@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 
 import ProtectedRoute from "@/components/ProtectedRoute"
 import { useToast } from "@/components/toast/ToastProvider"
+import { useAuth } from "@/hooks/useAuth"
 import { useRole } from "@/hooks/useRole"
 import { AuditEvent, DashboardMetric, fetchAuditEvents, fetchDashboardMetrics } from "@/services/dashboard.service"
 import {
@@ -24,6 +25,7 @@ function formatDateTime(value: string) {
 export default function DashboardPage() {
   const router = useRouter()
   const { showToast } = useToast()
+  const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { loading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
 
   const [metrics, setMetrics] = useState<DashboardMetric[]>([])
@@ -67,9 +69,10 @@ export default function DashboardPage() {
   }, [showToast])
 
   useEffect(() => {
-    if (loading) return
+    if (loading || authLoading) return
+    if (!isAuthenticated || !session?.access_token) return
     void loadData()
-  }, [loading, loadData])
+  }, [loading, authLoading, isAuthenticated, session?.access_token, loadData])
 
   const runChecks = useCallback(async () => {
     setRunningChecks(true)
@@ -101,7 +104,7 @@ export default function DashboardPage() {
           <p className="mt-2 max-w-2xl text-sm text-slate-200">{roleSummary}</p>
         </div>
 
-        {loading || loadingData ? (
+        {loading || authLoading || loadingData ? (
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
