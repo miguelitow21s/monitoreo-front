@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { Dispatch, ReactNode, SetStateAction } from "react"
 
+import { useLanguage } from "@/context/LanguageContext"
 import { useRole } from "@/hooks/useRole"
 
 type SidebarProps = {
@@ -99,22 +100,24 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname()
   const { isEmpleado, isSupervisora, isSuperAdmin, loading } = useRole()
+  const { language } = useLanguage()
+  const t = (es: string, en: string) => (language === "en" ? en : es)
 
-  const items: NavItem[] = [{ href: "/dashboard", label: "Panel", key: "dashboard" }]
+  const items: NavItem[] = [{ href: "/dashboard", label: t("Panel", "Dashboard"), key: "dashboard" }]
 
   if (isEmpleado) {
-    items.push({ href: "/shifts", label: "Mi turno", key: "shifts" })
+    items.push({ href: "/shifts", label: t("Mi turno", "My shift"), key: "shifts" })
   }
 
   if (isSupervisora) {
-    items.push({ href: "/shifts", label: "Turnos", key: "shifts" })
-    items.push({ href: "/supplies", label: "Insumos", key: "supplies" })
+    items.push({ href: "/shifts", label: t("Turnos", "Shifts"), key: "shifts" })
+    items.push({ href: "/supplies", label: t("Insumos", "Supplies"), key: "supplies" })
   }
 
   if (isSuperAdmin) {
-    items.push({ href: "/restaurants", label: "Restaurantes", key: "restaurants" })
-    items.push({ href: "/users", label: "Usuarios", key: "users" })
-    items.push({ href: "/reports", label: "Reportes", key: "reports" })
+    items.push({ href: "/restaurants", label: t("Restaurantes", "Restaurants"), key: "restaurants" })
+    items.push({ href: "/users", label: t("Usuarios", "Users"), key: "users" })
+    items.push({ href: "/reports", label: t("Reportes", "Reports"), key: "reports" })
   }
 
   const desktopWidth = collapsed ? "md:w-20" : "md:w-64"
@@ -135,12 +138,12 @@ export default function Sidebar({
       >
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 md:hidden">
-            <p className="text-sm font-semibold text-slate-800">Menu</p>
+            <p className="text-sm font-semibold text-slate-800">{t("Menu", "Menu")}</p>
             <button
               onClick={onCloseMobile}
               className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600"
             >
-              Cerrar
+              {t("Cerrar", "Close")}
             </button>
           </div>
 
@@ -149,13 +152,13 @@ export default function Sidebar({
               onClick={() => onToggle(v => !v)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100"
             >
-              {collapsed ? "Expandir" : "Contraer"}
+              {collapsed ? t("Expandir", "Expand") : t("Contraer", "Collapse")}
             </button>
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-5 pt-2">
             {loading && (
-              <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">Cargando menu...</div>
+              <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-500">{t("Cargando menu...", "Loading menu...")}</div>
             )}
 
             {!loading &&

@@ -47,6 +47,13 @@ import {
 } from "@/services/tasks.service"
 
 const HISTORY_PAGE_SIZE = 8
+const TASK_EVIDENCE_SHOTS = [
+  { key: "close_up", label: "Primer plano", helper: "Toma detalle directo del area intervenida." },
+  { key: "mid_range", label: "Plano medio", helper: "Toma a distancia media mostrando contexto cercano." },
+  { key: "wide_general", label: "Vista general", helper: "Toma panoramica final del espacio completo." },
+] as const
+
+type TaskEvidenceShotKey = (typeof TASK_EVIDENCE_SHOTS)[number]["key"]
 
 function formatDateTime(value: string | null) {
   if (!value) return "-"
@@ -141,10 +148,12 @@ export default function ShiftsPage() {
   const [supervisorTasks, setSupervisorTasks] = useState<OperationalTask[]>([])
   const [loadingTasks, setLoadingTasks] = useState(false)
   const [taskCoords, setTaskCoords] = useState<Coordinates | null>(null)
-  const [taskPhoto, setTaskPhoto] = useState<Blob | null>(null)
+  const [taskPhotoClose, setTaskPhotoClose] = useState<Blob | null>(null)
+  const [taskPhotoMid, setTaskPhotoMid] = useState<Blob | null>(null)
+  const [taskPhotoWide, setTaskPhotoWide] = useState<Blob | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [processingTask, setProcessingTask] = useState(false)
-  const [newTaskByShift, setNewTaskByShift] = useState<Record<string, { title: string; description: string; priority: TaskPriority }>>({})
+  const [newTaskByShift, setNewTaskByShift] = useState<Record<string, { title: string; description: string; priority: TaskPriority; dueAt: string }>>({})
   const [creatingTaskForShift, setCreatingTaskForShift] = useState<string | null>(null)
 
   const [supervisorPresence, setSupervisorPresence] = useState<SupervisorPresenceLog[]>([])
@@ -184,6 +193,10 @@ export default function ShiftsPage() {
 
   const canOperateEmployee = isEmpleado || isSuperAdmin
   const canOperateSupervisor = isSupervisora || isSuperAdmin
+  const pendingEmployeeTasks = useMemo(
+    () => employeeTasks.filter(task => task.status === "pending" || task.status === "in_progress"),
+    [employeeTasks]
+  )
   const shiftOverlayLines = [
     `Usuario: ${currentUserId ?? "desconocido"}`,
     `Fase: ${activeShift ? "salida-turno" : "ingreso-turno"}`,
@@ -291,6 +304,10 @@ export default function ShiftsPage() {
     if (!selectedTaskId) return
     if (!employeeTasks.some(task => task.id === selectedTaskId)) {
       setSelectedTaskId(null)
+      setTaskCoords(null)
+      setTaskPhotoClose(null)
+      setTaskPhotoMid(null)
+      setTaskPhotoWide(null)
     }
   }, [employeeTasks, selectedTaskId])
 
@@ -299,14 +316,19 @@ export default function ShiftsPage() {
   }, [loadPresenceLogs])
 
   const uploadEvidence = async (
-    prefix: "shift-start" | "shift-end" | "task" | "supervisor-start" | "supervisor-end",
+    prefix: string,
     blob: Blob,
-    position: Coordinates
+    position: Coordinates,
+    options?: {
+      extension?: string
+    }
   ) => {
     if (!currentUserId) throw new Error("No se encontro usuario autenticado.")
     const timestamp = new Date().toISOString().replaceAll(":", "-")
     const coordTag = `${position.lat.toFixed(6)}_${position.lng.toFixed(6)}`
-    const fileName = `${prefix}-${timestamp}-${coordTag}.jpg`
+    const rawExtension = (options?.extension ?? "jpg").replace(/^\./, "").toLowerCase()
+    const extension = rawExtension.length > 0 ? rawExtension : "jpg"
+    const fileName = `${prefix}-${timestamp}-${coordTag}.${extension}`
     const filePath = `users/${currentUserId}/${prefix}/${fileName}`
 
     const evidenceHash = await sha256Hex(blob)
@@ -324,6 +346,13 @@ export default function ShiftsPage() {
   const resetEvidenceAndLocation = () => {
     setCoords(null)
     setPhoto(null)
+  }
+
+  const resetTaskEvidenceCapture = () => {
+    setTaskCoords(null)
+    setTaskPhotoClose(null)
+    setTaskPhotoMid(null)
+    setTaskPhotoWide(null)
   }
 
   const handleStart = async () => {
@@ -500,6 +529,7 @@ export default function ShiftsPage() {
     const draft = newTaskByShift[row.id]
     const title = draft?.title?.trim() ?? ""
     const description = draft?.description?.trim() ?? ""
+    const dueAt = draft?.dueAt?.trim() ?? ""
 
     if (!title || !description) {
       showToast("info", "El titulo y la descripcion de la tarea son obligatorios.")
@@ -519,10 +549,11 @@ export default function ShiftsPage() {
         title,
         description,
         priority: draft?.priority ?? "normal",
+        dueAt: dueAt ? new Date(dueAt).toISOString() : null,
       })
       setNewTaskByShift(prev => ({
         ...prev,
-        [row.id]: { title: "", description: "", priority: "normal" },
+        [row.id]: { title: "", description: "", priority: "normal", dueAt: "" },
       }))
       showToast("success", "Tarea operativa creada.")
       await loadTasks()
@@ -548,25 +579,52 @@ export default function ShiftsPage() {
       showToast("info", "Selecciona una tarea para completar.")
       return
     }
-    if (!taskCoords || !taskPhoto) {
-      showToast("info", "Completar tarea requiere GPS y evidencia fotografica.")
+    if (!taskCoords || !taskPhotoClose || !taskPhotoMid || !taskPhotoWide) {
+      showToast("info", "Completar tarea requiere GPS y 3 evidencias: primer plano, plano medio y vista general.")
       return
     }
 
     setProcessingTask(true)
     try {
-      const { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes } = await uploadEvidence("task", taskPhoto, taskCoords)
+      const [closeEvidence, midEvidence, wideEvidence] = await Promise.all([
+        uploadEvidence("task-close", taskPhotoClose, taskCoords),
+        uploadEvidence("task-mid", taskPhotoMid, taskCoords),
+        uploadEvidence("task-wide", taskPhotoWide, taskCoords),
+      ])
+
+      const manifestPayload = {
+        version: 1,
+        task_id: selectedTaskId,
+        captured_at: new Date().toISOString(),
+        captured_by: currentUserId,
+        gps: {
+          lat: taskCoords.lat,
+          lng: taskCoords.lng,
+        },
+        evidences: [
+          { shot: "close_up" as TaskEvidenceShotKey, ...closeEvidence },
+          { shot: "mid_range" as TaskEvidenceShotKey, ...midEvidence },
+          { shot: "wide_general" as TaskEvidenceShotKey, ...wideEvidence },
+        ],
+      }
+
+      const manifestBlob = new Blob([JSON.stringify(manifestPayload, null, 2)], {
+        type: "application/json",
+      })
+      const manifestEvidence = await uploadEvidence("task-manifest", manifestBlob, taskCoords, {
+        extension: "json",
+      })
+
       await completeOperationalTask({
         taskId: selectedTaskId,
-        evidencePath: filePath,
-        evidenceHash,
-        evidenceMimeType,
-        evidenceSizeBytes,
+        evidencePath: manifestEvidence.filePath,
+        evidenceHash: manifestEvidence.evidenceHash,
+        evidenceMimeType: manifestEvidence.evidenceMimeType,
+        evidenceSizeBytes: manifestEvidence.evidenceSizeBytes,
       })
-      setTaskCoords(null)
-      setTaskPhoto(null)
+      resetTaskEvidenceCapture()
       setSelectedTaskId(null)
-      showToast("success", "Tarea completada con evidencia.")
+      showToast("success", "Tarea completada con evidencia triple.")
       await loadTasks()
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, "No se pudo completar la tarea."))
@@ -635,6 +693,24 @@ export default function ShiftsPage() {
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
                 No tienes turnos activos en este momento.
+              </div>
+            )}
+
+            {pendingEmployeeTasks.length > 0 && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-semibold">
+                  Alerta operativa: tienes {pendingEmployeeTasks.length} tarea(s) asignada(s) por supervisora.
+                </p>
+                <p className="mt-1 text-amber-800">
+                  Debes cerrar cada tarea con evidencia especifica de 3 tomas: primer plano, plano medio y vista general.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-900">
+                  {pendingEmployeeTasks.slice(0, 3).map(task => (
+                    <li key={task.id}>
+                      #{task.id} {task.title} ({task.status})
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 
@@ -788,7 +864,10 @@ export default function ShiftsPage() {
                             <Button
                               size="sm"
                               variant="primary"
-                              onClick={() => setSelectedTaskId(task.id)}
+                              onClick={() => {
+                                setSelectedTaskId(task.id)
+                                resetTaskEvidenceCapture()
+                              }}
                             >
                               {selectedTaskId === task.id ? "Seleccionada" : "Seleccionar para completar"}
                             </Button>
@@ -800,21 +879,75 @@ export default function ShiftsPage() {
 
                   {selectedTaskId && (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-sm font-medium text-slate-700">Evidencia de cierre de tarea (Tarea #{selectedTaskId})</p>
-                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                      <p className="text-sm font-medium text-slate-700">
+                        Evidencia de cierre de tarea (Tarea #{selectedTaskId})
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        Requerido: GPS + 3 fotos (primer plano, plano medio y vista general).
+                      </p>
+
+                      <div className="mt-3">
                         <GPSGuard onLocation={setTaskCoords} />
-                        <CameraCapture
-                          onCapture={setTaskPhoto}
-                          overlayLines={[
-                            `Usuario: ${currentUserId ?? "desconocido"}`,
-                            `Tarea: ${selectedTaskId}`,
-                            taskCoords ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}` : "GPS: pendiente",
-                          ]}
-                        />
                       </div>
+
+                      <div className="mt-3 grid gap-3 xl:grid-cols-3">
+                        <div className="rounded-lg border border-slate-200 bg-white p-3">
+                          <p className="text-sm font-semibold text-slate-700">{TASK_EVIDENCE_SHOTS[0].label}</p>
+                          <p className="mb-2 text-xs text-slate-500">{TASK_EVIDENCE_SHOTS[0].helper}</p>
+                          <CameraCapture
+                            onCapture={setTaskPhotoClose}
+                            overlayLines={[
+                              `Usuario: ${currentUserId ?? "desconocido"}`,
+                              `Tarea: ${selectedTaskId}`,
+                              "Toma: primer_plano",
+                              taskCoords
+                                ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
+                                : "GPS: pendiente",
+                            ]}
+                          />
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-white p-3">
+                          <p className="text-sm font-semibold text-slate-700">{TASK_EVIDENCE_SHOTS[1].label}</p>
+                          <p className="mb-2 text-xs text-slate-500">{TASK_EVIDENCE_SHOTS[1].helper}</p>
+                          <CameraCapture
+                            onCapture={setTaskPhotoMid}
+                            overlayLines={[
+                              `Usuario: ${currentUserId ?? "desconocido"}`,
+                              `Tarea: ${selectedTaskId}`,
+                              "Toma: plano_medio",
+                              taskCoords
+                                ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
+                                : "GPS: pendiente",
+                            ]}
+                          />
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-white p-3">
+                          <p className="text-sm font-semibold text-slate-700">{TASK_EVIDENCE_SHOTS[2].label}</p>
+                          <p className="mb-2 text-xs text-slate-500">{TASK_EVIDENCE_SHOTS[2].helper}</p>
+                          <CameraCapture
+                            onCapture={setTaskPhotoWide}
+                            overlayLines={[
+                              `Usuario: ${currentUserId ?? "desconocido"}`,
+                              `Tarea: ${selectedTaskId}`,
+                              "Toma: vista_general",
+                              taskCoords
+                                ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
+                                : "GPS: pendiente",
+                            ]}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                        <p>GPS: {taskCoords ? "OK" : "Pendiente"}</p>
+                        <p>Primer plano: {taskPhotoClose ? "OK" : "Pendiente"}</p>
+                        <p>Plano medio: {taskPhotoMid ? "OK" : "Pendiente"}</p>
+                        <p>Vista general: {taskPhotoWide ? "OK" : "Pendiente"}</p>
+                      </div>
+
                       <div className="mt-3">
                         <Button variant="primary" onClick={() => void handleCompleteTask()} disabled={processingTask}>
-                          {processingTask ? "Completando..." : "Completar tarea con evidencia"}
+                          {processingTask ? "Completando..." : "Completar tarea con evidencia triple"}
                         </Button>
                       </div>
                     </div>
@@ -989,6 +1122,19 @@ export default function ShiftsPage() {
                   Ultimos registros: {supervisorPresence.length}
                 </span>
               </div>
+
+              {supervisorPresence.length > 0 && (
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <p className="mb-2 font-medium text-slate-700">Historial reciente de presencia</p>
+                  <ul className="space-y-1 text-slate-600">
+                    {supervisorPresence.slice(0, 6).map(item => (
+                      <li key={item.id}>
+                        {formatDateTime(item.recorded_at)} | Restaurante #{item.restaurant_id} | Fase: {item.phase}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </Card>
 
             <Card title="Monitoreo de tareas" subtitle="Tareas recientes creadas o asignadas en restaurantes supervisados.">
@@ -1007,6 +1153,33 @@ export default function ShiftsPage() {
                       <p className="text-xs text-slate-500">
                         Empleado: {task.assigned_employee_id.slice(0, 8)} | Turno: {task.shift_id}
                       </p>
+                      {task.due_at && (
+                        <p className="text-xs text-slate-500">Vence: {formatDateTime(task.due_at)}</p>
+                      )}
+                      {task.status === "completed" && task.evidence_path && (
+                        <div className="mt-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              void (async () => {
+                                try {
+                                  const signedUrl = await resolveEvidenceUrl(task.evidence_path)
+                                  if (!signedUrl) {
+                                    showToast("info", "No se pudo resolver evidencia de la tarea.")
+                                    return
+                                  }
+                                  window.open(signedUrl, "_blank", "noopener,noreferrer")
+                                } catch (error: unknown) {
+                                  showToast("error", extractErrorMessage(error, "No se pudo abrir evidencia de tarea."))
+                                }
+                              })()
+                            }}
+                          >
+                            Ver evidencia de tarea
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1108,6 +1281,7 @@ export default function ShiftsPage() {
                                 title: event.target.value,
                                 description: prev[row.id]?.description ?? "",
                                 priority: prev[row.id]?.priority ?? "normal",
+                                dueAt: prev[row.id]?.dueAt ?? "",
                               },
                             }))
                           }
@@ -1123,14 +1297,31 @@ export default function ShiftsPage() {
                                 title: prev[row.id]?.title ?? "",
                                 description: event.target.value,
                                 priority: prev[row.id]?.priority ?? "normal",
+                                dueAt: prev[row.id]?.dueAt ?? "",
                               },
                             }))
                           }
                           rows={2}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                          placeholder="Instrucciones de la tarea y evidencia esperada..."
+                          placeholder="Instrucciones. Incluye criterio de cierre: primer plano + plano medio + vista general."
                         />
                         <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="datetime-local"
+                            value={newTaskByShift[row.id]?.dueAt ?? ""}
+                            onChange={event =>
+                              setNewTaskByShift(prev => ({
+                                ...prev,
+                                [row.id]: {
+                                  title: prev[row.id]?.title ?? "",
+                                  description: prev[row.id]?.description ?? "",
+                                  priority: prev[row.id]?.priority ?? "normal",
+                                  dueAt: event.target.value,
+                                },
+                              }))
+                            }
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          />
                           <select
                             value={newTaskByShift[row.id]?.priority ?? "normal"}
                             onChange={event =>
@@ -1140,6 +1331,7 @@ export default function ShiftsPage() {
                                   title: prev[row.id]?.title ?? "",
                                   description: prev[row.id]?.description ?? "",
                                   priority: event.target.value as TaskPriority,
+                                  dueAt: prev[row.id]?.dueAt ?? "",
                                 },
                               }))
                             }

@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo } from "react"
 
+import LanguageSwitch from "@/components/LanguageSwitch"
+import { useLanguage } from "@/context/LanguageContext"
 import { useAuth } from "@/hooks/useAuth"
 import { useRole } from "@/hooks/useRole"
 
@@ -12,12 +13,12 @@ type HeaderProps = {
   onToggleMobile: () => void
 }
 
-const roleLabel: Record<string, string> = {
-  super_admin: "Superadmin",
-  supervisora: "Supervisora",
-  empleado: "Empleado",
-  restaurant_owner: "Dueno de restaurante",
-  restaurant_admin: "Administrador de restaurante",
+const roleLabel: Record<string, { es: string; en: string }> = {
+  super_admin: { es: "Superadmin", en: "Super Admin" },
+  supervisora: { es: "Supervisora", en: "Supervisor" },
+  empleado: { es: "Empleado", en: "Employee" },
+  restaurant_owner: { es: "Dueno de restaurante", en: "Restaurant owner" },
+  restaurant_admin: { es: "Administrador de restaurante", en: "Restaurant admin" },
 }
 
 export default function Header({
@@ -27,10 +28,12 @@ export default function Header({
 }: HeaderProps) {
   const { user, logout } = useAuth()
   const { role } = useRole()
+  const { language } = useLanguage()
 
   const leftClass = collapsed ? "md:left-20" : "md:left-64"
-  const emailLabel = useMemo(() => user?.email ?? "Sin usuario", [user?.email])
-  const roleText = role ? roleLabel[role] ?? role : "Sin rol"
+  const t = (es: string, en: string) => (language === "en" ? en : es)
+  const emailLabel = user?.email ?? t("Sin usuario", "No user")
+  const roleText = role ? roleLabel[role]?.[language] ?? role : t("Sin rol", "No role")
 
   return (
     <header
@@ -40,26 +43,31 @@ export default function Header({
         <button
           onClick={onToggleMobile}
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-700 md:hidden"
-          aria-label="Abrir menu"
+          aria-label={t("Abrir menu", "Open menu")}
         >
           <span className="text-base">|||</span>
         </button>
         <button
           onClick={onToggleDesktop}
           className="hidden h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-700 md:inline-flex"
-          aria-label="Expandir o contraer menu lateral"
+          aria-label={t("Expandir o contraer menu lateral", "Expand or collapse sidebar")}
         >
           {collapsed ? ">>" : "<<"}
         </button>
         <div>
           <h1 className="max-w-[180px] truncate text-sm font-semibold text-slate-900 md:max-w-none md:text-base">
-            Plataforma de Control Operativo
+            {t("Plataforma de Control Operativo", "Operations Control Platform")}
           </h1>
-          <p className="hidden text-xs text-slate-500 md:block">Trazabilidad de turnos y supervision en campo</p>
+          <p className="hidden text-xs text-slate-500 md:block">
+            {t("Trazabilidad de turnos y supervision en campo", "Shift traceability and field supervision")}
+          </p>
         </div>
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
+        <div className="hidden md:block">
+          <LanguageSwitch compact />
+        </div>
         <div className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 sm:block">
           {roleText}
         </div>
@@ -72,13 +80,13 @@ export default function Header({
           onClick={logout}
           className="rounded-lg bg-slate-900 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-slate-700 md:px-3 md:text-xs"
         >
-          Cerrar sesion
+          {t("Cerrar sesion", "Sign out")}
         </button>
         <Link
           href="/account/password"
           className="rounded-lg border border-slate-300 px-2.5 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 md:px-3 md:text-xs"
         >
-          Contrasena
+          {t("Contrasena", "Password")}
         </Link>
       </div>
     </header>
