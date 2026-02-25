@@ -36,10 +36,17 @@ function getErrorStatus(error: unknown) {
   return typeof status === "number" ? status : undefined
 }
 
-function toStatusError(message: string, status?: number, requestId?: string) {
-  const error = new Error(message) as Error & { status?: number; request_id?: string }
+function toStatusError(message: string, status?: number, requestId?: string, sbRequestId?: string, xRequestId?: string) {
+  const error = new Error(message) as Error & {
+    status?: number
+    request_id?: string
+    sb_request_id?: string
+    x_request_id?: string
+  }
   if (typeof status === "number") error.status = status
   if (requestId) error.request_id = requestId
+  if (sbRequestId) error.sb_request_id = sbRequestId
+  if (xRequestId) error.x_request_id = xRequestId
   return error
 }
 
@@ -61,9 +68,12 @@ async function invokeLegalConsentDirect<T>(
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!baseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured.")
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!anonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not configured.")
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
+    apikey: anonKey,
     "Content-Type": "application/json",
   }
 
@@ -96,15 +106,19 @@ async function invokeLegalConsentDirect<T>(
   }
 
   if (!response.ok) {
+    const xRequestId = response.headers.get("x-request-id") ?? undefined
+    const sbRequestId = response.headers.get("sb-request-id") ?? undefined
     const requestId = payload?.request_id ?? payload?.error?.request_id ?? response.headers.get("x-request-id") ?? undefined
     const message = payload?.error?.message ?? `legal_consent request failed (HTTP ${response.status})`
-    throw toStatusError(message, response.status, requestId)
+    throw toStatusError(message, response.status, requestId, sbRequestId, xRequestId)
   }
 
   if (payload && "success" in payload && payload.success === false) {
     const requestId = payload.request_id ?? payload.error?.request_id
+    const xRequestId = response.headers.get("x-request-id") ?? undefined
+    const sbRequestId = response.headers.get("sb-request-id") ?? undefined
     const message = payload.error?.message ?? "legal_consent rejected by backend."
-    throw toStatusError(message, undefined, requestId)
+    throw toStatusError(message, undefined, requestId, sbRequestId, xRequestId)
   }
 
   return (payload?.data ?? null) as T
@@ -226,7 +240,7 @@ export async function getLegalConsentStatus(accessToken?: string) {
   } catch (error: unknown) {
     // Fallback only for transport-layer issues (CORS/network). AUTH errors must bubble up.
     if (getErrorStatus(error) === 401) {
-      throw toStatusError("Authenticated session rejected by legal_consent.", 401)
+      throw error
     }
     if (!shouldFallbackToDirectTableAccess(error)) throw error
     return getLegalConsentStatusFallback()
@@ -246,7 +260,7 @@ export async function acceptLegalConsent(legalTermsId?: number, accessToken?: st
     return (data ?? null) as { accepted?: boolean; accepted_at?: string | null } | null
   } catch (error: unknown) {
     if (getErrorStatus(error) === 401) {
-      throw toStatusError("Authenticated session rejected while accepting legal consent.", 401)
+      throw error
     }
     if (!shouldFallbackToDirectTableAccess(error)) throw error
     return acceptLegalConsentFallback(legalTermsId)

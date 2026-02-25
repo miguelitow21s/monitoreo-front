@@ -82,11 +82,20 @@ export default function LoginPage() {
         typeof legalError === "object" && legalError !== null && "request_id" in legalError
           ? (legalError as { request_id?: unknown }).request_id
           : undefined
+      const sbRequestId =
+        typeof legalError === "object" && legalError !== null && "sb_request_id" in legalError
+          ? (legalError as { sb_request_id?: unknown }).sb_request_id
+          : undefined
+      const xRequestId =
+        typeof legalError === "object" && legalError !== null && "x_request_id" in legalError
+          ? (legalError as { x_request_id?: unknown }).x_request_id
+          : undefined
       const baseMessage = extractErrorMessage(legalError)
-      const message =
-        typeof requestId === "string" && requestId.trim().length > 0
-          ? `${baseMessage} (request_id: ${requestId})`
-          : baseMessage
+      const tags: string[] = []
+      if (typeof requestId === "string" && requestId.trim().length > 0) tags.push(`request_id: ${requestId}`)
+      if (typeof sbRequestId === "string" && sbRequestId.trim().length > 0) tags.push(`sb-request-id: ${sbRequestId}`)
+      if (typeof xRequestId === "string" && xRequestId.trim().length > 0) tags.push(`x-request-id: ${xRequestId}`)
+      const message = tags.length > 0 ? `${baseMessage} (${tags.join(" | ")})` : baseMessage
       setError(message)
       setSubmitting(false)
       setLoadingLegalStatus(false)
