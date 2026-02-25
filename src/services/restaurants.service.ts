@@ -14,6 +14,11 @@ export interface RestaurantEmployee {
   user_id: string
 }
 
+export interface SupervisorRestaurantOption {
+  id: number
+  name: string
+}
+
 export async function listRestaurants() {
   const { data, error } = await supabase.from("restaurants").select("*").order("name")
   if (error) throw error
@@ -57,4 +62,45 @@ export async function assignEmployeeToRestaurant(restaurantId: string, userId: s
 
   if (error) throw error
   return data as RestaurantEmployee
+}
+
+export async function listMySupervisorRestaurants() {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+  if (userError) throw userError
+  if (!user?.id) return [] as SupervisorRestaurantOption[]
+
+  const { data: links, error: linksError } = await supabase
+    .from("restaurant_employees")
+    .select("restaurant_id")
+    .eq("user_id", user.id)
+
+  if (linksError) throw linksError
+
+  const restaurantIds = Array.from(
+    new Set(
+      (links ?? [])
+        .map(item => Number(item.restaurant_id))
+        .filter(id => Number.isFinite(id))
+    )
+  )
+
+  if (restaurantIds.length === 0) return [] as SupervisorRestaurantOption[]
+
+  const { data: restaurants, error: restaurantsError } = await supabase
+    .from("restaurants")
+    .select("id,name")
+    .in("id", restaurantIds)
+    .order("name")
+
+  if (restaurantsError) throw restaurantsError
+
+  return (restaurants ?? [])
+    .map(item => ({
+      id: Number(item.id),
+      name: String(item.name ?? `Restaurante #${item.id}`),
+    }))
+    .filter(item => Number.isFinite(item.id)) as SupervisorRestaurantOption[]
 }

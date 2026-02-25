@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 
 import CameraCapture from "@/components/CameraCapture"
 import GPSGuard, { Coordinates } from "@/components/GPSGuard"
+import Modal from "@/components/Modal"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import Badge from "@/components/ui/Badge"
 import Button from "@/components/ui/Button"
@@ -39,12 +40,15 @@ import { supabase } from "@/services/supabaseClient"
 import {
   completeOperationalTask,
   createOperationalTask,
+  fetchTaskEvidenceManifest,
   listMyOperationalTasks,
   listSupervisorOperationalTasks,
   markTaskInProgress,
   OperationalTask,
   TaskPriority,
+  TaskEvidenceManifestResolved,
 } from "@/services/tasks.service"
+import { listMySupervisorRestaurants, listRestaurants, SupervisorRestaurantOption } from "@/services/restaurants.service"
 
 const HISTORY_PAGE_SIZE = 8
 const TASK_EVIDENCE_SHOTS = [
@@ -52,6 +56,11 @@ const TASK_EVIDENCE_SHOTS = [
   { key: "mid_range", label: "Plano medio", helper: "Toma a distancia media mostrando contexto cercano." },
   { key: "wide_general", label: "Vista general", helper: "Toma panoramica final del espacio completo." },
 ] as const
+const TASK_SHOT_ORDER: Record<string, number> = {
+  close_up: 1,
+  mid_range: 2,
+  wide_general: 3,
+}
 
 type TaskEvidenceShotKey = (typeof TASK_EVIDENCE_SHOTS)[number]["key"]
 
@@ -157,12 +166,17 @@ export default function ShiftsPage() {
   const [creatingTaskForShift, setCreatingTaskForShift] = useState<string | null>(null)
 
   const [supervisorPresence, setSupervisorPresence] = useState<SupervisorPresenceLog[]>([])
+  const [presenceRestaurants, setPresenceRestaurants] = useState<SupervisorRestaurantOption[]>([])
   const [presenceRestaurantId, setPresenceRestaurantId] = useState<number | null>(null)
   const [presenceCoords, setPresenceCoords] = useState<Coordinates | null>(null)
   const [presencePhoto, setPresencePhoto] = useState<Blob | null>(null)
   const [presenceNotes, setPresenceNotes] = useState("")
   const [presencePhase, setPresencePhase] = useState<"start" | "end">("start")
   const [registeringPresence, setRegisteringPresence] = useState(false)
+  const [taskDetailModalTask, setTaskDetailModalTask] = useState<OperationalTask | null>(null)
+  const [taskDetailManifest, setTaskDetailManifest] = useState<TaskEvidenceManifestResolved | null>(null)
+  const [loadingTaskDetailManifest, setLoadingTaskDetailManifest] = useState(false)
+  const [taskDetailManifestError, setTaskDetailManifestError] = useState<string | null>(null)
 
   const healthAnswered = activeShift ? endFitForWork !== null : startFitForWork !== null
   const healthDeclarationRequired =
@@ -197,6 +211,32 @@ export default function ShiftsPage() {
     () => employeeTasks.filter(task => task.status === "pending" || task.status === "in_progress"),
     [employeeTasks]
   )
+  const overdueSupervisorTasks = useMemo(
+    () =>
+      supervisorTasks.filter(task => {
+        if (!task.due_at || task.status === "completed" || task.status === "cancelled") return false
+        const dueAt = new Date(task.due_at).getTime()
+        return Number.isFinite(dueAt) && dueAt < Date.now()
+      }),
+    [supervisorTasks]
+  )
+  const pendingPresenceClosures = useMemo(() => {
+    if (supervisorPresence.length === 0) return [] as SupervisorPresenceLog[]
+    const now = new Date()
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const rowsToday = supervisorPresence.filter(item => {
+      const recordedAt = new Date(item.recorded_at).getTime()
+      return Number.isFinite(recordedAt) && recordedAt >= dayStart
+    })
+    const latestByRestaurant = new Map<number, SupervisorPresenceLog>()
+    for (const row of rowsToday) {
+      const current = latestByRestaurant.get(row.restaurant_id)
+      if (!current || new Date(row.recorded_at).getTime() > new Date(current.recorded_at).getTime()) {
+        latestByRestaurant.set(row.restaurant_id, row)
+      }
+    }
+    return Array.from(latestByRestaurant.values()).filter(item => item.phase === "start")
+  }, [supervisorPresence])
   const shiftOverlayLines = [
     `Usuario: ${currentUserId ?? "desconocido"}`,
     `Fase: ${activeShift ? "salida-turno" : "ingreso-turno"}`,
@@ -234,6 +274,29 @@ export default function ShiftsPage() {
     }
   }, [showToast])
 
+  const loadPresenceRestaurants = useCallback(async () => {
+    if (!canOperateSupervisor) return
+    try {
+      const items = isSuperAdmin
+        ? (await listRestaurants())
+            .map(item => ({
+              id: Number(item.id),
+              name: item.name ?? `Restaurante #${item.id}`,
+            }))
+            .filter(item => Number.isFinite(item.id))
+        : await listMySupervisorRestaurants()
+
+      setPresenceRestaurants(items)
+      setPresenceRestaurantId(prev => {
+        if (items.length === 0) return null
+        if (prev !== null && items.some(item => item.id === prev)) return prev
+        return items[0].id
+      })
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, "No se pudo cargar restaurantes para presencia de supervisora."))
+    }
+  }, [canOperateSupervisor, isSuperAdmin, showToast])
+
   useEffect(() => {
     if (!canOperateEmployee) return
     void loadEmployeeData(historyPage)
@@ -245,10 +308,9 @@ export default function ShiftsPage() {
   }, [canOperateSupervisor, loadSupervisorData])
 
   useEffect(() => {
-    if (presenceRestaurantId) return
-    const firstRestaurant = supervisorRows.find(row => typeof row.restaurant_id === "number")?.restaurant_id
-    if (firstRestaurant) setPresenceRestaurantId(firstRestaurant)
-  }, [supervisorRows, presenceRestaurantId])
+    if (!canOperateSupervisor) return
+    void loadPresenceRestaurants()
+  }, [canOperateSupervisor, loadPresenceRestaurants])
 
   useEffect(() => {
     let mounted = true
@@ -288,13 +350,10 @@ export default function ShiftsPage() {
     try {
       const rows = await listMySupervisorPresence(20)
       setSupervisorPresence(rows)
-      if (!presenceRestaurantId && rows[0]?.restaurant_id) {
-        setPresenceRestaurantId(rows[0].restaurant_id)
-      }
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, "No se pudieron cargar los registros de presencia de supervisora."))
     }
-  }, [canOperateSupervisor, presenceRestaurantId, showToast])
+  }, [canOperateSupervisor, showToast])
 
   useEffect(() => {
     void loadTasks()
@@ -630,6 +689,35 @@ export default function ShiftsPage() {
       showToast("error", extractErrorMessage(error, "No se pudo completar la tarea."))
     } finally {
       setProcessingTask(false)
+    }
+  }
+
+  const closeTaskDetailModal = () => {
+    setTaskDetailModalTask(null)
+    setTaskDetailManifest(null)
+    setTaskDetailManifestError(null)
+    setLoadingTaskDetailManifest(false)
+  }
+
+  const handleOpenTaskDetail = async (task: OperationalTask) => {
+    setTaskDetailModalTask(task)
+    setTaskDetailManifest(null)
+    setTaskDetailManifestError(null)
+    setLoadingTaskDetailManifest(true)
+
+    try {
+      const manifest = await fetchTaskEvidenceManifest(task)
+      const sortedEvidences = [...manifest.evidences].sort(
+        (left, right) => (TASK_SHOT_ORDER[left.shot] ?? 99) - (TASK_SHOT_ORDER[right.shot] ?? 99)
+      )
+      setTaskDetailManifest({
+        ...manifest,
+        evidences: sortedEvidences,
+      })
+    } catch (error: unknown) {
+      setTaskDetailManifestError(extractErrorMessage(error, "No se pudo cargar detalle de evidencia de la tarea."))
+    } finally {
+      setLoadingTaskDetailManifest(false)
     }
   }
 
@@ -1047,6 +1135,21 @@ export default function ShiftsPage() {
           <section className="space-y-4">
             <h2 className="text-lg font-semibold text-slate-900">Panel de supervision</h2>
 
+            {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                {overdueSupervisorTasks.length > 0 && (
+                  <p className="font-medium">
+                    Hay {overdueSupervisorTasks.length} tarea(s) vencida(s) pendientes de cierre.
+                  </p>
+                )}
+                {pendingPresenceClosures.length > 0 && (
+                  <p className="mt-1">
+                    Tienes {pendingPresenceClosures.length} restaurante(s) con ingreso sin registrar salida hoy.
+                  </p>
+                )}
+              </div>
+            )}
+
             <Card title="Ingreso/salida supervisora" subtitle="Registro obligatorio por restaurante con GPS + evidencia.">
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="space-y-2">
@@ -1056,18 +1159,18 @@ export default function ShiftsPage() {
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   >
                     <option value="">Seleccionar restaurante</option>
-                    {Array.from(
-                      new Set(
-                        supervisorRows
-                          .map(row => row.restaurant_id)
-                          .filter((value): value is number => typeof value === "number")
-                      )
-                    ).map(restaurantId => (
-                      <option key={restaurantId} value={restaurantId}>
-                        Restaurante #{restaurantId}
+                    {presenceRestaurants.map(restaurant => (
+                      <option key={restaurant.id} value={restaurant.id}>
+                        {restaurant.name}
                       </option>
                     ))}
                   </select>
+
+                  {presenceRestaurants.length === 0 && (
+                    <p className="text-xs text-amber-700">
+                      No hay restaurantes asignados para registrar presencia.
+                    </p>
+                  )}
 
                   <div className="flex gap-4 text-sm">
                     <label className="flex items-center gap-2">
@@ -1161,22 +1264,9 @@ export default function ShiftsPage() {
                           <Button
                             size="sm"
                             variant="secondary"
-                            onClick={() => {
-                              void (async () => {
-                                try {
-                                  const signedUrl = await resolveEvidenceUrl(task.evidence_path)
-                                  if (!signedUrl) {
-                                    showToast("info", "No se pudo resolver evidencia de la tarea.")
-                                    return
-                                  }
-                                  window.open(signedUrl, "_blank", "noopener,noreferrer")
-                                } catch (error: unknown) {
-                                  showToast("error", extractErrorMessage(error, "No se pudo abrir evidencia de tarea."))
-                                }
-                              })()
-                            }}
+                            onClick={() => void handleOpenTaskDetail(task)}
                           >
-                            Ver evidencia de tarea
+                            Ver detalle de evidencia
                           </Button>
                         </div>
                       )}
@@ -1396,6 +1486,99 @@ export default function ShiftsPage() {
             )}
           </section>
         )}
+
+        <Modal open={!!taskDetailModalTask} onClose={closeTaskDetailModal}>
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-slate-900">
+              Detalle de evidencia de tarea{" "}
+              {taskDetailModalTask ? `#${taskDetailModalTask.id}` : ""}
+            </h3>
+
+            {loadingTaskDetailManifest ? (
+              <div className="space-y-2">
+                <Skeleton className="h-8" />
+                <Skeleton className="h-36" />
+              </div>
+            ) : taskDetailManifestError ? (
+              <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <p>{taskDetailManifestError}</p>
+                {taskDetailModalTask?.evidence_path && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          const signedUrl = await resolveEvidenceUrl(taskDetailModalTask.evidence_path)
+                          if (!signedUrl) {
+                            showToast("info", "No se pudo abrir archivo de evidencia.")
+                            return
+                          }
+                          window.open(signedUrl, "_blank", "noopener,noreferrer")
+                        } catch (error: unknown) {
+                          showToast("error", extractErrorMessage(error, "No se pudo abrir archivo de evidencia."))
+                        }
+                      })()
+                    }}
+                  >
+                    Abrir archivo de evidencia
+                  </Button>
+                )}
+              </div>
+            ) : !taskDetailManifest ? (
+              <p className="text-sm text-slate-600">No hay detalle de evidencia disponible.</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                  <p>Capturada: {formatDateTime(taskDetailManifest.capturedAt)}</p>
+                  <p>Usuario: {taskDetailManifest.capturedBy ?? "-"}</p>
+                  <p>
+                    GPS:{" "}
+                    {taskDetailManifest.gps
+                      ? `${taskDetailManifest.gps.lat.toFixed(6)}, ${taskDetailManifest.gps.lng.toFixed(6)}`
+                      : "-"}
+                  </p>
+                  <p>Evidencias: {taskDetailManifest.evidences.length}</p>
+                </div>
+
+                <div className="grid gap-3">
+                  {taskDetailManifest.evidences.map(item => (
+                    <div key={`${item.shot}-${item.path}`} className="rounded-lg border border-slate-200 p-3">
+                      <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+                      <p className="text-xs text-slate-500">{item.path}</p>
+                      {item.signedUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.signedUrl}
+                          alt={`Evidencia ${item.label}`}
+                          className="mt-2 h-48 w-full rounded-lg border border-slate-200 object-cover"
+                        />
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">No se pudo resolver URL de esta evidencia.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      if (!taskDetailManifest.manifestSignedUrl) {
+                        showToast("info", "No hay URL del manifiesto disponible.")
+                        return
+                      }
+                      window.open(taskDetailManifest.manifestSignedUrl, "_blank", "noopener,noreferrer")
+                    }}
+                  >
+                    Ver manifiesto JSON
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
       </div>
     </ProtectedRoute>
   )
