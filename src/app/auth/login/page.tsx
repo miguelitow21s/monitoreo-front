@@ -21,6 +21,15 @@ export default function LoginPage() {
   const [loadingLegalStatus, setLoadingLegalStatus] = useState(false)
   const [showLegalContent, setShowLegalContent] = useState(false)
 
+  const extractErrorMessage = (error: unknown) => {
+    if (error instanceof Error && error.message) return error.message
+    if (typeof error === "object" && error !== null && "message" in error) {
+      const message = (error as { message?: unknown }).message
+      if (typeof message === "string" && message.trim().length > 0) return message
+    }
+    return "Could not validate legal consent. Please try again."
+  }
+
   useEffect(() => {
     if (!loading && session) {
       router.replace("/dashboard")
@@ -67,9 +76,18 @@ export default function LoginPage() {
       if (!status.accepted) {
         await acceptLegalConsent(status.active_term?.id, accessToken)
       }
-    } catch {
+    } catch (legalError: unknown) {
       await supabase.auth.signOut()
-      setError("Could not validate legal consent. Please try again.")
+      const requestId =
+        typeof legalError === "object" && legalError !== null && "request_id" in legalError
+          ? (legalError as { request_id?: unknown }).request_id
+          : undefined
+      const baseMessage = extractErrorMessage(legalError)
+      const message =
+        typeof requestId === "string" && requestId.trim().length > 0
+          ? `${baseMessage} (request_id: ${requestId})`
+          : baseMessage
+      setError(message)
       setSubmitting(false)
       setLoadingLegalStatus(false)
       return

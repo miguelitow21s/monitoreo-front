@@ -1,4 +1,3 @@
-import { invokeEdge } from "@/services/edgeClient"
 import { supabase } from "@/services/supabaseClient"
 
 export interface LegalConsentStatus {
@@ -29,6 +28,106 @@ function shouldFallbackToDirectTableAccess(error: unknown) {
     message.includes("cors") ||
     message.includes("fetch")
   )
+}
+
+function getErrorStatus(error: unknown) {
+  if (typeof error !== "object" || error === null) return undefined
+  const status = (error as { status?: unknown }).status
+  return typeof status === "number" ? status : undefined
+}
+
+function toStatusError(message: string, status?: number, requestId?: string) {
+  const error = new Error(message) as Error & { status?: number; request_id?: string }
+  if (typeof status === "number") error.status = status
+  if (requestId) error.request_id = requestId
+  return error
+}
+
+async function getLatestAccessToken() {
+  const { data, error } = await supabase.auth.getSession()
+  if (error) throw error
+  return data.session?.access_token ?? null
+}
+
+async function refreshAndGetAccessToken() {
+  await supabase.auth.refreshSession()
+  return getLatestAccessToken()
+}
+
+async function invokeLegalConsentDirect<T>(
+  body: Record<string, unknown>,
+  accessToken: string,
+  idempotencyKey?: string
+) {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!baseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured.")
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  }
+
+  if (idempotencyKey) {
+    headers["Idempotency-Key"] = idempotencyKey
+  }
+
+  const response = await fetch(`${baseUrl}/functions/v1/legal_consent`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  })
+
+  let payload: {
+    success?: boolean
+    data?: T | null
+    error?: { message?: string; request_id?: string } | null
+    request_id?: string
+  } | null = null
+
+  try {
+    payload = (await response.json()) as {
+      success?: boolean
+      data?: T | null
+      error?: { message?: string; request_id?: string } | null
+      request_id?: string
+    }
+  } catch {
+    payload = null
+  }
+
+  if (!response.ok) {
+    const requestId = payload?.request_id ?? payload?.error?.request_id ?? response.headers.get("x-request-id") ?? undefined
+    const message = payload?.error?.message ?? `legal_consent request failed (HTTP ${response.status})`
+    throw toStatusError(message, response.status, requestId)
+  }
+
+  if (payload && "success" in payload && payload.success === false) {
+    const requestId = payload.request_id ?? payload.error?.request_id
+    const message = payload.error?.message ?? "legal_consent rejected by backend."
+    throw toStatusError(message, undefined, requestId)
+  }
+
+  return (payload?.data ?? null) as T
+}
+
+async function invokeLegalConsentWithRetry<T>(
+  body: Record<string, unknown>,
+  accessToken?: string,
+  idempotencyKey?: string
+) {
+  const token = accessToken ?? (await getLatestAccessToken())
+  if (!token) {
+    throw toStatusError("Authenticated session token not available.", 401)
+  }
+
+  try {
+    return await invokeLegalConsentDirect<T>(body, token, idempotencyKey)
+  } catch (error: unknown) {
+    if (getErrorStatus(error) !== 401) throw error
+    const refreshed = await refreshAndGetAccessToken()
+    if (!refreshed || refreshed === token) throw error
+    return invokeLegalConsentDirect<T>(body, refreshed, idempotencyKey)
+  }
 }
 
 async function getCurrentUserId() {
@@ -119,12 +218,16 @@ async function acceptLegalConsentFallback(legalTermsId?: number) {
 
 export async function getLegalConsentStatus(accessToken?: string) {
   try {
-    const data = await invokeEdge<LegalConsentStatus>("legal_consent", {
-      body: { action: "status" },
-      accessToken,
-    })
+    const data = await invokeLegalConsentWithRetry<LegalConsentStatus>(
+      { action: "status" },
+      accessToken
+    )
     return (data ?? { accepted: false, accepted_at: null, active_term: null }) as LegalConsentStatus
   } catch (error: unknown) {
+    // Fallback only for transport-layer issues (CORS/network). AUTH errors must bubble up.
+    if (getErrorStatus(error) === 401) {
+      throw toStatusError("Authenticated session rejected by legal_consent.", 401)
+    }
     if (!shouldFallbackToDirectTableAccess(error)) throw error
     return getLegalConsentStatusFallback()
   }
@@ -132,16 +235,19 @@ export async function getLegalConsentStatus(accessToken?: string) {
 
 export async function acceptLegalConsent(legalTermsId?: number, accessToken?: string) {
   try {
-    const data = await invokeEdge<{ accepted?: boolean; accepted_at?: string | null } | null>("legal_consent", {
-      idempotencyKey: crypto.randomUUID(),
-      accessToken,
-      body: {
+    const data = await invokeLegalConsentWithRetry<{ accepted?: boolean; accepted_at?: string | null } | null>(
+      {
         action: "accept",
         legal_terms_id: legalTermsId,
       },
-    })
+      accessToken,
+      crypto.randomUUID()
+    )
     return (data ?? null) as { accepted?: boolean; accepted_at?: string | null } | null
   } catch (error: unknown) {
+    if (getErrorStatus(error) === 401) {
+      throw toStatusError("Authenticated session rejected while accepting legal consent.", 401)
+    }
     if (!shouldFallbackToDirectTableAccess(error)) throw error
     return acceptLegalConsentFallback(legalTermsId)
   }
