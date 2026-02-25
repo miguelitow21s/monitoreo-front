@@ -38,7 +38,7 @@ export default function LoginPage() {
 
     setSubmitting(true)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError("Invalid credentials")
@@ -46,13 +46,26 @@ export default function LoginPage() {
       return
     }
 
+    let accessToken: string | null = data.session?.access_token ?? null
+    if (!accessToken) {
+      const sessionResult = await supabase.auth.getSession()
+      accessToken = sessionResult.data.session?.access_token ?? null
+    }
+
+    if (!accessToken) {
+      await supabase.auth.signOut()
+      setError("Authenticated session was not established. Please sign in again.")
+      setSubmitting(false)
+      return
+    }
+
     try {
       setLoadingLegalStatus(true)
-      const status = await getLegalConsentStatus()
+      const status = await getLegalConsentStatus(accessToken)
       setLegalStatus(status)
 
       if (!status.accepted) {
-        await acceptLegalConsent(status.active_term?.id)
+        await acceptLegalConsent(status.active_term?.id, accessToken)
       }
     } catch {
       await supabase.auth.signOut()

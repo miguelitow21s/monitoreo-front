@@ -117,10 +117,11 @@ async function acceptLegalConsentFallback(legalTermsId?: number) {
   return { accepted: true, accepted_at: acceptedAt }
 }
 
-export async function getLegalConsentStatus() {
+export async function getLegalConsentStatus(accessToken?: string) {
   try {
     const data = await invokeEdge<LegalConsentStatus>("legal_consent", {
       body: { action: "status" },
+      accessToken,
     })
     return (data ?? { accepted: false, accepted_at: null, active_term: null }) as LegalConsentStatus
   } catch (error: unknown) {
@@ -129,10 +130,11 @@ export async function getLegalConsentStatus() {
   }
 }
 
-export async function acceptLegalConsent(legalTermsId?: number) {
+export async function acceptLegalConsent(legalTermsId?: number, accessToken?: string) {
   try {
     const data = await invokeEdge<{ accepted?: boolean; accepted_at?: string | null } | null>("legal_consent", {
       idempotencyKey: crypto.randomUUID(),
+      accessToken,
       body: {
         action: "accept",
         legal_terms_id: legalTermsId,

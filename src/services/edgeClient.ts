@@ -15,6 +15,7 @@ interface BackendEnvelope<T> {
 type EdgeInvokeOptions = {
   body?: Record<string, unknown> | string | Blob | ArrayBuffer | FormData
   idempotencyKey?: string
+  accessToken?: string
 }
 
 function toError(message: string, status?: number, code?: string, requestId?: string) {
@@ -32,6 +33,10 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
 
   if (options.idempotencyKey) {
     headers["Idempotency-Key"] = options.idempotencyKey
+  }
+
+  if (options.accessToken) {
+    headers.Authorization = `Bearer ${options.accessToken}`
   }
 
   const { data, error } = await supabase.functions.invoke(fn, {
