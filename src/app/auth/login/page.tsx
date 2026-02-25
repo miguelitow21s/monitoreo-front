@@ -78,6 +78,10 @@ export default function LoginPage() {
       }
     } catch (legalError: unknown) {
       await supabase.auth.signOut()
+      const status =
+        typeof legalError === "object" && legalError !== null && "status" in legalError
+          ? (legalError as { status?: unknown }).status
+          : undefined
       const requestId =
         typeof legalError === "object" && legalError !== null && "request_id" in legalError
           ? (legalError as { request_id?: unknown }).request_id
@@ -90,12 +94,30 @@ export default function LoginPage() {
         typeof legalError === "object" && legalError !== null && "x_request_id" in legalError
           ? (legalError as { x_request_id?: unknown }).x_request_id
           : undefined
+      const responseBody =
+        typeof legalError === "object" && legalError !== null && "response_body" in legalError
+          ? (legalError as { response_body?: unknown }).response_body
+          : undefined
+      const timestampUtc =
+        typeof legalError === "object" && legalError !== null && "timestamp_utc" in legalError
+          ? (legalError as { timestamp_utc?: unknown }).timestamp_utc
+          : undefined
       const baseMessage = extractErrorMessage(legalError)
       const tags: string[] = []
       if (typeof requestId === "string" && requestId.trim().length > 0) tags.push(`request_id: ${requestId}`)
       if (typeof sbRequestId === "string" && sbRequestId.trim().length > 0) tags.push(`sb-request-id: ${sbRequestId}`)
       if (typeof xRequestId === "string" && xRequestId.trim().length > 0) tags.push(`x-request-id: ${xRequestId}`)
+      if (typeof timestampUtc === "string" && timestampUtc.trim().length > 0) tags.push(`utc: ${timestampUtc}`)
+      if (typeof status === "number") tags.push(`status: ${status}`)
       const message = tags.length > 0 ? `${baseMessage} (${tags.join(" | ")})` : baseMessage
+      console.error("legal_consent_failed", {
+        status,
+        request_id: requestId,
+        sb_request_id: sbRequestId,
+        x_request_id: xRequestId,
+        timestamp_utc: timestampUtc,
+        response_body: responseBody,
+      })
       setError(message)
       setSubmitting(false)
       setLoadingLegalStatus(false)
