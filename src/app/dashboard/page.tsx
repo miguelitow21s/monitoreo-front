@@ -58,7 +58,10 @@ export default function DashboardPage() {
   const loadData = useCallback(async () => {
     setLoadingData(true)
     try {
-      const [metricRows, auditRows] = await Promise.all([fetchDashboardMetrics(), fetchAuditEvents(10)])
+      const [metricRows, auditRows] = await Promise.all([
+        fetchDashboardMetrics(),
+        isSuperAdmin || isSupervisora ? fetchAuditEvents(10) : Promise.resolve([] as AuditEvent[]),
+      ])
       setMetrics(metricRows)
       setAuditEvents(auditRows)
     } catch (error: unknown) {
@@ -66,7 +69,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingData(false)
     }
-  }, [showToast])
+  }, [showToast, isSuperAdmin, isSupervisora])
 
   useEffect(() => {
     if (loading || authLoading) return

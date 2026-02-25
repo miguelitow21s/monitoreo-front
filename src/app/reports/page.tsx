@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 
+import { useAuth } from "@/hooks/useAuth"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -24,6 +25,7 @@ function toEndOfDayIso(value: string) {
 }
 
 export default function ReportsPage() {
+  const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<ReportRow[]>([])
@@ -58,12 +60,16 @@ export default function ReportsPage() {
   }, [fromDate, toDate, restaurantId, showToast])
 
   useEffect(() => {
+    if (authLoading) return
+    if (!isAuthenticated || !session?.access_token) return
     void loadCatalogs()
-  }, [loadCatalogs])
+  }, [authLoading, isAuthenticated, session?.access_token, loadCatalogs])
 
   useEffect(() => {
+    if (authLoading) return
+    if (!isAuthenticated || !session?.access_token) return
     void loadReport()
-  }, [loadReport])
+  }, [authLoading, isAuthenticated, session?.access_token, loadReport])
 
   const totalCompleted = useMemo(() => rows.filter(item => item.end_time).length, [rows])
   const totalActive = useMemo(() => rows.length - totalCompleted, [rows, totalCompleted])
@@ -127,7 +133,7 @@ export default function ReportsPage() {
           </Card>
 
           <Card title="Report results" subtitle="Read-only row details.">
-            {loading ? (
+            {loading || authLoading ? (
               <Skeleton className="h-28" />
             ) : rows.length === 0 ? (
               <EmptyState

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 
+import { useAuth } from "@/hooks/useAuth"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -17,6 +18,7 @@ import { ROLES, Role } from "@/utils/permissions"
 const roleOptions: Role[] = [ROLES.EMPLEADO, ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]
 
 export default function UsersPage() {
+  const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<UserProfile[]>([])
@@ -52,8 +54,10 @@ export default function UsersPage() {
   }, [showToast])
 
   useEffect(() => {
+    if (authLoading) return
+    if (!isAuthenticated || !session?.access_token) return
     void loadData()
-  }, [loadData])
+  }, [authLoading, isAuthenticated, session?.access_token, loadData])
 
   const handleRoleChange = async (id: string, role: Role) => {
     try {
@@ -114,7 +118,7 @@ export default function UsersPage() {
         <div className="space-y-4">
           <h1 className="text-2xl font-bold text-slate-900">Users</h1>
 
-          {loading ? (
+          {loading || authLoading ? (
             <Skeleton className="h-28" />
           ) : (
             <div className="space-y-4">

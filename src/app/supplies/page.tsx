@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 
+import { useAuth } from "@/hooks/useAuth"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -26,6 +27,7 @@ function extractError(error: unknown, fallback: string) {
 }
 
 export default function SuppliesPage() {
+  const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [supplies, setSupplies] = useState<Supply[]>([])
@@ -62,8 +64,10 @@ export default function SuppliesPage() {
   }, [showToast])
 
   useEffect(() => {
+    if (authLoading) return
+    if (!isAuthenticated || !session?.access_token) return
     void loadData()
-  }, [loadData])
+  }, [authLoading, isAuthenticated, session?.access_token, loadData])
 
   const inconsistencies = useMemo(
     () => supplies.filter(item => Number(item.stock ?? 0) < 0),
@@ -119,7 +123,7 @@ export default function SuppliesPage() {
         <div className="space-y-4">
           <h1 className="text-2xl font-bold text-slate-900">Supplies</h1>
 
-          {loading ? (
+          {loading || authLoading ? (
             <Skeleton className="h-28" />
           ) : (
             <>

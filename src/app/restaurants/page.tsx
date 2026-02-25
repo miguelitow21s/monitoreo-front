@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 
+import { useAuth } from "@/hooks/useAuth"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -29,6 +30,7 @@ function parseNullableNumber(value: string) {
 }
 
 export default function RestaurantsPage() {
+  const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<Restaurant[]>([])
@@ -65,8 +67,10 @@ export default function RestaurantsPage() {
   }, [showToast])
 
   useEffect(() => {
+    if (authLoading) return
+    if (!isAuthenticated || !session?.access_token) return
     void loadData()
-  }, [loadData])
+  }, [authLoading, isAuthenticated, session?.access_token, loadData])
 
   const handleCreate = async () => {
     const parsedLat = parseNullableNumber(lat)
@@ -140,7 +144,7 @@ export default function RestaurantsPage() {
         <div className="space-y-4">
           <h1 className="text-2xl font-bold text-slate-900">Restaurants</h1>
 
-          {loading ? (
+          {loading || authLoading ? (
             <Skeleton className="h-28" />
           ) : (
             <>
