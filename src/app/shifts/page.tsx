@@ -50,6 +50,7 @@ import {
   TaskEvidenceManifestResolved,
 } from "@/services/tasks.service"
 import { listMySupervisorRestaurants, listRestaurants, SupervisorRestaurantOption } from "@/services/restaurants.service"
+import { uploadEvidenceObject } from "@/services/storageEvidence.service"
 
 const HISTORY_PAGE_SIZE = 8
 const TASK_EVIDENCE_SHOTS = [
@@ -203,7 +204,7 @@ export default function ShiftsPage() {
     if (healthDeclarationRequired && !healthDeclarationProvided) {
       blockers.push("You must provide a declaration when health condition is not optimal.")
     }
-    if (processing) blockers.push("There are una accion en progreso.")
+    if (processing) blockers.push("There is an action in progress.")
     return blockers
   }, [coords, photo, healthAnswered, healthDeclarationRequired, healthDeclarationProvided, processing, activeShift])
 
@@ -251,7 +252,7 @@ export default function ShiftsPage() {
       const [active, historyResult, scheduledResult] = await Promise.all([
         getMyActiveShift(),
         getMyShiftHistory(page, HISTORY_PAGE_SIZE),
-        listMyScheduledShifts(6),
+        listMyScheduledShifts(100),
       ])
       setActiveShift(active)
       setHistory(historyResult.rows)
@@ -396,11 +397,10 @@ export default function ShiftsPage() {
     const evidenceMimeType = blob.type || "image/jpeg"
     const evidenceSizeBytes = blob.size
 
-    const { error } = await supabase.storage.from("shift-evidence").upload(filePath, blob, {
+    await uploadEvidenceObject(filePath, blob, {
       upsert: false,
       contentType: evidenceMimeType,
     })
-    if (error) throw error
     return { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes }
   }
 

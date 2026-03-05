@@ -1,4 +1,5 @@
 import { supabase } from "@/services/supabaseClient"
+import { createEvidenceSignedUrl } from "@/services/storageEvidence.service"
 
 export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled"
 export type TaskPriority = "low" | "normal" | "high" | "critical"
@@ -94,9 +95,7 @@ function extractEvidencePath(rawEvidence: Record<string, unknown>) {
 
 export async function resolveTaskEvidenceSignedUrl(path: string | null | undefined, expiresInSeconds = 3600) {
   if (!path) return null
-  const { data, error } = await supabase.storage.from("shift-evidence").createSignedUrl(path, expiresInSeconds)
-  if (error) throw error
-  return data.signedUrl
+  return createEvidenceSignedUrl(path, expiresInSeconds)
 }
 
 export async function fetchTaskEvidenceManifest(

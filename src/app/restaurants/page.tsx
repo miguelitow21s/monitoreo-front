@@ -40,6 +40,10 @@ type NominatimSearchRow = {
   importance?: number
 }
 
+function stripDiacritics(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+}
+
 function parseNullableNumber(value: string) {
   const trimmed = value.trim()
   if (!trimmed) return null
@@ -77,8 +81,8 @@ function expandStreetAbbreviations(value: string) {
 }
 
 function inferCountryCodes(value: string) {
-  const normalized = value.toLowerCase()
-  if (/\b(colombia|antioquia|medell[ií]n|bogot[aá]|bello|cali|barranquilla|cartagena)\b/.test(normalized)) {
+  const normalized = stripDiacritics(value).toLowerCase()
+  if (/\b(colombia|antioquia|medellin|bogota|bello|cali|barranquilla|cartagena)\b/.test(normalized)) {
     return ["co"]
   }
   if (/\b(usa|u\.s\.a|united states|eeuu|u\.s\.)\b/.test(normalized)) {
@@ -127,6 +131,13 @@ function buildAddressSearchQueries(rawQuery: string) {
     variants.add(withoutNeighborhood)
     if (!includesUsContext) variants.add(`${withoutNeighborhood}, USA`)
     if (!includesCoContext) variants.add(`${withoutNeighborhood}, Colombia`)
+
+    for (let index = 1; index < segments.length - 1; index += 1) {
+      const reduced = `${segments[0]}, ${segments.slice(index).join(", ")}`
+      variants.add(reduced)
+      if (!includesUsContext) variants.add(`${reduced}, USA`)
+      if (!includesCoContext) variants.add(`${reduced}, Colombia`)
+    }
   }
 
   for (const countryCode of countryHints) {
@@ -171,11 +182,19 @@ async function searchNominatim(query: string, options?: { countryCodes?: string;
     params.set("countrycodes", options.countryCodes)
   }
 
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
-    headers: {
-      Accept: "application/json",
-    },
-  })
+  const controller = new AbortController()
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), 9000)
+  let response: Response
+  try {
+    response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    })
+  } finally {
+    globalThis.clearTimeout(timeoutId)
+  }
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
@@ -249,6 +268,7 @@ export default function RestaurantsPage() {
       const queryVariants = buildAddressSearchQueries(normalizedQuery)
       const queryTokens = tokenizeAddressQuery(normalizedQuery)
       const candidatesById = new Map<string, GeocodingCandidate>()
+      const failures: string[] = []
 
       const countryCodes = inferCountryCodes(normalizedQuery)
       const collectCandidates = async (rows: NominatimSearchRow[]) => {
@@ -281,16 +301,24 @@ export default function RestaurantsPage() {
       // Primary pass: prioritize inferred country when detected.
       if (countryCodes.length > 0) {
         for (const variant of queryVariants) {
-          const rows = await searchNominatim(variant, { countryCodes: countryCodes.join(","), limit: 10 })
-          await collectCandidates(rows)
+          try {
+            const rows = await searchNominatim(variant, { countryCodes: countryCodes.join(","), limit: 10 })
+            await collectCandidates(rows)
+          } catch (error: unknown) {
+            failures.push(error instanceof Error ? `${variant}: ${error.message}` : `${variant}: unknown error`)
+          }
         }
       }
 
-      // Fallback pass: global search only if US pass is scarce.
+      // Fallback pass: global search if scoped pass is scarce.
       if (candidatesById.size < 6) {
         for (const variant of queryVariants) {
-          const rows = await searchNominatim(variant, { limit: 6 })
-          await collectCandidates(rows)
+          try {
+            const rows = await searchNominatim(variant, { limit: 6 })
+            await collectCandidates(rows)
+          } catch (error: unknown) {
+            failures.push(error instanceof Error ? `${variant}: ${error.message}` : `${variant}: unknown error`)
+          }
         }
       }
 
@@ -312,6 +340,10 @@ export default function RestaurantsPage() {
             "Address found. Select the most precise option from the list."
           )
         )
+      }
+
+      if (parsed.length > 0 && failures.length > 0) {
+        console.warn("geocoding_partial_failures", failures)
       }
     } catch (error: unknown) {
       showToast(
@@ -390,11 +422,15 @@ export default function RestaurantsPage() {
     }
 
     try {
+      const normalizedAddress = normalizeAddressInput(selectedAddressLabel || addressQuery)
+      const countryHints = inferCountryCodes(normalizedAddress)
       const created = await createRestaurant({
         name: name.trim(),
         lat: parsedLat,
         lng: parsedLng,
         geofence_radius_m: parsedRadius,
+        address_line: normalizedAddress || null,
+        country: countryHints[0] === "co" ? "Colombia" : countryHints[0] === "us" ? "United States" : null,
       })
       setRows(prev => [created, ...prev])
       setName("")
@@ -624,3 +660,4 @@ export default function RestaurantsPage() {
     </ProtectedRoute>
   )
 }
+

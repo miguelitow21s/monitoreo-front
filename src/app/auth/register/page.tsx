@@ -12,6 +12,18 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+function canDeferProfileBootstrap(error: unknown) {
+  if (!error || typeof error !== "object") return false
+  const rawMessage = "message" in error ? (error as { message?: unknown }).message : null
+  const message = typeof rawMessage === "string" ? rawMessage.toLowerCase() : ""
+  return (
+    message.includes("no autenticado") ||
+    message.includes("not authenticated") ||
+    message.includes("jwt") ||
+    message.includes("permission denied")
+  )
+}
+
 export default function RegisterPage() {
   const router = useRouter()
   const { t } = useI18n()
@@ -72,19 +84,36 @@ export default function RegisterPage() {
       const userEmail = data.user?.email ?? email
 
       if (userId) {
-        const { error: registerError } = await supabase.rpc("register_employee", {
+        let { error: registerError } = await supabase.rpc("register_employee", {
           p_user_id: userId,
           p_email: userEmail,
           p_full_name: fullName,
+          p_first_name: normalizedFirstName,
+          p_last_name: normalizedLastName,
+          p_phone_number: phone.trim(),
         })
 
-        if (registerError) throw registerError
+        // Backward compatibility while database migration is being applied.
+        if (
+          registerError &&
+          typeof registerError.message === "string" &&
+          registerError.message.toLowerCase().includes("does not exist")
+        ) {
+          const fallback = await supabase.rpc("register_employee", {
+            p_user_id: userId,
+            p_email: userEmail,
+            p_full_name: fullName,
+          })
+          registerError = fallback.error
+        }
+
+        if (registerError && !canDeferProfileBootstrap(registerError)) throw registerError
       }
 
       setMessage(
         t(
-          "Registro exitoso. Si se requiere confirmacion por correo, valida tu email antes de iniciar sesion.",
-          "Registration completed. If email confirmation is required, verify your email before signing in."
+          "Registro exitoso. Si se requiere confirmacion por correo, valida tu email antes de iniciar sesion. El perfil se completara al primer acceso.",
+          "Registration completed. If email confirmation is required, verify your email before signing in. Profile bootstrap will complete on first access."
         )
       )
       setTimeout(() => router.replace("/auth/login"), 1400)

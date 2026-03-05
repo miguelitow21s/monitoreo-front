@@ -182,6 +182,24 @@ end $$;
 alter table public.restaurants
   add column if not exists geofence_radius_m integer;
 
+alter table public.restaurants
+  add column if not exists address_line text;
+
+alter table public.restaurants
+  add column if not exists city text;
+
+alter table public.restaurants
+  add column if not exists state text;
+
+alter table public.restaurants
+  add column if not exists postal_code text;
+
+alter table public.restaurants
+  add column if not exists country text;
+
+alter table public.restaurants
+  add column if not exists place_id text;
+
 update public.restaurants
 set geofence_radius_m = radius
 where geofence_radius_m is null;
@@ -246,6 +264,8 @@ create index if not exists idx_scheduled_shifts_employee_start
   on public.scheduled_shifts (employee_id, scheduled_start);
 
 create extension if not exists btree_gist;
+create extension if not exists cube;
+create extension if not exists earthdistance;
 
 do $$
 begin
@@ -306,12 +326,24 @@ alter table public.users
   add column if not exists full_name text;
 
 alter table public.users
+  add column if not exists first_name text;
+
+alter table public.users
+  add column if not exists last_name text;
+
+alter table public.users
+  add column if not exists phone_number text;
+
+alter table public.users
   add column if not exists is_active boolean not null default true;
 
 create or replace view public.profiles as
 select
   u.id,
   u.full_name,
+  u.first_name,
+  u.last_name,
+  u.phone_number,
   u.email,
   r.name::text as role,
   u.is_active
@@ -366,10 +398,15 @@ begin
 end $$;
 
 -- 7) SELF REGISTRATION RPC (empleado)
+drop function if exists public.register_employee(uuid, text, text);
+
 create or replace function public.register_employee(
   p_user_id uuid,
   p_email text,
-  p_full_name text default null
+  p_full_name text default null,
+  p_first_name text default null,
+  p_last_name text default null,
+  p_phone_number text default null
 )
 returns void
 language plpgsql
@@ -410,16 +447,106 @@ begin
     raise exception 'No existe rol empleado en public.roles.';
   end if;
 
-  insert into public.users (id, email, role_id, full_name, is_active)
-  values (p_user_id, p_email, v_role_id, p_full_name, false)
+  insert into public.users (
+    id,
+    email,
+    role_id,
+    full_name,
+    first_name,
+    last_name,
+    phone_number,
+    is_active
+  )
+  values (
+    p_user_id,
+    p_email,
+    v_role_id,
+    coalesce(p_full_name, nullif(trim(coalesce(p_first_name, '') || ' ' || coalesce(p_last_name, '')), '')),
+    p_first_name,
+    p_last_name,
+    p_phone_number,
+    false
+  )
   on conflict (id) do update
   set
     full_name = coalesce(excluded.full_name, public.users.full_name),
+    first_name = coalesce(excluded.first_name, public.users.first_name),
+    last_name = coalesce(excluded.last_name, public.users.last_name),
+    phone_number = coalesce(excluded.phone_number, public.users.phone_number),
+    email = coalesce(excluded.email, public.users.email),
     updated_at = now();
 end;
 $$;
 
-grant execute on function public.register_employee(uuid, text, text) to authenticated;
+grant execute on function public.register_employee(uuid, text, text, text, text, text) to authenticated;
+
+create or replace function public.bootstrap_my_user()
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_uid uuid;
+  v_email text;
+  v_meta_full_name text;
+  v_meta_first_name text;
+  v_meta_last_name text;
+  v_meta_phone text;
+begin
+  v_uid := auth.uid();
+  if v_uid is null then
+    raise exception 'No autenticado.';
+  end if;
+
+  select
+    au.email,
+    nullif(trim(coalesce(au.raw_user_meta_data ->> 'full_name', '')), ''),
+    nullif(trim(coalesce(au.raw_user_meta_data ->> 'first_name', '')), ''),
+    nullif(trim(coalesce(au.raw_user_meta_data ->> 'last_name', '')), ''),
+    nullif(trim(coalesce(au.raw_user_meta_data ->> 'phone_number', '')), '')
+  into
+    v_email,
+    v_meta_full_name,
+    v_meta_first_name,
+    v_meta_last_name,
+    v_meta_phone
+  from auth.users au
+  where au.id = v_uid;
+
+  if not found then
+    raise exception 'Usuario auth invalido.';
+  end if;
+
+  if v_email is null then
+    raise exception 'Usuario auth sin email.';
+  end if;
+
+  if exists (select 1 from public.users u where u.id = v_uid) then
+    update public.users u
+    set
+      email = coalesce(v_email, u.email),
+      full_name = coalesce(v_meta_full_name, u.full_name),
+      first_name = coalesce(v_meta_first_name, u.first_name),
+      last_name = coalesce(v_meta_last_name, u.last_name),
+      phone_number = coalesce(v_meta_phone, u.phone_number),
+      updated_at = now()
+    where u.id = v_uid;
+    return;
+  end if;
+
+  perform public.register_employee(
+    v_uid,
+    v_email,
+    v_meta_full_name,
+    v_meta_first_name,
+    v_meta_last_name,
+    v_meta_phone
+  );
+end;
+$$;
+
+grant execute on function public.bootstrap_my_user() to authenticated;
 
 create or replace function public.app_user_role(p_user_id uuid)
 returns text
@@ -804,6 +931,9 @@ begin
     insert into storage.buckets (id, name, public)
     values ('evidence', 'evidence', false)
     on conflict (id) do nothing;
+    insert into storage.buckets (id, name, public)
+    values ('shift-evidence', 'shift-evidence', false)
+    on conflict (id) do nothing;
   exception when insufficient_privilege then
     raise notice 'Sin permisos para crear bucket evidence desde SQL Editor. Crealo manualmente en Storage > Buckets.';
   end;
@@ -845,10 +975,10 @@ begin
       execute 'drop policy evidence_delete on storage.objects';
     end if;
 
-    execute 'create policy evidence_select on storage.objects for select to authenticated using (bucket_id = ''evidence'')';
-    execute 'create policy evidence_insert on storage.objects for insert to authenticated with check (bucket_id = ''evidence'' and owner_id = auth.uid()::text)';
-    execute 'create policy evidence_update on storage.objects for update to authenticated using (bucket_id = ''evidence'' and owner_id = auth.uid()::text) with check (bucket_id = ''evidence'' and owner_id = auth.uid()::text)';
-    execute 'create policy evidence_delete on storage.objects for delete to authenticated using (bucket_id = ''evidence'' and owner_id = auth.uid()::text)';
+    execute 'create policy evidence_select on storage.objects for select to authenticated using (bucket_id in (''evidence'', ''shift-evidence''))';
+    execute 'create policy evidence_insert on storage.objects for insert to authenticated with check (bucket_id in (''evidence'', ''shift-evidence'') and owner_id = auth.uid()::text)';
+    execute 'create policy evidence_update on storage.objects for update to authenticated using (bucket_id in (''evidence'', ''shift-evidence'') and owner_id = auth.uid()::text) with check (bucket_id in (''evidence'', ''shift-evidence'') and owner_id = auth.uid()::text)';
+    execute 'create policy evidence_delete on storage.objects for delete to authenticated using (bucket_id in (''evidence'', ''shift-evidence'') and owner_id = auth.uid()::text)';
   else
     raise notice 'Sin ownership sobre storage.objects. Configura policies de evidence manualmente en Storage > Policies.';
   end if;
@@ -877,6 +1007,27 @@ alter table public.audit_logs enable row level security;
 alter table public.supplies enable row level security;
 alter table public.supply_deliveries enable row level security;
 alter table public.reports enable row level security;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'operational_tasks'
+  ) then
+    execute 'alter table public.operational_tasks enable row level security';
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'supervisor_presence_logs'
+  ) then
+    execute 'alter table public.supervisor_presence_logs enable row level security';
+  end if;
+end $$;
 
 create or replace function public.set_supply_delivery_defaults()
 returns trigger
@@ -1136,6 +1287,85 @@ begin
   to authenticated
   using (public.current_actor_role() = 'super_admin')
   with check (public.current_actor_role() = 'super_admin');
+
+  -- operational_tasks (optional table)
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'operational_tasks'
+  ) then
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'operational_tasks' and policyname = 'operational_tasks_select_scoped') then
+      drop policy operational_tasks_select_scoped on public.operational_tasks;
+    end if;
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'operational_tasks' and policyname = 'operational_tasks_insert_supervision') then
+      drop policy operational_tasks_insert_supervision on public.operational_tasks;
+    end if;
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'operational_tasks' and policyname = 'operational_tasks_update_scoped') then
+      drop policy operational_tasks_update_scoped on public.operational_tasks;
+    end if;
+
+    create policy operational_tasks_select_scoped
+    on public.operational_tasks
+    for select
+    to authenticated
+    using (
+      assigned_employee_id = auth.uid()
+      or public.current_actor_role() in ('super_admin', 'supervisora')
+    );
+
+    create policy operational_tasks_insert_supervision
+    on public.operational_tasks
+    for insert
+    to authenticated
+    with check (public.current_actor_role() in ('super_admin', 'supervisora'));
+
+    create policy operational_tasks_update_scoped
+    on public.operational_tasks
+    for update
+    to authenticated
+    using (
+      assigned_employee_id = auth.uid()
+      or public.current_actor_role() in ('super_admin', 'supervisora')
+    )
+    with check (
+      assigned_employee_id = auth.uid()
+      or public.current_actor_role() in ('super_admin', 'supervisora')
+    );
+  end if;
+
+  -- supervisor_presence_logs (optional table)
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'supervisor_presence_logs'
+  ) then
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'supervisor_presence_logs' and policyname = 'supervisor_presence_select_scoped') then
+      drop policy supervisor_presence_select_scoped on public.supervisor_presence_logs;
+    end if;
+    if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'supervisor_presence_logs' and policyname = 'supervisor_presence_insert_scoped') then
+      drop policy supervisor_presence_insert_scoped on public.supervisor_presence_logs;
+    end if;
+
+    create policy supervisor_presence_select_scoped
+    on public.supervisor_presence_logs
+    for select
+    to authenticated
+    using (
+      supervisor_id = auth.uid()
+      or public.current_actor_role() in ('super_admin', 'supervisora')
+    );
+
+    create policy supervisor_presence_insert_scoped
+    on public.supervisor_presence_logs
+    for insert
+    to authenticated
+    with check (
+      supervisor_id = auth.uid()
+      and public.current_actor_role() in ('super_admin', 'supervisora')
+    );
+  end if;
 end $$;
 
 commit;

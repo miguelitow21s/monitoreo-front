@@ -1,5 +1,6 @@
 import { supabase } from "@/services/supabaseClient"
 import { invokeEdge } from "@/services/edgeClient"
+import { getEvidenceBucketCandidates } from "@/services/storageEvidence.service"
 import { withRetry } from "@/utils/retry"
 
 export type ReportColumnKey =
@@ -277,7 +278,7 @@ export async function resolveReportReadonlyUrl(path: string | null | undefined, 
   if (!path) return null
   if (/^https?:\/\//i.test(path)) return path
 
-  const buckets = ["reports", "shift-evidence", "evidence"]
+  const buckets = ["reports", ...getEvidenceBucketCandidates()]
 
   for (const bucket of buckets) {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresInSeconds)

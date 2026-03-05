@@ -6,6 +6,12 @@ export interface Restaurant {
   lat: number | null
   lng: number | null
   geofence_radius_m: number | null
+  address_line?: string | null
+  city?: string | null
+  state?: string | null
+  postal_code?: string | null
+  country?: string | null
+  place_id?: string | null
 }
 
 export interface RestaurantEmployee {
