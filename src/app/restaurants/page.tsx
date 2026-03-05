@@ -63,13 +63,50 @@ function normalizeAddressInput(value: string) {
     .trim()
 }
 
+function expandStreetAbbreviations(value: string) {
+  return value
+    .replace(/\bcl\.?\b/gi, "calle")
+    .replace(/\bcra\.?\b/gi, "carrera")
+    .replace(/\bcr\.?\b/gi, "carrera")
+    .replace(/\bav\.?\b/gi, "avenida")
+    .replace(/\bdiag\.?\b/gi, "diagonal")
+    .replace(/\btransv\.?\b/gi, "transversal")
+    .replace(/\btv\.?\b/gi, "transversal")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function inferCountryCodes(value: string) {
+  const normalized = value.toLowerCase()
+  if (/\b(colombia|antioquia|medell[ií]n|bogot[aá]|bello|cali|barranquilla|cartagena)\b/.test(normalized)) {
+    return ["co"]
+  }
+  if (/\b(usa|u\.s\.a|united states|eeuu|u\.s\.)\b/.test(normalized)) {
+    return ["us"]
+  }
+  return [] as string[]
+}
+
 function buildAddressSearchQueries(rawQuery: string) {
   const normalized = normalizeAddressInput(rawQuery)
+  const expanded = expandStreetAbbreviations(normalized)
+  const hashAsSpace = expanded.replace(/\s*#\s*/g, " ")
+  const hashAsNo = expanded.replace(/\s*#\s*/g, " no ")
+  const countryHints = inferCountryCodes(normalized)
   const variants = new Set<string>()
   const includesUsContext = /\b(usa|us|united states)\b/i.test(normalized)
+  const includesCoContext = /\b(colombia)\b/i.test(normalized)
 
   variants.add(normalized)
+  variants.add(expanded)
+  variants.add(hashAsSpace)
+  variants.add(hashAsNo)
   if (!includesUsContext) variants.add(`${normalized}, USA`)
+  if (!includesCoContext) variants.add(`${normalized}, Colombia`)
+  if (expanded !== normalized) {
+    if (!includesUsContext) variants.add(`${expanded}, USA`)
+    if (!includesCoContext) variants.add(`${expanded}, Colombia`)
+  }
 
   const unitStripped = normalized
     .replace(/\b(apt|apartment|suite|ste|unit|#)\s*[a-z0-9-]+\b/gi, "")
@@ -81,6 +118,25 @@ function buildAddressSearchQueries(rawQuery: string) {
   if (unitStripped.length >= 5 && unitStripped !== normalized) {
     variants.add(unitStripped)
     if (!includesUsContext) variants.add(`${unitStripped}, USA`)
+    if (!includesCoContext) variants.add(`${unitStripped}, Colombia`)
+  }
+
+  const segments = normalized.split(",").map(item => item.trim()).filter(Boolean)
+  if (segments.length >= 3) {
+    const withoutNeighborhood = `${segments[0]}, ${segments[segments.length - 2]}, ${segments[segments.length - 1]}`
+    variants.add(withoutNeighborhood)
+    if (!includesUsContext) variants.add(`${withoutNeighborhood}, USA`)
+    if (!includesCoContext) variants.add(`${withoutNeighborhood}, Colombia`)
+  }
+
+  for (const countryCode of countryHints) {
+    if (countryCode === "co") {
+      variants.add(`${expanded}, Colombia`)
+      variants.add(`${hashAsSpace}, Colombia`)
+    }
+    if (countryCode === "us") {
+      variants.add(`${expanded}, USA`)
+    }
   }
 
   return Array.from(variants).filter(item => item.length >= 4)
@@ -194,9 +250,8 @@ export default function RestaurantsPage() {
       const queryTokens = tokenizeAddressQuery(normalizedQuery)
       const candidatesById = new Map<string, GeocodingCandidate>()
 
-      // Primary pass: prioritize US results for long US addresses.
-      for (const variant of queryVariants) {
-        const rows = await searchNominatim(variant, { countryCodes: "us", limit: 10 })
+      const countryCodes = inferCountryCodes(normalizedQuery)
+      const collectCandidates = async (rows: NominatimSearchRow[]) => {
         for (const row of rows) {
           const candidateLat = Number(row.lat)
           const candidateLng = Number(row.lon)
@@ -223,34 +278,19 @@ export default function RestaurantsPage() {
         }
       }
 
+      // Primary pass: prioritize inferred country when detected.
+      if (countryCodes.length > 0) {
+        for (const variant of queryVariants) {
+          const rows = await searchNominatim(variant, { countryCodes: countryCodes.join(","), limit: 10 })
+          await collectCandidates(rows)
+        }
+      }
+
       // Fallback pass: global search only if US pass is scarce.
       if (candidatesById.size < 6) {
         for (const variant of queryVariants) {
           const rows = await searchNominatim(variant, { limit: 6 })
-          for (const row of rows) {
-            const candidateLat = Number(row.lat)
-            const candidateLng = Number(row.lon)
-            if (!Number.isFinite(candidateLat) || !Number.isFinite(candidateLng)) continue
-
-            const displayName = row.display_name ?? `${candidateLat}, ${candidateLng}`
-            const importance = typeof row.importance === "number" && Number.isFinite(row.importance) ? row.importance : 0
-            const matchScore = scoreAddressMatch(queryTokens, displayName) + importance * 0.35
-            const id = String(row.place_id ?? `${candidateLat}_${candidateLng}`)
-
-            const nextCandidate: GeocodingCandidate = {
-              id,
-              displayName,
-              lat: candidateLat,
-              lng: candidateLng,
-              importance,
-              matchScore,
-            }
-
-            const current = candidatesById.get(id)
-            if (!current || nextCandidate.matchScore > current.matchScore) {
-              candidatesById.set(id, nextCandidate)
-            }
-          }
+          await collectCandidates(rows)
         }
       }
 
