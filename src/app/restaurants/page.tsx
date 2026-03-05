@@ -23,11 +23,27 @@ import {
 import { listUserProfiles, UserProfile } from "@/services/users.service"
 import { ROLES } from "@/utils/permissions"
 
+type GeocodingCandidate = {
+  id: string
+  displayName: string
+  lat: number
+  lng: number
+}
+
 function parseNullableNumber(value: string) {
   const trimmed = value.trim()
   if (!trimmed) return null
   const parsed = Number(trimmed)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function buildMapPreviewUrl(lat: number, lng: number) {
+  const delta = 0.005
+  const left = lng - delta
+  const right = lng + delta
+  const top = lat + delta
+  const bottom = lat - delta
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik&marker=${lat}%2C${lng}`
 }
 
 export default function RestaurantsPage() {
@@ -40,12 +56,20 @@ export default function RestaurantsPage() {
   const [assignments, setAssignments] = useState<Record<string, RestaurantEmployee[]>>({})
 
   const [name, setName] = useState("")
+  const [addressQuery, setAddressQuery] = useState("")
   const [lat, setLat] = useState("")
   const [lng, setLng] = useState("")
   const [radius, setRadius] = useState("100")
+  const [searchingAddress, setSearchingAddress] = useState(false)
+  const [usingCurrentLocation, setUsingCurrentLocation] = useState(false)
+  const [addressResults, setAddressResults] = useState<GeocodingCandidate[]>([])
+  const [selectedAddressLabel, setSelectedAddressLabel] = useState("")
 
   const [assignRestaurant, setAssignRestaurant] = useState("")
   const [assignUser, setAssignUser] = useState("")
+
+  const latNumber = parseNullableNumber(lat)
+  const lngNumber = parseNullableNumber(lng)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -74,13 +98,115 @@ export default function RestaurantsPage() {
     void loadData()
   }, [authLoading, isAuthenticated, session?.access_token, loadData])
 
+  const handleSearchAddress = async () => {
+    const query = addressQuery.trim()
+    if (!query) {
+      showToast("info", t("Ingresa una direccion para buscar.", "Enter an address to search."))
+      return
+    }
+
+    setSearchingAddress(true)
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=${encodeURIComponent(query)}`
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+        },
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const rows = (await response.json()) as Array<{
+        place_id?: number
+        display_name?: string
+        lat?: string
+        lon?: string
+      }>
+
+      const parsed = rows
+        .map((row, index) => {
+          const candidateLat = Number(row.lat)
+          const candidateLng = Number(row.lon)
+          if (!Number.isFinite(candidateLat) || !Number.isFinite(candidateLng)) return null
+          return {
+            id: String(row.place_id ?? index),
+            displayName: row.display_name ?? `${candidateLat}, ${candidateLng}`,
+            lat: candidateLat,
+            lng: candidateLng,
+          } satisfies GeocodingCandidate
+        })
+        .filter((item): item is GeocodingCandidate => item !== null)
+
+      setAddressResults(parsed)
+      if (parsed.length === 0) {
+        showToast("info", t("No se encontraron resultados para esa direccion.", "No results found for that address."))
+      } else {
+        showToast("success", t("Direccion encontrada. Selecciona un resultado.", "Address found. Select a result."))
+      }
+    } catch (error: unknown) {
+      showToast(
+        "error",
+        error instanceof Error
+          ? error.message
+          : t("No se pudo buscar la direccion.", "Could not search address.")
+      )
+    } finally {
+      setSearchingAddress(false)
+    }
+  }
+
+  const handlePickAddress = (candidate: GeocodingCandidate) => {
+    setLat(candidate.lat.toFixed(6))
+    setLng(candidate.lng.toFixed(6))
+    setSelectedAddressLabel(candidate.displayName)
+    if (!name.trim()) {
+      const inferredName = candidate.displayName.split(",")[0]?.trim() ?? ""
+      setName(inferredName)
+    }
+    showToast("success", t("Coordenadas cargadas desde direccion.", "Coordinates loaded from address."))
+  }
+
+  const handleUseCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+      showToast("error", t("Tu navegador no soporta geolocalizacion.", "Your browser does not support geolocation."))
+      return
+    }
+
+    setUsingCurrentLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setLat(position.coords.latitude.toFixed(6))
+        setLng(position.coords.longitude.toFixed(6))
+        setSelectedAddressLabel(t("Ubicacion actual", "Current location"))
+        setUsingCurrentLocation(false)
+        showToast("success", t("Ubicacion actual cargada.", "Current location loaded."))
+      },
+      () => {
+        setUsingCurrentLocation(false)
+        showToast("error", t("No se pudo obtener tu ubicacion actual.", "Could not get your current location."))
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    )
+  }
+
   const handleCreate = async () => {
     const parsedLat = parseNullableNumber(lat)
     const parsedLng = parseNullableNumber(lng)
     const parsedRadius = parseNullableNumber(radius)
 
-    if (!name.trim() || parsedLat === null || parsedLng === null || parsedRadius === null) {
-      showToast("info", t("Completa nombre, latitud, longitud y radio.", "Complete name, latitude, longitude, and radius."))
+    if (!name.trim() || parsedRadius === null) {
+      showToast("info", t("Completa nombre y radio.", "Complete name and radius."))
+      return
+    }
+    if (parsedLat === null || parsedLng === null) {
+      showToast(
+        "info",
+        t(
+          "Busca y selecciona una direccion en el mapa antes de guardar.",
+          "Search and select an address on the map before saving."
+        )
+      )
       return
     }
 
@@ -103,6 +229,9 @@ export default function RestaurantsPage() {
       })
       setRows(prev => [created, ...prev])
       setName("")
+      setAddressQuery("")
+      setAddressResults([])
+      setSelectedAddressLabel("")
       setLat("")
       setLng("")
       showToast("success", t("Restaurante creado.", "Restaurant created."))
@@ -150,8 +279,8 @@ export default function RestaurantsPage() {
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Incluye coordenadas y radio de geocerca.", "Include coordinates and geofence radius.")}>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Busca direccion como en una app de domicilios y confirma en mapa.", "Search address like a delivery app and confirm on map.")}>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     placeholder={t("Nombre", "Name")}
@@ -159,25 +288,87 @@ export default function RestaurantsPage() {
                     onChange={event => setName(event.target.value)}
                   />
                   <input
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder={t("Latitud", "Latitude")}
-                    value={lat}
-                    onChange={event => setLat(event.target.value)}
+                    className="sm:col-span-2 xl:col-span-3 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder={t("Direccion del restaurante", "Restaurant address")}
+                    value={addressQuery}
+                    onChange={event => setAddressQuery(event.target.value)}
                   />
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleSearchAddress()}
+                    disabled={searchingAddress}
+                  >
+                    {searchingAddress ? t("Buscando...", "Searching...") : t("Buscar direccion", "Search address")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => void handleUseCurrentLocation()}
+                    disabled={usingCurrentLocation}
+                  >
+                    {usingCurrentLocation ? t("Obteniendo...", "Getting...") : t("Usar mi ubicacion", "Use my location")}
+                  </Button>
                   <input
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder={t("Longitud", "Longitude")}
-                    value={lng}
-                    onChange={event => setLng(event.target.value)}
-                  />
-                  <input
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="sm:col-span-2 xl:col-span-2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     placeholder={t("Radio (m)", "Radius (m)")}
                     value={radius}
                     onChange={event => setRadius(event.target.value)}
                   />
-                  <Button onClick={handleCreate}>{t("Guardar", "Save")}</Button>
+                  <Button onClick={handleCreate} className="sm:col-span-2 xl:col-span-1">
+                    {t("Guardar", "Save")}
+                  </Button>
                 </div>
+
+                {addressResults.length > 0 && (
+                  <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {t("Resultados de direccion", "Address results")}
+                    </p>
+                    <div className="max-h-48 space-y-2 overflow-auto">
+                      {addressResults.map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-400"
+                          onClick={() => handlePickAddress(item)}
+                        >
+                          <p className="font-medium">{item.displayName}</p>
+                          <p className="text-xs text-slate-500">
+                            Lat: {item.lat.toFixed(6)} | Lng: {item.lng.toFixed(6)}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {latNumber !== null && lngNumber !== null && (
+                  <div className="mt-3 space-y-2">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      <p>
+                        {t("Ubicacion seleccionada", "Selected location")}:{" "}
+                        <span className="font-medium text-slate-800">{selectedAddressLabel || t("Pin de mapa", "Map pin")}</span>
+                      </p>
+                      <p>Lat: {latNumber.toFixed(6)} | Lng: {lngNumber.toFixed(6)}</p>
+                    </div>
+                    <div className="overflow-hidden rounded-lg border border-slate-200">
+                      <iframe
+                        title={t("Vista de mapa", "Map preview")}
+                        src={buildMapPreviewUrl(latNumber, lngNumber)}
+                        className="h-64 w-full"
+                        loading="lazy"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {latNumber === null || lngNumber === null ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {t(
+                      "Todavia no hay ubicacion seleccionada. Busca una direccion y elige un resultado.",
+                      "No location selected yet. Search an address and choose a result."
+                    )}
+                  </div>
+                ) : null}
               </Card>
 
               <Card title={t("Asignar empleados", "Assign employees")} subtitle={t("Asocia usuarios operativos con restaurantes.", "Associate operational users with restaurants.")}>

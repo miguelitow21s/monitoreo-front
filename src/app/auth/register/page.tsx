@@ -15,7 +15,9 @@ function errorMessage(error: unknown, fallback: string) {
 export default function RegisterPage() {
   const router = useRouter()
   const { t } = useI18n()
-  const [fullName, setFullName] = useState("")
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -29,13 +31,37 @@ export default function RegisterPage() {
     setMessage(null)
 
     try {
+      const normalizedFirstName = firstName.trim()
+      const normalizedLastName = lastName.trim()
+      const fullName = `${normalizedFirstName} ${normalizedLastName}`.trim()
+
+      if (!normalizedFirstName || !normalizedLastName) {
+        throw new Error(
+          t(
+            "Debes ingresar nombre y apellido.",
+            "First name and last name are required."
+          )
+        )
+      }
+      if (!phone.trim()) {
+        throw new Error(
+          t(
+            "Debes ingresar numero de celular.",
+            "Phone number is required."
+          )
+        )
+      }
+
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             role: "empleado",
-            full_name: fullName.trim() || null,
+            full_name: fullName,
+            first_name: normalizedFirstName,
+            last_name: normalizedLastName,
+            phone_number: phone.trim(),
           },
         },
       })
@@ -49,7 +75,7 @@ export default function RegisterPage() {
         const { error: registerError } = await supabase.rpc("register_employee", {
           p_user_id: userId,
           p_email: userEmail,
-          p_full_name: fullName.trim() || null,
+          p_full_name: fullName,
         })
 
         if (registerError) throw registerError
@@ -87,11 +113,29 @@ export default function RegisterPage() {
         </p>
 
         <div className="mt-6 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              required
+              placeholder={t("Nombre", "First name")}
+              value={firstName}
+              onChange={e => setFirstName(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+            />
+            <input
+              required
+              placeholder={t("Apellido", "Last name")}
+              value={lastName}
+              onChange={e => setLastName(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+            />
+          </div>
           <input
+            type="tel"
             required
-            placeholder={t("Nombre completo", "Full name")}
-            value={fullName}
-            onChange={e => setFullName(e.target.value)}
+            autoComplete="tel"
+            placeholder={t("Celular", "Phone number")}
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
           />
           <input
