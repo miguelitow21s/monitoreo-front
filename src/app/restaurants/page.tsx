@@ -28,6 +28,16 @@ type GeocodingCandidate = {
   displayName: string
   lat: number
   lng: number
+  importance: number
+  matchScore: number
+}
+
+type NominatimSearchRow = {
+  place_id?: number
+  display_name?: string
+  lat?: string
+  lon?: string
+  importance?: number
 }
 
 function parseNullableNumber(value: string) {
@@ -44,6 +54,78 @@ function buildMapPreviewUrl(lat: number, lng: number) {
   const top = lat + delta
   const bottom = lat - delta
   return `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik&marker=${lat}%2C${lng}`
+}
+
+function normalizeAddressInput(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .trim()
+}
+
+function buildAddressSearchQueries(rawQuery: string) {
+  const normalized = normalizeAddressInput(rawQuery)
+  const variants = new Set<string>()
+  const includesUsContext = /\b(usa|us|united states)\b/i.test(normalized)
+
+  variants.add(normalized)
+  if (!includesUsContext) variants.add(`${normalized}, USA`)
+
+  const unitStripped = normalized
+    .replace(/\b(apt|apartment|suite|ste|unit|#)\s*[a-z0-9-]+\b/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/,\s*,/g, ", ")
+    .trim()
+
+  if (unitStripped.length >= 5 && unitStripped !== normalized) {
+    variants.add(unitStripped)
+    if (!includesUsContext) variants.add(`${unitStripped}, USA`)
+  }
+
+  return Array.from(variants).filter(item => item.length >= 4)
+}
+
+function tokenizeAddressQuery(value: string) {
+  return normalizeAddressInput(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(token => token.length >= 2)
+}
+
+function scoreAddressMatch(tokens: string[], displayName: string) {
+  if (tokens.length === 0) return 0
+  const normalizedDisplay = displayName.toLowerCase()
+  const matches = tokens.reduce((count, token) => count + (normalizedDisplay.includes(token) ? 1 : 0), 0)
+  return matches / tokens.length
+}
+
+async function searchNominatim(query: string, options?: { countryCodes?: string; limit?: number }) {
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    addressdetails: "1",
+    dedupe: "1",
+    limit: String(options?.limit ?? 8),
+    q: query,
+    "accept-language": "en",
+  })
+
+  if (options?.countryCodes) {
+    params.set("countrycodes", options.countryCodes)
+  }
+
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    headers: {
+      Accept: "application/json",
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  return (await response.json()) as NominatimSearchRow[]
 }
 
 export default function RestaurantsPage() {
@@ -107,42 +189,89 @@ export default function RestaurantsPage() {
 
     setSearchingAddress(true)
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=${encodeURIComponent(query)}`
-      const response = await fetch(url, {
-        headers: {
-          Accept: "application/json",
-        },
-      })
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
+      const normalizedQuery = normalizeAddressInput(query)
+      const queryVariants = buildAddressSearchQueries(normalizedQuery)
+      const queryTokens = tokenizeAddressQuery(normalizedQuery)
+      const candidatesById = new Map<string, GeocodingCandidate>()
 
-      const rows = (await response.json()) as Array<{
-        place_id?: number
-        display_name?: string
-        lat?: string
-        lon?: string
-      }>
-
-      const parsed = rows
-        .map((row, index) => {
+      // Primary pass: prioritize US results for long US addresses.
+      for (const variant of queryVariants) {
+        const rows = await searchNominatim(variant, { countryCodes: "us", limit: 10 })
+        for (const row of rows) {
           const candidateLat = Number(row.lat)
           const candidateLng = Number(row.lon)
-          if (!Number.isFinite(candidateLat) || !Number.isFinite(candidateLng)) return null
-          return {
-            id: String(row.place_id ?? index),
-            displayName: row.display_name ?? `${candidateLat}, ${candidateLng}`,
+          if (!Number.isFinite(candidateLat) || !Number.isFinite(candidateLng)) continue
+
+          const displayName = row.display_name ?? `${candidateLat}, ${candidateLng}`
+          const importance = typeof row.importance === "number" && Number.isFinite(row.importance) ? row.importance : 0
+          const matchScore = scoreAddressMatch(queryTokens, displayName) + importance * 0.35
+          const id = String(row.place_id ?? `${candidateLat}_${candidateLng}`)
+
+          const nextCandidate: GeocodingCandidate = {
+            id,
+            displayName,
             lat: candidateLat,
             lng: candidateLng,
-          } satisfies GeocodingCandidate
+            importance,
+            matchScore,
+          }
+
+          const current = candidatesById.get(id)
+          if (!current || nextCandidate.matchScore > current.matchScore) {
+            candidatesById.set(id, nextCandidate)
+          }
+        }
+      }
+
+      // Fallback pass: global search only if US pass is scarce.
+      if (candidatesById.size < 6) {
+        for (const variant of queryVariants) {
+          const rows = await searchNominatim(variant, { limit: 6 })
+          for (const row of rows) {
+            const candidateLat = Number(row.lat)
+            const candidateLng = Number(row.lon)
+            if (!Number.isFinite(candidateLat) || !Number.isFinite(candidateLng)) continue
+
+            const displayName = row.display_name ?? `${candidateLat}, ${candidateLng}`
+            const importance = typeof row.importance === "number" && Number.isFinite(row.importance) ? row.importance : 0
+            const matchScore = scoreAddressMatch(queryTokens, displayName) + importance * 0.35
+            const id = String(row.place_id ?? `${candidateLat}_${candidateLng}`)
+
+            const nextCandidate: GeocodingCandidate = {
+              id,
+              displayName,
+              lat: candidateLat,
+              lng: candidateLng,
+              importance,
+              matchScore,
+            }
+
+            const current = candidatesById.get(id)
+            if (!current || nextCandidate.matchScore > current.matchScore) {
+              candidatesById.set(id, nextCandidate)
+            }
+          }
+        }
+      }
+
+      const parsed = Array.from(candidatesById.values())
+        .sort((a, b) => {
+          if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore
+          return b.importance - a.importance
         })
-        .filter((item): item is GeocodingCandidate => item !== null)
+        .slice(0, 10)
 
       setAddressResults(parsed)
       if (parsed.length === 0) {
         showToast("info", t("No se encontraron resultados para esa direccion.", "No results found for that address."))
       } else {
-        showToast("success", t("Direccion encontrada. Selecciona un resultado.", "Address found. Select a result."))
+        showToast(
+          "success",
+          t(
+            "Direccion encontrada. Selecciona la opcion mas precisa del listado.",
+            "Address found. Select the most precise option from the list."
+          )
+        )
       }
     } catch (error: unknown) {
       showToast(
@@ -279,7 +408,7 @@ export default function RestaurantsPage() {
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Busca direccion como en una app de domicilios y confirma en mapa.", "Search address like a delivery app and confirm on map.")}>
+              <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Busca direccion completa (calle, ciudad, estado, ZIP) y confirma en mapa.", "Search full address (street, city, state, ZIP) and confirm on map.")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -291,7 +420,13 @@ export default function RestaurantsPage() {
                     className="sm:col-span-2 xl:col-span-3 rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     placeholder={t("Direccion del restaurante", "Restaurant address")}
                     value={addressQuery}
-                    onChange={event => setAddressQuery(event.target.value)}
+                    onChange={event => {
+                      setAddressQuery(event.target.value)
+                      setLat("")
+                      setLng("")
+                      setSelectedAddressLabel("")
+                      setAddressResults([])
+                    }}
                   />
                   <Button
                     variant="secondary"
