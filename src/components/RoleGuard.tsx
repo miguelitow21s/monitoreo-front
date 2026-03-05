@@ -3,6 +3,7 @@
 import { ReactNode, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
+import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
 import { Role } from "@/utils/permissions"
 
@@ -14,6 +15,7 @@ interface RoleGuardProps {
 export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
   const router = useRouter()
   const { role, loading } = useRole()
+  const { t } = useI18n()
   const allowed = !!role && allowedRoles.includes(role)
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center text-sm text-gray-500">
-        Verificando permisos...
+        {t("Verificando permisos...", "Verifying permissions...")}
       </div>
     )
   }
@@ -33,7 +35,7 @@ export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
   if (!allowed) {
     return (
       <div className="flex h-screen items-center justify-center text-sm text-gray-500">
-        Redirigiendo...
+        {t("Redirigiendo...", "Redirecting...")}
       </div>
     )
   }

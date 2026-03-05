@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
+import { useI18n } from "@/hooks/useI18n"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -31,6 +32,7 @@ function parseNullableNumber(value: string) {
 
 export default function RestaurantsPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
+  const { t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<Restaurant[]>([])
@@ -60,11 +62,11 @@ export default function RestaurantsPage() {
       )
       setAssignments(Object.fromEntries(assignmentEntries))
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudieron cargar los restaurantes.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudieron cargar los restaurantes.", "Could not load restaurants."))
     } finally {
       setLoading(false)
     }
-  }, [showToast])
+  }, [showToast, t])
 
   useEffect(() => {
     if (authLoading) return
@@ -78,17 +80,17 @@ export default function RestaurantsPage() {
     const parsedRadius = parseNullableNumber(radius)
 
     if (!name.trim() || parsedLat === null || parsedLng === null || parsedRadius === null) {
-      showToast("info", "Completa nombre, latitud, longitud y radio.")
+      showToast("info", t("Completa nombre, latitud, longitud y radio.", "Complete name, latitude, longitude, and radius."))
       return
     }
 
     if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
-      showToast("info", "Latitud/longitud fuera de rango valido.")
+      showToast("info", t("Latitud/longitud fuera de rango valido.", "Latitude/longitude out of valid range."))
       return
     }
 
     if (parsedRadius <= 0) {
-      showToast("info", "El radio debe ser mayor a 0.")
+      showToast("info", t("El radio debe ser mayor a 0.", "Radius must be greater than 0."))
       return
     }
 
@@ -103,9 +105,9 @@ export default function RestaurantsPage() {
       setName("")
       setLat("")
       setLng("")
-      showToast("success", "Restaurante creado.")
+      showToast("success", t("Restaurante creado.", "Restaurant created."))
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo crear el restaurante.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudo crear el restaurante.", "Could not create restaurant."))
     }
   }
 
@@ -114,15 +116,15 @@ export default function RestaurantsPage() {
     try {
       const updated = await updateRestaurant(restaurant.id, { geofence_radius_m: parsed })
       setRows(prev => prev.map(item => (item.id === updated.id ? updated : item)))
-      showToast("success", "Geocerca actualizada.")
+      showToast("success", t("Geocerca actualizada.", "Geofence updated."))
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo actualizar la geocerca.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudo actualizar la geocerca.", "Could not update geofence."))
     }
   }
 
   const handleAssign = async () => {
     if (!assignRestaurant || !assignUser) {
-      showToast("info", "Selecciona restaurante y empleado.")
+      showToast("info", t("Selecciona restaurante y empleado.", "Select restaurant and employee."))
       return
     }
 
@@ -132,9 +134,9 @@ export default function RestaurantsPage() {
         ...prev,
         [assignRestaurant]: [created, ...(prev[assignRestaurant] ?? [])],
       }))
-      showToast("success", "Empleado asignado al restaurante.")
+      showToast("success", t("Empleado asignado al restaurante.", "Employee assigned to restaurant."))
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo asignar el empleado.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudo asignar el empleado.", "Could not assign employee."))
     }
   }
 
@@ -142,43 +144,43 @@ export default function RestaurantsPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Restaurantes</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t("Restaurantes", "Restaurants")}</h1>
 
           {loading || authLoading ? (
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title="Crear restaurante" subtitle="Incluye coordenadas y radio de geocerca.">
+              <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Incluye coordenadas y radio de geocerca.", "Include coordinates and geofence radius.")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Nombre"
+                    placeholder={t("Nombre", "Name")}
                     value={name}
                     onChange={event => setName(event.target.value)}
                   />
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Latitud"
+                    placeholder={t("Latitud", "Latitude")}
                     value={lat}
                     onChange={event => setLat(event.target.value)}
                   />
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Longitud"
+                    placeholder={t("Longitud", "Longitude")}
                     value={lng}
                     onChange={event => setLng(event.target.value)}
                   />
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Radio (m)"
+                    placeholder={t("Radio (m)", "Radius (m)")}
                     value={radius}
                     onChange={event => setRadius(event.target.value)}
                   />
-                  <Button onClick={handleCreate}>Guardar</Button>
+                  <Button onClick={handleCreate}>{t("Guardar", "Save")}</Button>
                 </div>
               </Card>
 
-              <Card title="Asignar empleados" subtitle="Asocia usuarios operativos con restaurantes.">
+              <Card title={t("Asignar empleados", "Assign employees")} subtitle={t("Asocia usuarios operativos con restaurantes.", "Associate operational users with restaurants.")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -205,17 +207,17 @@ export default function RestaurantsPage() {
                       ))}
                   </select>
                   <Button variant="secondary" onClick={handleAssign}>
-                    Asignar
+                    {t("Asignar", "Assign")}
                   </Button>
                 </div>
               </Card>
 
-              <Card title="Listado de restaurantes" subtitle="Configuracion operativa actual.">
+              <Card title={t("Listado de restaurantes", "Restaurant list")} subtitle={t("Configuracion operativa actual.", "Current operational configuration.")}>
                 {rows.length === 0 ? (
                   <EmptyState
-                    title="Sin restaurantes"
-                    description="Crea el primer restaurante para iniciar operacion."
-                    actionLabel="Recargar"
+                    title={t("Sin restaurantes", "No restaurants")}
+                    description={t("Crea el primer restaurante para iniciar operacion.", "Create the first restaurant to start operations.")}
+                    actionLabel={t("Recargar", "Reload")}
                     onAction={() => void loadData()}
                   />
                 ) : (
@@ -226,7 +228,7 @@ export default function RestaurantsPage() {
                           <div>
                             <p className="font-semibold text-slate-900">{item.name}</p>
                             <p className="text-sm text-slate-600">
-                              Lat: {item.lat ?? "-"} | Lng: {item.lng ?? "-"} | Radio:{" "}
+                              Lat: {item.lat ?? "-"} | Lng: {item.lng ?? "-"} | {t("Radio", "Radius")}:{" "}
                               {item.geofence_radius_m ?? "-"} m
                             </p>
                           </div>
@@ -241,7 +243,7 @@ export default function RestaurantsPage() {
                         </div>
                         {(assignments[item.id] ?? []).length > 0 && (
                           <p className="mt-2 text-xs text-slate-500">
-                            Empleados asignados: {(assignments[item.id] ?? []).length}
+                            {t("Empleados asignados", "Assigned employees")}: {(assignments[item.id] ?? []).length}
                           </p>
                         )}
                       </div>

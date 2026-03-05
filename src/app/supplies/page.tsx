@@ -29,7 +29,7 @@ function extractError(error: unknown, fallback: string) {
 
 export default function SuppliesPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
-  const { t } = useI18n()
+  const { formatDateTime, t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [supplies, setSupplies] = useState<Supply[]>([])
@@ -240,7 +240,7 @@ export default function SuppliesPage() {
                   <ul className="space-y-1 text-sm text-slate-700">
                     {deliveries.map(item => (
                       <li key={item.id}>
-                        {new Date(item.delivered_at).toLocaleString("es-CO")} - {item.quantity} {t("unidades", "units")}
+                        {formatDateTime(item.delivered_at)} - {item.quantity} {t("unidades", "units")}
                       </li>
                     ))}
                   </ul>

@@ -23,14 +23,18 @@ function isLanguage(value: string | null): value is AppLanguage {
   return value === "es" || value === "en"
 }
 
+function detectBrowserLanguage(): AppLanguage {
+  return "en"
+}
+
 function resolveLanguageByRole(role: string | null | undefined): AppLanguage {
-  if (!role) return "es"
-  return ENGLISH_ROLES.has(role) ? "en" : "es"
+  if (role && ENGLISH_ROLES.has(role)) return "en"
+  return detectBrowserLanguage()
 }
 
 function readStoredLanguageConfig() {
   if (typeof window === "undefined") {
-    return { language: "es" as AppLanguage, isManual: false }
+    return { language: "en" as AppLanguage, isManual: false }
   }
 
   const savedLanguage = window.localStorage.getItem(STORAGE_LANGUAGE_KEY)
@@ -39,7 +43,7 @@ function readStoredLanguageConfig() {
     return { language: savedLanguage, isManual: savedManual }
   }
 
-  return { language: "es" as AppLanguage, isManual: false }
+  return { language: detectBrowserLanguage(), isManual: false }
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
@@ -83,7 +87,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 export function useLanguage() {
   const context = useContext(LanguageContext)
   if (!context) {
-    throw new Error("useLanguage debe usarse dentro de LanguageProvider.")
+    throw new Error("useLanguage must be used within LanguageProvider.")
   }
   return context
 }

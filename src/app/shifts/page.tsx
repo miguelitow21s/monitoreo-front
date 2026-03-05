@@ -11,6 +11,7 @@ import Button from "@/components/ui/Button"
 import Card from "@/components/ui/Card"
 import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
+import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
 import { useToast } from "@/components/toast/ToastProvider"
 import {
@@ -52,9 +53,9 @@ import { listMySupervisorRestaurants, listRestaurants, SupervisorRestaurantOptio
 
 const HISTORY_PAGE_SIZE = 8
 const TASK_EVIDENCE_SHOTS = [
-  { key: "close_up", label: "Primer plano", helper: "Toma detalle directo del area intervenida." },
-  { key: "mid_range", label: "Plano medio", helper: "Toma a distancia media mostrando contexto cercano." },
-  { key: "wide_general", label: "Vista general", helper: "Toma panoramica final del espacio completo." },
+  { key: "close_up", label: "Close-up", helper: "Capture a direct detail of the intervened area." },
+  { key: "mid_range", label: "Mid-range shot", helper: "Capture from mid distance showing nearby context." },
+  { key: "wide_general", label: "Wide overview", helper: "Capture a final panoramic view of the full space." },
 ] as const
 const TASK_SHOT_ORDER: Record<string, number> = {
   close_up: 1,
@@ -63,18 +64,6 @@ const TASK_SHOT_ORDER: Record<string, number> = {
 }
 
 type TaskEvidenceShotKey = (typeof TASK_EVIDENCE_SHOTS)[number]["key"]
-
-function formatDateTime(value: string | null) {
-  if (!value) return "-"
-  const date = new Date(value)
-  return date.toLocaleString("es-CO", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
 
 function formatDuration(start: string, end: string | null) {
   const startDate = new Date(start).getTime()
@@ -103,7 +92,7 @@ function isConsentPendingError(error: unknown) {
   if (status === 403) return true
 
   const message = extractErrorMessage(error, "").toLowerCase()
-  return message.includes("consent") || message.includes("legal") || message.includes("tratamiento de datos")
+  return message.includes("consent") || message.includes("legal") || message.includes("data processing")
 }
 
 function getCurrentScheduledRestaurantId(scheduledShifts: ScheduledShift[]) {
@@ -127,7 +116,20 @@ async function sha256Hex(blob: Blob) {
 
 export default function ShiftsPage() {
   const { isEmpleado, isSupervisora, isSuperAdmin } = useRole()
+  const { formatDateTime: formatDateTimeI18n } = useI18n()
   const { showToast } = useToast()
+
+  const formatDateTime = useCallback(
+    (value: string | null) =>
+      formatDateTimeI18n(value, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    [formatDateTimeI18n]
+  )
 
   const [coords, setCoords] = useState<Coordinates | null>(null)
   const [photo, setPhoto] = useState<Blob | null>(null)
@@ -189,19 +191,19 @@ export default function ShiftsPage() {
 
   const submitBlockers = useMemo(() => {
     const blockers: string[] = []
-    if (!coords) blockers.push("Debes capturar ubicacion GPS.")
-    if (!photo) blockers.push("Debes capturar evidencia fotografica.")
+    if (!coords) blockers.push("You must capture GPS location.")
+    if (!photo) blockers.push("You must capture photo evidence.")
     if (!healthAnswered) {
       blockers.push(
         activeShift
-          ? "Debes responder la condicion de salud de salida."
-          : "Debes responder la condicion de salud de ingreso."
+          ? "You must answer the exit health condition."
+          : "You must answer the entry health condition."
       )
     }
     if (healthDeclarationRequired && !healthDeclarationProvided) {
-      blockers.push("Debes registrar una declaracion cuando la condicion de salud no sea optima.")
+      blockers.push("You must provide a declaration when health condition is not optimal.")
     }
-    if (processing) blockers.push("Hay una accion en progreso.")
+    if (processing) blockers.push("There are una accion en progreso.")
     return blockers
   }, [coords, photo, healthAnswered, healthDeclarationRequired, healthDeclarationProvided, processing, activeShift])
 
@@ -238,9 +240,9 @@ export default function ShiftsPage() {
     return Array.from(latestByRestaurant.values()).filter(item => item.phase === "start")
   }, [supervisorPresence])
   const shiftOverlayLines = [
-    `Usuario: ${currentUserId ?? "desconocido"}`,
-    `Fase: ${activeShift ? "salida-turno" : "ingreso-turno"}`,
-    coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "GPS: pendiente",
+    `User: ${currentUserId ?? "unknown"}`,
+    `Phase: ${activeShift ? "shift-end" : "shift-start"}`,
+    coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "GPS: pending",
   ]
 
   const loadEmployeeData = useCallback(async (page: number) => {
@@ -256,7 +258,7 @@ export default function ShiftsPage() {
       setHistoryTotalPages(historyResult.totalPages)
       setScheduledShifts(scheduledResult)
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo cargar la informacion de turnos."))
+      showToast("error", extractErrorMessage(error, "Could not load shift information."))
     } finally {
       setLoadingData(false)
     }
@@ -268,7 +270,7 @@ export default function ShiftsPage() {
       const rows = await getActiveShiftsForSupervision(30)
       setSupervisorRows(rows)
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudieron cargar los turnos activos."))
+      showToast("error", extractErrorMessage(error, "Could not load active shifts."))
     } finally {
       setLoadingSupervisor(false)
     }
@@ -281,7 +283,7 @@ export default function ShiftsPage() {
         ? (await listRestaurants())
             .map(item => ({
               id: Number(item.id),
-              name: item.name ?? `Restaurante #${item.id}`,
+              name: item.name ?? `Restaurant #${item.id}`,
             }))
             .filter(item => Number.isFinite(item.id))
         : await listMySupervisorRestaurants()
@@ -293,7 +295,7 @@ export default function ShiftsPage() {
         return items[0].id
       })
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo cargar restaurantes para presencia de supervisora."))
+      showToast("error", extractErrorMessage(error, "Could not load restaurants for supervisor presence."))
     }
   }, [canOperateSupervisor, isSuperAdmin, showToast])
 
@@ -339,7 +341,7 @@ export default function ShiftsPage() {
         setSupervisorTasks(items)
       }
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudieron cargar las tareas operativas."))
+      showToast("error", extractErrorMessage(error, "Could not load operational tasks."))
     } finally {
       setLoadingTasks(false)
     }
@@ -351,7 +353,7 @@ export default function ShiftsPage() {
       const rows = await listMySupervisorPresence(20)
       setSupervisorPresence(rows)
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudieron cargar los registros de presencia de supervisora."))
+      showToast("error", extractErrorMessage(error, "Could not load supervisor presence records."))
     }
   }, [canOperateSupervisor, showToast])
 
@@ -382,7 +384,7 @@ export default function ShiftsPage() {
       extension?: string
     }
   ) => {
-    if (!currentUserId) throw new Error("No se encontro usuario autenticado.")
+    if (!currentUserId) throw new Error("Authenticated user was not found.")
     const timestamp = new Date().toISOString().replaceAll(":", "-")
     const coordTag = `${position.lat.toFixed(6)}_${position.lng.toFixed(6)}`
     const rawExtension = (options?.extension ?? "jpg").replace(/^\./, "").toLowerCase()
@@ -420,15 +422,15 @@ export default function ShiftsPage() {
     let startedShiftId: number | null = null
 
     try {
-      if (startFitForWork === null) throw new Error("Debes confirmar si ingresas en optimas condiciones para laborar.")
+      if (startFitForWork === null) throw new Error("You must confirm you are fit for work at shift start.")
 
       const latestActive = await getMyActiveShift()
       if (latestActive) {
         setActiveShift(latestActive)
-        throw new Error("Ya existe un turno activo. Debes finalizarlo antes de iniciar otro.")
+        throw new Error("There is already an active shift. End it before starting another.")
       }
 
-      if (!photo) throw new Error("Debes capturar evidencia fotografica.")
+      if (!photo) throw new Error("You must capture photo evidence.")
       const currentRestaurantId = getCurrentScheduledRestaurantId(scheduledShifts)
       const shiftId = Number(
         await startShift({
@@ -453,7 +455,7 @@ export default function ShiftsPage() {
         await createShiftIncident(String(shiftId), `[INGRESO] ${startObservation.trim()}`)
       }
 
-      showToast("success", "Turno iniciado correctamente.")
+      showToast("success", "Shift started successfully.")
       resetEvidenceAndLocation()
       setStartObservation("")
       setStartFitForWork(null)
@@ -466,10 +468,10 @@ export default function ShiftsPage() {
         await loadEmployeeData(1)
       }
       if (isConsentPendingError(error)) {
-        showToast("error", "Consentimiento pendiente: acepta tratamiento de datos para operar turnos.")
+        showToast("error", "Consent pending: accept data processing terms to operate shifts.")
         return
       }
-      showToast("error", extractErrorMessage(error, "No se pudo iniciar el turno."))
+      showToast("error", extractErrorMessage(error, "Could not start shift."))
     } finally {
       setProcessing(false)
     }
@@ -480,12 +482,12 @@ export default function ShiftsPage() {
     setProcessing(true)
 
     try {
-      if (endFitForWork === null) throw new Error("Debes confirmar tu condicion al finalizar turno.")
+      if (endFitForWork === null) throw new Error("You must confirm your condition when ending shift.")
       if (!endFitForWork && !endHealthDeclaration.trim()) {
-        throw new Error("Debes describir incidentes si tu condicion de salida no es optima.")
+        throw new Error("You must describe incidents if your end condition is not optimal.")
       }
 
-      if (!photo) throw new Error("Debes capturar evidencia fotografica.")
+      if (!photo) throw new Error("You must capture photo evidence.")
       await uploadShiftEvidence({
         shiftId: Number(activeShift.id),
         type: "fin",
@@ -505,7 +507,7 @@ export default function ShiftsPage() {
         await createShiftIncident(activeShift.id, `[SALIDA] ${endObservation.trim()}`)
       }
 
-      showToast("success", "Turno finalizado correctamente.")
+      showToast("success", "Shift ended successfully.")
       resetEvidenceAndLocation()
       setEndObservation("")
       setEndFitForWork(null)
@@ -515,10 +517,10 @@ export default function ShiftsPage() {
       await loadSupervisorData()
     } catch (error: unknown) {
       if (isConsentPendingError(error)) {
-        showToast("error", "Consentimiento pendiente: acepta tratamiento de datos para operar turnos.")
+        showToast("error", "Consent pending: accept data processing terms to operate shifts.")
         return
       }
-      showToast("error", extractErrorMessage(error, "No se pudo finalizar el turno."))
+      showToast("error", extractErrorMessage(error, "Could not end shift."))
     } finally {
       setProcessing(false)
     }
@@ -527,17 +529,17 @@ export default function ShiftsPage() {
   const handleStatusChange = async (shiftId: string, status: string) => {
     try {
       await updateShiftStatus(shiftId, status)
-      showToast("success", `Turno actualizado a ${status}.`)
+      showToast("success", `Shift updated to ${status}.`)
       await loadSupervisorData()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo actualizar el estado del turno."))
+      showToast("error", extractErrorMessage(error, "Could not update shift status."))
     }
   }
 
   const handleCreateIncident = async (shiftId: string) => {
     const note = (incidentNotes[shiftId] ?? "").trim()
     if (!note) {
-      showToast("info", "Escribe una novedad antes de guardar.")
+      showToast("info", "Write an incident before saving.")
       return
     }
 
@@ -548,9 +550,9 @@ export default function ShiftsPage() {
         ...prev,
         [shiftId]: [incident, ...(prev[shiftId] ?? [])],
       }))
-      showToast("success", "Novedad guardada.")
+      showToast("success", "Incident saved.")
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo guardar la novedad."))
+      showToast("error", extractErrorMessage(error, "Could not save incident."))
     }
   }
 
@@ -567,7 +569,7 @@ export default function ShiftsPage() {
   const handleCreateEmployeeIncident = async () => {
     const note = employeeIncident.trim()
     if (!activeShift || !note) {
-      showToast("info", "Escribe una nota antes de guardar.")
+      showToast("info", "Write a note before saving.")
       return
     }
 
@@ -575,10 +577,10 @@ export default function ShiftsPage() {
     try {
       await createShiftIncident(activeShift.id, `[EMPLEADO] ${note}`)
       setEmployeeIncident("")
-      showToast("success", "Nota guardada correctamente.")
+      showToast("success", "Note saved successfully.")
       await loadSupervisorData()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo guardar la nota."))
+      showToast("error", extractErrorMessage(error, "Could not save note."))
     } finally {
       setCreatingEmployeeIncident(false)
     }
@@ -591,11 +593,11 @@ export default function ShiftsPage() {
     const dueAt = draft?.dueAt?.trim() ?? ""
 
     if (!title || !description) {
-      showToast("info", "El titulo y la descripcion de la tarea son obligatorios.")
+      showToast("info", "Task title and description are required.")
       return
     }
     if (!row.restaurant_id || !row.employee_id) {
-      showToast("error", "El turno no tiene relacion restaurante/empleado.")
+      showToast("error", "Shift is missing restaurant/employee relation.")
       return
     }
 
@@ -614,10 +616,10 @@ export default function ShiftsPage() {
         ...prev,
         [row.id]: { title: "", description: "", priority: "normal", dueAt: "" },
       }))
-      showToast("success", "Tarea operativa creada.")
+      showToast("success", "Operational task created.")
       await loadTasks()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo crear la tarea."))
+      showToast("error", extractErrorMessage(error, "Could not create task."))
     } finally {
       setCreatingTaskForShift(null)
     }
@@ -626,20 +628,20 @@ export default function ShiftsPage() {
   const handleSetTaskInProgress = async (taskId: number) => {
     try {
       await markTaskInProgress(taskId)
-      showToast("success", "Tarea marcada en progreso.")
+      showToast("success", "Task marked as in progress.")
       await loadTasks()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo actualizar el estado de la tarea."))
+      showToast("error", extractErrorMessage(error, "Could not update task status."))
     }
   }
 
   const handleCompleteTask = async () => {
     if (!selectedTaskId) {
-      showToast("info", "Selecciona una tarea para completar.")
+      showToast("info", "Select a task to complete.")
       return
     }
     if (!taskCoords || !taskPhotoClose || !taskPhotoMid || !taskPhotoWide) {
-      showToast("info", "Completar tarea requiere GPS y 3 evidencias: primer plano, plano medio y vista general.")
+      showToast("info", "Completing a task requires GPS and 3 evidences: close-up, mid-range, and wide overview.")
       return
     }
 
@@ -683,10 +685,10 @@ export default function ShiftsPage() {
       })
       resetTaskEvidenceCapture()
       setSelectedTaskId(null)
-      showToast("success", "Tarea completada con evidencia triple.")
+      showToast("success", "Task completed with triple evidence.")
       await loadTasks()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo completar la tarea."))
+      showToast("error", extractErrorMessage(error, "Could not complete task."))
     } finally {
       setProcessingTask(false)
     }
@@ -715,7 +717,7 @@ export default function ShiftsPage() {
         evidences: sortedEvidences,
       })
     } catch (error: unknown) {
-      setTaskDetailManifestError(extractErrorMessage(error, "No se pudo cargar detalle de evidencia de la tarea."))
+      setTaskDetailManifestError(extractErrorMessage(error, "Could not load task evidence details."))
     } finally {
       setLoadingTaskDetailManifest(false)
     }
@@ -723,11 +725,11 @@ export default function ShiftsPage() {
 
   const handleRegisterPresence = async () => {
     if (!presenceRestaurantId) {
-      showToast("info", "Selecciona restaurante para registro de ingreso/salida de supervisora.")
+      showToast("info", "Select a restaurant to register supervisor entry/exit.")
       return
     }
     if (!presenceCoords || !presencePhoto) {
-      showToast("info", "El registro de supervisora requiere GPS y evidencia fotografica.")
+      showToast("info", "Supervisor registration requires GPS and photo evidence.")
       return
     }
 
@@ -749,10 +751,10 @@ export default function ShiftsPage() {
       setPresenceNotes("")
       setPresenceCoords(null)
       setPresencePhoto(null)
-      showToast("success", "Presencia de supervisora registrada.")
+      showToast("success", "Supervisor presence registered.")
       await loadPresenceLogs()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "No se pudo registrar presencia de supervisora."))
+      showToast("error", extractErrorMessage(error, "Could not register supervisor presence."))
     } finally {
       setRegisteringPresence(false)
     }
@@ -761,11 +763,11 @@ export default function ShiftsPage() {
   return (
     <ProtectedRoute>
       <div className="space-y-6">
-        <Card title="Turnos" subtitle="Operacion de empleado y supervision en un solo modulo." />
+        <Card title="Shifts" subtitle="Employee operation and supervision in one module." />
 
         {canOperateEmployee && (
           <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-900">Operacion de empleado</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Employee operations</h2>
 
             {loadingData ? (
               <Skeleton className="h-24" />
@@ -773,24 +775,24 @@ export default function ShiftsPage() {
               <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    Turno activo desde <b>{formatDateTime(activeShift.start_time)}</b>
+                    Active shift since <b>{formatDateTime(activeShift.start_time)}</b>
                   </span>
-                  <Badge variant="success">Activo</Badge>
+                  <Badge variant="success">Active</Badge>
                 </div>
               </div>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                No tienes turnos activos en este momento.
+                You do not have active shifts at this moment.
               </div>
             )}
 
             {pendingEmployeeTasks.length > 0 && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                 <p className="font-semibold">
-                  Alerta operativa: tienes {pendingEmployeeTasks.length} tarea(s) asignada(s) por supervisora.
+                  Operational alert: you have {pendingEmployeeTasks.length} task(s) assigned by supervisor.
                 </p>
                 <p className="mt-1 text-amber-800">
-                  Debes cerrar cada tarea con evidencia especifica de 3 tomas: primer plano, plano medio y vista general.
+                  You must close each task with 3 specific evidence shots: close-up, mid-range shot, and wide overview.
                 </p>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-900">
                   {pendingEmployeeTasks.slice(0, 3).map(task => (
@@ -803,13 +805,13 @@ export default function ShiftsPage() {
             )}
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card title="Ubicacion GPS" subtitle="Debes tener coordenadas validas para ejecutar acciones.">
+              <Card title="GPS location" subtitle="You must have valid coordinates to execute actions.">
                 <div className="mt-3">
                   <GPSGuard onLocation={setCoords} />
                 </div>
               </Card>
 
-              <Card title="Evidencia fotografica" subtitle="La foto se captura con camara y se sube a Storage.">
+              <Card title="Photo evidence" subtitle="Photo is captured with camera and uploaded to Storage.">
                 <div className="mt-3">
                   <CameraCapture onCapture={setPhoto} overlayLines={shiftOverlayLines} />
                 </div>
@@ -817,14 +819,14 @@ export default function ShiftsPage() {
             </div>
 
             <Card
-              title="Accion principal"
-              subtitle={activeShift ? "Finalizar turno activo" : "Iniciar nuevo turno"}
+              title="Main action"
+              subtitle={activeShift ? "End active shift" : "Start new shift"}
             >
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                 <p className="font-medium text-slate-800">
                   {activeShift
-                    ? "¿Salio bien del turno?"
-                    : "¿Ingresa en optimas condiciones?"}
+                    ? "Did you finish the shift in good condition?"
+                    : "Are you starting in good condition?"}
                 </p>
                 <div className="mt-2 flex gap-4">
                   <label className="flex items-center gap-2">
@@ -837,7 +839,7 @@ export default function ShiftsPage() {
                         else setStartFitForWork(true)
                       }}
                     />
-                    <span>Si</span>
+                    <span>Yes</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input
@@ -863,7 +865,7 @@ export default function ShiftsPage() {
                         : setStartHealthDeclaration(event.target.value)
                     }
                     className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
-                    placeholder="Describe condicion de salud o incidente."
+                    placeholder="Describe health condition or incident."
                   />
                 )}
               </div>
@@ -878,8 +880,8 @@ export default function ShiftsPage() {
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
                   placeholder={
                     activeShift
-                      ? "Observacion final (opcional)"
-                      : "Observacion inicial (opcional)"
+                      ? "Final observation (optional)"
+                      : "Initial observation (optional)"
                   }
                 />
               </div>
@@ -887,11 +889,11 @@ export default function ShiftsPage() {
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {!activeShift ? (
                   <Button onClick={handleStart} disabled={!canSubmit} variant="primary">
-                    {processing ? "Iniciando..." : "Iniciar turno"}
+                    {processing ? "Starting..." : "Start shift"}
                   </Button>
                 ) : (
                   <Button onClick={handleEnd} disabled={!canSubmit} variant="danger">
-                    {processing ? "Finalizando..." : "Finalizar turno"}
+                    {processing ? "Ending..." : "End shift"}
                   </Button>
                 )}
               </div>
@@ -906,14 +908,14 @@ export default function ShiftsPage() {
             </Card>
 
             {activeShift && (
-              <Card title="Registrar novedad" subtitle="Si ocurre algo durante el turno, registralo aqui.">
+              <Card title="Register incident" subtitle="If anything happens during the shift, register it here.">
                 <div className="space-y-2">
                   <textarea
                     value={employeeIncident}
                     onChange={event => setEmployeeIncident(event.target.value)}
                     rows={3}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
-                    placeholder="Describe la nota o novedad..."
+                    placeholder="Describe the note or incident..."
                   />
                   <Button
                     size="sm"
@@ -921,17 +923,17 @@ export default function ShiftsPage() {
                     disabled={creatingEmployeeIncident}
                     onClick={() => void handleCreateEmployeeIncident()}
                   >
-                    {creatingEmployeeIncident ? "Guardando..." : "Guardar nota"}
+                    {creatingEmployeeIncident ? "Saving..." : "Save note"}
                   </Button>
                 </div>
               </Card>
             )}
 
-            <Card title="Tareas asignadas" subtitle="Tareas operativas de supervision con cierre obligatorio por evidencia.">
+            <Card title="Assigned tasks" subtitle="Supervision operational tasks with mandatory evidence closure.">
               {loadingTasks ? (
                 <Skeleton className="h-24" />
               ) : employeeTasks.length === 0 ? (
-                <p className="text-sm text-slate-500">No hay tareas pendientes asignadas.</p>
+                <p className="text-sm text-slate-500">There are no pending assigned tasks.</p>
               ) : (
                 <div className="space-y-3">
                   <div className="space-y-2">
@@ -940,12 +942,12 @@ export default function ShiftsPage() {
                         <p className="font-semibold text-slate-800">{task.title}</p>
                         <p className="mt-1 text-slate-600">{task.description}</p>
                         <p className="mt-1 text-xs text-slate-500">
-                          Prioridad: {task.priority} | Estado: {task.status} | Creada: {formatDateTime(task.created_at)}
+                          Priority: {task.priority} | Status: {task.status} | Created: {formatDateTime(task.created_at)}
                         </p>
                         <div className="mt-2 flex gap-2">
                           {task.status === "pending" && (
                             <Button size="sm" variant="secondary" onClick={() => void handleSetTaskInProgress(task.id)}>
-                              Iniciar tarea
+                              Start task
                             </Button>
                           )}
                           {task.status !== "completed" && (
@@ -957,7 +959,7 @@ export default function ShiftsPage() {
                                 resetTaskEvidenceCapture()
                               }}
                             >
-                              {selectedTaskId === task.id ? "Seleccionada" : "Seleccionar para completar"}
+                              {selectedTaskId === task.id ? "Selected" : "Select to complete"}
                             </Button>
                           )}
                         </div>
@@ -968,10 +970,10 @@ export default function ShiftsPage() {
                   {selectedTaskId && (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <p className="text-sm font-medium text-slate-700">
-                        Evidencia de cierre de tarea (Tarea #{selectedTaskId})
+                        Task closing evidence (Task #{selectedTaskId})
                       </p>
                       <p className="mt-1 text-xs text-slate-600">
-                        Requerido: GPS + 3 fotos (primer plano, plano medio y vista general).
+                        Required: GPS + 3 photos (close-up, mid-range, wide overview).
                       </p>
 
                       <div className="mt-3">
@@ -985,12 +987,12 @@ export default function ShiftsPage() {
                           <CameraCapture
                             onCapture={setTaskPhotoClose}
                             overlayLines={[
-                              `Usuario: ${currentUserId ?? "desconocido"}`,
-                              `Tarea: ${selectedTaskId}`,
-                              "Toma: primer_plano",
+                              `User: ${currentUserId ?? "unknown"}`,
+                              `Task: ${selectedTaskId}`,
+                              "Shot: close_up",
                               taskCoords
                                 ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : "GPS: pendiente",
+                                : "GPS: pending",
                             ]}
                           />
                         </div>
@@ -1000,12 +1002,12 @@ export default function ShiftsPage() {
                           <CameraCapture
                             onCapture={setTaskPhotoMid}
                             overlayLines={[
-                              `Usuario: ${currentUserId ?? "desconocido"}`,
-                              `Tarea: ${selectedTaskId}`,
-                              "Toma: plano_medio",
+                              `User: ${currentUserId ?? "unknown"}`,
+                              `Task: ${selectedTaskId}`,
+                              "Shot: mid_range",
                               taskCoords
                                 ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : "GPS: pendiente",
+                                : "GPS: pending",
                             ]}
                           />
                         </div>
@@ -1015,27 +1017,27 @@ export default function ShiftsPage() {
                           <CameraCapture
                             onCapture={setTaskPhotoWide}
                             overlayLines={[
-                              `Usuario: ${currentUserId ?? "desconocido"}`,
-                              `Tarea: ${selectedTaskId}`,
-                              "Toma: vista_general",
+                              `User: ${currentUserId ?? "unknown"}`,
+                              `Task: ${selectedTaskId}`,
+                              "Shot: wide_general",
                               taskCoords
                                 ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : "GPS: pendiente",
+                                : "GPS: pending",
                             ]}
                           />
                         </div>
                       </div>
 
                       <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                        <p>GPS: {taskCoords ? "OK" : "Pendiente"}</p>
-                        <p>Primer plano: {taskPhotoClose ? "OK" : "Pendiente"}</p>
-                        <p>Plano medio: {taskPhotoMid ? "OK" : "Pendiente"}</p>
-                        <p>Vista general: {taskPhotoWide ? "OK" : "Pendiente"}</p>
+                        <p>GPS: {taskCoords ? "OK" : "Pending"}</p>
+                        <p>Close-up: {taskPhotoClose ? "OK" : "Pending"}</p>
+                        <p>Mid-range shot: {taskPhotoMid ? "OK" : "Pending"}</p>
+                        <p>Wide overview: {taskPhotoWide ? "OK" : "Pending"}</p>
                       </div>
 
                       <div className="mt-3">
                         <Button variant="primary" onClick={() => void handleCompleteTask()} disabled={processingTask}>
-                          {processingTask ? "Completando..." : "Completar tarea con evidencia triple"}
+                          {processingTask ? "Completing..." : "Complete task with triple evidence"}
                         </Button>
                       </div>
                     </div>
@@ -1044,7 +1046,7 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card title="Historial de turnos" subtitle="Vista paginada con estado y duracion.">
+            <Card title="Shift history" subtitle="Paginated view with status and duration.">
               {loadingData ? (
                 <div className="space-y-2">
                   {Array.from({ length: 4 }).map((_, index) => (
@@ -1053,9 +1055,9 @@ export default function ShiftsPage() {
                 </div>
               ) : history.length === 0 ? (
                 <EmptyState
-                  title="Sin historial"
-                  description="Cuando registres turnos, apareceran aqui."
-                  actionLabel="Recargar"
+                  title="No history"
+                  description="When you register shifts, they will appear here."
+                  actionLabel="Reload"
                   onAction={() => void loadEmployeeData(historyPage)}
                 />
               ) : (
@@ -1064,10 +1066,10 @@ export default function ShiftsPage() {
                     <table className="min-w-full border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                          <th className="pb-2 pr-3">Inicio</th>
-                          <th className="pb-2 pr-3">Fin</th>
-                          <th className="pb-2 pr-3">Estado</th>
-                          <th className="pb-2 pr-3">Duracion</th>
+                          <th className="pb-2 pr-3">Start</th>
+                          <th className="pb-2 pr-3">End</th>
+                          <th className="pb-2 pr-3">Status</th>
+                          <th className="pb-2 pr-3">Duration</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1077,7 +1079,7 @@ export default function ShiftsPage() {
                             <td className="py-2 pr-3">{formatDateTime(shift.end_time)}</td>
                             <td className="py-2 pr-3">
                               <Badge variant={shift.end_time ? "neutral" : "success"}>
-                                {shift.end_time ? "Finalizado" : "Activo"}
+                                {shift.end_time ? "Completed" : "Active"}
                               </Badge>
                             </td>
                             <td className="py-2 pr-3">{formatDuration(shift.start_time, shift.end_time)}</td>
@@ -1089,7 +1091,7 @@ export default function ShiftsPage() {
 
                   <div className="mt-4 flex items-center justify-between">
                     <p className="text-xs text-slate-500">
-                      Pagina {historyPage} de {historyTotalPages}
+                      Page {historyPage} of {historyTotalPages}
                     </p>
                     <div className="flex gap-2">
                       <Button
@@ -1098,7 +1100,7 @@ export default function ShiftsPage() {
                         disabled={historyPage <= 1 || loadingData}
                         onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
                       >
-                        Anterior
+                        Previous
                       </Button>
                       <Button
                         variant="secondary"
@@ -1106,7 +1108,7 @@ export default function ShiftsPage() {
                         disabled={historyPage >= historyTotalPages || loadingData}
                         onClick={() => setHistoryPage(prev => prev + 1)}
                       >
-                        Siguiente
+                        Next
                       </Button>
                     </div>
                   </div>
@@ -1114,15 +1116,15 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card title="Turnos programados" subtitle="Agenda asignada para tus proximos periodos de trabajo.">
+            <Card title="Scheduled shifts" subtitle="Agenda assigned for your upcoming work periods.">
               {scheduledShifts.length === 0 ? (
-                <p className="text-sm text-slate-500">No tienes turnos programados.</p>
+                <p className="text-sm text-slate-500">You do not have scheduled shifts.</p>
               ) : (
                 <div className="space-y-2">
                   {scheduledShifts.map(item => (
                     <div key={item.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
                       {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)} |{" "}
-                      Estado: {item.status}
+                      Status: {item.status}
                     </div>
                   ))}
                 </div>
@@ -1133,24 +1135,24 @@ export default function ShiftsPage() {
 
         {canOperateSupervisor && (
           <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-900">Panel de supervision</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Supervision panel</h2>
 
             {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                 {overdueSupervisorTasks.length > 0 && (
                   <p className="font-medium">
-                    Hay {overdueSupervisorTasks.length} tarea(s) vencida(s) pendientes de cierre.
+                    There are {overdueSupervisorTasks.length} overdue task(s) pending closure.
                   </p>
                 )}
                 {pendingPresenceClosures.length > 0 && (
                   <p className="mt-1">
-                    Tienes {pendingPresenceClosures.length} restaurante(s) con ingreso sin registrar salida hoy.
+                    You have {pendingPresenceClosures.length} restaurant(s) with entry registered but no exit today.
                   </p>
                 )}
               </div>
             )}
 
-            <Card title="Ingreso/salida supervisora" subtitle="Registro obligatorio por restaurante con GPS + evidencia.">
+            <Card title="Supervisor entry/exit" subtitle="Mandatory record by restaurant with GPS + evidence.">
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="space-y-2">
                   <select
@@ -1158,7 +1160,7 @@ export default function ShiftsPage() {
                     onChange={event => setPresenceRestaurantId(Number(event.target.value) || null)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   >
-                    <option value="">Seleccionar restaurante</option>
+                    <option value="">Select restaurant</option>
                     {presenceRestaurants.map(restaurant => (
                       <option key={restaurant.id} value={restaurant.id}>
                         {restaurant.name}
@@ -1168,7 +1170,7 @@ export default function ShiftsPage() {
 
                   {presenceRestaurants.length === 0 && (
                     <p className="text-xs text-amber-700">
-                      No hay restaurantes asignados para registrar presencia.
+                      No assigned restaurants to register presence.
                     </p>
                   )}
 
@@ -1180,7 +1182,7 @@ export default function ShiftsPage() {
                         checked={presencePhase === "start"}
                         onChange={() => setPresencePhase("start")}
                       />
-                      Ingreso
+                      Entry
                     </label>
                     <label className="flex items-center gap-2">
                       <input
@@ -1189,7 +1191,7 @@ export default function ShiftsPage() {
                         checked={presencePhase === "end"}
                         onChange={() => setPresencePhase("end")}
                       />
-                      Salida
+                      Exit
                     </label>
                   </div>
 
@@ -1198,7 +1200,7 @@ export default function ShiftsPage() {
                     value={presenceNotes}
                     onChange={event => setPresenceNotes(event.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Notas de presencia (opcional)"
+                    placeholder="Presence notes (optional)"
                   />
                 </div>
 
@@ -1207,11 +1209,11 @@ export default function ShiftsPage() {
                   <CameraCapture
                     onCapture={setPresencePhoto}
                     overlayLines={[
-                      `Usuario: ${currentUserId ?? "desconocido"}`,
-                      `Fase supervisora: ${presencePhase}`,
+                      `User: ${currentUserId ?? "unknown"}`,
+                      `Supervisor phase: ${presencePhase}`,
                       presenceCoords
                         ? `GPS: ${presenceCoords.lat.toFixed(6)}, ${presenceCoords.lng.toFixed(6)}`
-                        : "GPS: pendiente",
+                        : "GPS: pending",
                     ]}
                   />
                 </div>
@@ -1219,20 +1221,20 @@ export default function ShiftsPage() {
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Button variant="primary" onClick={() => void handleRegisterPresence()} disabled={registeringPresence}>
-                  {registeringPresence ? "Guardando..." : "Registrar presencia de supervisora"}
+                  {registeringPresence ? "Saving..." : "Register supervisor presence"}
                 </Button>
                 <span className="text-xs text-slate-500">
-                  Ultimos registros: {supervisorPresence.length}
+                  Latest records: {supervisorPresence.length}
                 </span>
               </div>
 
               {supervisorPresence.length > 0 && (
                 <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <p className="mb-2 font-medium text-slate-700">Historial reciente de presencia</p>
+                  <p className="mb-2 font-medium text-slate-700">Recent presence history</p>
                   <ul className="space-y-1 text-slate-600">
                     {supervisorPresence.slice(0, 6).map(item => (
                       <li key={item.id}>
-                        {formatDateTime(item.recorded_at)} | Restaurante #{item.restaurant_id} | Fase: {item.phase}
+                        {formatDateTime(item.recorded_at)} | Restaurant #{item.restaurant_id} | Phase: {item.phase}
                       </li>
                     ))}
                   </ul>
@@ -1240,11 +1242,11 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card title="Monitoreo de tareas" subtitle="Tareas recientes creadas o asignadas en restaurantes supervisados.">
+            <Card title="Task monitoring" subtitle="Recent tasks created or assigned in supervised restaurants.">
               {loadingTasks ? (
                 <Skeleton className="h-20" />
               ) : supervisorTasks.length === 0 ? (
-                <p className="text-sm text-slate-500">Aun no hay tareas operativas registradas.</p>
+                <p className="text-sm text-slate-500">There are no operational tasks recorded yet.</p>
               ) : (
                 <div className="space-y-2">
                   {supervisorTasks.slice(0, 8).map(task => (
@@ -1252,12 +1254,12 @@ export default function ShiftsPage() {
                       <p className="font-medium text-slate-800">
                         #{task.id} {task.title}
                       </p>
-                      <p className="text-slate-600">Estado: {task.status} | Prioridad: {task.priority}</p>
+                      <p className="text-slate-600">Status: {task.status} | Priority: {task.priority}</p>
                       <p className="text-xs text-slate-500">
-                        Empleado: {task.assigned_employee_id.slice(0, 8)} | Turno: {task.shift_id}
+                        Employee: {task.assigned_employee_id.slice(0, 8)} | Shift: {task.shift_id}
                       </p>
                       {task.due_at && (
-                        <p className="text-xs text-slate-500">Vence: {formatDateTime(task.due_at)}</p>
+                        <p className="text-xs text-slate-500">Due: {formatDateTime(task.due_at)}</p>
                       )}
                       {task.status === "completed" && task.evidence_path && (
                         <div className="mt-2">
@@ -1266,7 +1268,7 @@ export default function ShiftsPage() {
                             variant="secondary"
                             onClick={() => void handleOpenTaskDetail(task)}
                           >
-                            Ver detalle de evidencia
+                            View evidence details
                           </Button>
                         </div>
                       )}
@@ -1280,9 +1282,9 @@ export default function ShiftsPage() {
               <Skeleton className="h-40" />
             ) : supervisorRows.length === 0 ? (
               <EmptyState
-                title="Sin turnos activos"
-                description="Cuando haya actividad en progreso, la veras aqui."
-                actionLabel="Actualizar"
+                title="No active shifts"
+                description="When there is activity in progress, you will see it here."
+                actionLabel="Refresh"
                 onAction={() => void loadSupervisorData()}
               />
             ) : (
@@ -1291,12 +1293,12 @@ export default function ShiftsPage() {
                   return (
                     <Card
                       key={row.id}
-                      title={`Turno ${String(row.id).slice(0, 8)}`}
-                      subtitle={`Inicio: ${formatDateTime(row.start_time)} | Estado: ${row.status}`}
+                      title={`Shift ${String(row.id).slice(0, 8)}`}
+                      subtitle={`Start: ${formatDateTime(row.start_time)} | Status: ${row.status}`}
                     >
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="font-medium text-slate-700">Evidencia de inicio</p>
+                          <p className="font-medium text-slate-700">Start evidence</p>
                           {row.start_evidence_path ? (
                             <Button
                               size="sm"
@@ -1306,24 +1308,24 @@ export default function ShiftsPage() {
                                   try {
                                     const signedUrl = await resolveEvidenceUrl(row.start_evidence_path)
                                     if (!signedUrl) {
-                                      showToast("info", "No se pudo generar URL de evidencia.")
+                                      showToast("info", "Could not generate evidence URL.")
                                       return
                                     }
                                     window.open(signedUrl, "_blank", "noopener,noreferrer")
                                   } catch (error: unknown) {
-                                    showToast("error", extractErrorMessage(error, "No se pudo abrir la evidencia."))
+                                    showToast("error", extractErrorMessage(error, "Could not open evidence."))
                                   }
                                 })()
                               }}
                             >
-                              Ver evidencia de inicio
+                              View start evidence
                             </Button>
                           ) : (
-                            <p className="text-slate-500">No hay evidencia registrada.</p>
+                            <p className="text-slate-500">No evidence registered.</p>
                           )}
                         </div>
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="font-medium text-slate-700">Evidencia de salida</p>
+                          <p className="font-medium text-slate-700">End evidence</p>
                           {row.end_evidence_path ? (
                             <Button
                               size="sm"
@@ -1333,35 +1335,35 @@ export default function ShiftsPage() {
                                   try {
                                     const signedUrl = await resolveEvidenceUrl(row.end_evidence_path)
                                     if (!signedUrl) {
-                                      showToast("info", "No se pudo generar URL de evidencia.")
+                                      showToast("info", "Could not generate evidence URL.")
                                       return
                                     }
                                     window.open(signedUrl, "_blank", "noopener,noreferrer")
                                   } catch (error: unknown) {
-                                    showToast("error", extractErrorMessage(error, "No se pudo abrir la evidencia."))
+                                    showToast("error", extractErrorMessage(error, "Could not open evidence."))
                                   }
                                 })()
                               }}
                             >
-                              Ver evidencia de salida
+                              View end evidence
                             </Button>
                           ) : (
-                            <p className="text-slate-500">Cierre pendiente.</p>
+                            <p className="text-slate-500">Closure pending.</p>
                           )}
                         </div>
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button size="sm" variant="secondary" onClick={() => void handleStatusChange(row.id, "approved")}>
-                          Aprobar
+                          Approve
                         </Button>
                         <Button size="sm" variant="danger" onClick={() => void handleStatusChange(row.id, "rejected")}>
-                          Rechazar
+                          Reject
                         </Button>
                       </div>
 
                       <div className="mt-4 space-y-2 rounded-lg border border-slate-200 p-3">
-                        <p className="text-sm font-medium text-slate-700">Crear tarea para este turno</p>
+                        <p className="text-sm font-medium text-slate-700">Create task for this shift</p>
                         <input
                           value={newTaskByShift[row.id]?.title ?? ""}
                           onChange={event =>
@@ -1376,7 +1378,7 @@ export default function ShiftsPage() {
                             }))
                           }
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                          placeholder="Titulo de la tarea"
+                          placeholder="Task title"
                         />
                         <textarea
                           value={newTaskByShift[row.id]?.description ?? ""}
@@ -1393,7 +1395,7 @@ export default function ShiftsPage() {
                           }
                           rows={2}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                          placeholder="Instrucciones. Incluye criterio de cierre: primer plano + plano medio + vista general."
+                          placeholder="Instructions. Include closing criteria: close-up + mid-range + wide overview."
                         />
                         <div className="flex flex-wrap items-center gap-2">
                           <input
@@ -1427,10 +1429,10 @@ export default function ShiftsPage() {
                             }
                             className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                           >
-                            <option value="low">Baja</option>
+                            <option value="low">Low</option>
                             <option value="normal">Normal</option>
-                            <option value="high">Alta</option>
-                            <option value="critical">Critica</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
                           </select>
                           <Button
                             size="sm"
@@ -1438,13 +1440,13 @@ export default function ShiftsPage() {
                             onClick={() => void handleCreateTaskForShift(row)}
                             disabled={creatingTaskForShift === row.id}
                           >
-                            {creatingTaskForShift === row.id ? "Guardando..." : "Crear tarea"}
+                            {creatingTaskForShift === row.id ? "Saving..." : "Create task"}
                           </Button>
                         </div>
                       </div>
 
                       <div className="mt-4 space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Registrar novedad</label>
+                        <label className="text-sm font-medium text-slate-700">Register incident</label>
                         <textarea
                           value={incidentNotes[row.id] ?? ""}
                           onFocus={() => void loadIncidentsForShift(row.id)}
@@ -1456,20 +1458,20 @@ export default function ShiftsPage() {
                           }
                           rows={3}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
-                          placeholder="Describe la novedad observada..."
+                          placeholder="Describe the observed incident..."
                         />
                         <Button
                           size="sm"
                           variant="primary"
                           onClick={() => void handleCreateIncident(row.id)}
                         >
-                          Guardar novedad
+                          Save incident
                         </Button>
                       </div>
 
                       {(incidentHistory[row.id] ?? []).length > 0 && (
                         <div className="mt-3 rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="mb-2 font-medium text-slate-700">Novedades recientes</p>
+                          <p className="mb-2 font-medium text-slate-700">Recent incidents</p>
                           <ul className="space-y-1 text-slate-600">
                             {incidentHistory[row.id].map(incident => (
                               <li key={incident.id}>
@@ -1490,7 +1492,7 @@ export default function ShiftsPage() {
         <Modal open={!!taskDetailModalTask} onClose={closeTaskDetailModal}>
           <div className="space-y-3">
             <h3 className="text-lg font-semibold text-slate-900">
-              Detalle de evidencia de tarea{" "}
+              Task evidence detail{" "}
               {taskDetailModalTask ? `#${taskDetailModalTask.id}` : ""}
             </h3>
 
@@ -1511,34 +1513,34 @@ export default function ShiftsPage() {
                         try {
                           const signedUrl = await resolveEvidenceUrl(taskDetailModalTask.evidence_path)
                           if (!signedUrl) {
-                            showToast("info", "No se pudo abrir archivo de evidencia.")
+                            showToast("info", "Could not open evidence file.")
                             return
                           }
                           window.open(signedUrl, "_blank", "noopener,noreferrer")
                         } catch (error: unknown) {
-                          showToast("error", extractErrorMessage(error, "No se pudo abrir archivo de evidencia."))
+                          showToast("error", extractErrorMessage(error, "Could not open evidence file."))
                         }
                       })()
                     }}
                   >
-                    Abrir archivo de evidencia
+                    Open evidence file
                   </Button>
                 )}
               </div>
             ) : !taskDetailManifest ? (
-              <p className="text-sm text-slate-600">No hay detalle de evidencia disponible.</p>
+              <p className="text-sm text-slate-600">No evidence detail available.</p>
             ) : (
               <div className="space-y-3">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                  <p>Capturada: {formatDateTime(taskDetailManifest.capturedAt)}</p>
-                  <p>Usuario: {taskDetailManifest.capturedBy ?? "-"}</p>
+                  <p>Captured: {formatDateTime(taskDetailManifest.capturedAt)}</p>
+                  <p>User: {taskDetailManifest.capturedBy ?? "-"}</p>
                   <p>
                     GPS:{" "}
                     {taskDetailManifest.gps
                       ? `${taskDetailManifest.gps.lat.toFixed(6)}, ${taskDetailManifest.gps.lng.toFixed(6)}`
                       : "-"}
                   </p>
-                  <p>Evidencias: {taskDetailManifest.evidences.length}</p>
+                  <p>Evidences: {taskDetailManifest.evidences.length}</p>
                 </div>
 
                 <div className="grid gap-3">
@@ -1550,11 +1552,11 @@ export default function ShiftsPage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={item.signedUrl}
-                          alt={`Evidencia ${item.label}`}
+                          alt={`Evidence ${item.label}`}
                           className="mt-2 h-48 w-full rounded-lg border border-slate-200 object-cover"
                         />
                       ) : (
-                        <p className="mt-2 text-xs text-slate-500">No se pudo resolver URL de esta evidencia.</p>
+                        <p className="mt-2 text-xs text-slate-500">Could not resolve URL for this evidence.</p>
                       )}
                     </div>
                   ))}
@@ -1566,13 +1568,13 @@ export default function ShiftsPage() {
                     variant="secondary"
                     onClick={() => {
                       if (!taskDetailManifest.manifestSignedUrl) {
-                        showToast("info", "No hay URL del manifiesto disponible.")
+                        showToast("info", "No manifest URL available.")
                         return
                       }
                       window.open(taskDetailManifest.manifestSignedUrl, "_blank", "noopener,noreferrer")
                     }}
                   >
-                    Ver manifiesto JSON
+                    View JSON manifest
                   </Button>
                 </div>
               </div>
@@ -1583,4 +1585,5 @@ export default function ShiftsPage() {
     </ProtectedRoute>
   )
 }
+
 

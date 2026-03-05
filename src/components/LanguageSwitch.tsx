@@ -11,7 +11,7 @@ export default function LanguageSwitch({ compact = false, className = "" }: Lang
   const { language, isManual, setLanguage, setLanguageAutoByRole } = useLanguage()
 
   const label = language === "es" ? "Idioma" : "Language"
-  const autoLabel = language === "es" ? "Auto por rol" : "Role auto"
+  const autoLabel = language === "es" ? "Auto por rol" : "Auto by role"
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>

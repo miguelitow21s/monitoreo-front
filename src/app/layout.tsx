@@ -5,8 +5,8 @@ import ClientProviders from "@/components/ClientProviders"
 import LayoutShell from "@/components/LayoutShell"
 
 export const metadata: Metadata = {
-  title: "Control Operativo de Limpieza",
-  description: "Plataforma de control operativo por horas",
+  title: "Cleaning Operations Control",
+  description: "Hourly operations control platform",
 }
 
 export default function RootLayout({
@@ -15,7 +15,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es">
+    <html lang="en">
       <body className="min-h-screen bg-slate-100 text-slate-900">
         <ClientProviders>
           <LayoutShell>{children}</LayoutShell>

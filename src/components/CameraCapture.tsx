@@ -15,10 +15,9 @@ function drawEvidenceOverlay(
   width: number,
   height: number,
   lines: string[],
-  capturedLabel: string
+  capturedAtLine: string
 ) {
-  const nowLine = `${capturedLabel}: ${new Date().toLocaleString("es-CO")}`
-  const mergedLines = [nowLine, ...lines.filter(item => item.trim().length > 0)]
+  const mergedLines = [capturedAtLine, ...lines.filter(item => item.trim().length > 0)]
   const paddingX = 12
   const paddingY = 10
   const lineHeight = 16
@@ -37,7 +36,7 @@ function drawEvidenceOverlay(
 }
 
 export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCaptureProps) {
-  const { t } = useI18n()
+  const { formatDateTime, t } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -120,7 +119,13 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
     }
 
     ctx.drawImage(video, 0, 0)
-    drawEvidenceOverlay(ctx, canvas.width, canvas.height, overlayLines, t("Capturada", "Captured"))
+    drawEvidenceOverlay(
+      ctx,
+      canvas.width,
+      canvas.height,
+      overlayLines,
+      `${t("Capturada", "Captured")}: ${formatDateTime(new Date(), { hour12: false })}`
+    )
 
     canvas.toBlob(
       blob => {

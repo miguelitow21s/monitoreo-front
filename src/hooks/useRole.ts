@@ -9,6 +9,7 @@ import { ROLES, Role } from "@/utils/permissions"
 export function useRole() {
   const { user, loading } = useAuth()
   const [profileRole, setProfileRole] = useState<Role | null>(null)
+  const [loadingRole, setLoadingRole] = useState(true)
 
   useEffect(() => {
     let mounted = true
@@ -16,8 +17,11 @@ export function useRole() {
     const loadRoleFromProfile = async () => {
       if (!user?.id) {
         setProfileRole(null)
+        setLoadingRole(false)
         return
       }
+
+      setLoadingRole(true)
 
       const { data } = await supabase
         .from("profiles")
@@ -27,6 +31,7 @@ export function useRole() {
 
       if (!mounted) return
       setProfileRole((data?.role as Role | undefined) ?? null)
+      setLoadingRole(false)
     }
 
     void loadRoleFromProfile()
@@ -41,7 +46,7 @@ export function useRole() {
 
   return {
     role,
-    loading,
+    loading: loading || loadingRole,
     isSuperAdmin: role === ROLES.SUPER_ADMIN,
     isSupervisora: role === ROLES.SUPERVISORA,
     isEmpleado: role === ROLES.EMPLEADO,

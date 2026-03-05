@@ -89,9 +89,9 @@ async function invokeLegalConsentDirect<T>(
   idempotencyKey?: string
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!baseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL no esta configurada.")
+  if (!baseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured.")
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!anonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY no esta configurada.")
+  if (!anonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not configured.")
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
@@ -135,7 +135,7 @@ async function invokeLegalConsentDirect<T>(
     const sbRequestId = response.headers.get("sb-request-id") ?? undefined
     const requestId = payload?.request_id ?? payload?.error?.request_id ?? response.headers.get("x-request-id") ?? undefined
     const fallbackBodyMessage = rawBody?.trim().slice(0, 600)
-    const message = payload?.error?.message ?? fallbackBodyMessage ?? `Fallo legal_consent (HTTP ${response.status})`
+    const message = payload?.error?.message ?? fallbackBodyMessage ?? `legal_consent failed (HTTP ${response.status})`
     throw toStatusError(message, response.status, requestId, sbRequestId, xRequestId, rawBody?.trim() || undefined)
   }
 
@@ -143,7 +143,7 @@ async function invokeLegalConsentDirect<T>(
     const requestId = payload.request_id ?? payload.error?.request_id
     const xRequestId = response.headers.get("x-request-id") ?? undefined
     const sbRequestId = response.headers.get("sb-request-id") ?? undefined
-    const message = payload.error?.message ?? "legal_consent fue rechazado por backend."
+    const message = payload.error?.message ?? "legal_consent was rejected by backend."
     throw toStatusError(message, undefined, requestId, sbRequestId, xRequestId, rawBody?.trim() || undefined)
   }
 
@@ -157,7 +157,7 @@ async function invokeLegalConsentWithRetry<T>(
 ) {
   let token = accessToken ?? (await getLatestAccessToken())
   if (!token) {
-    throw toStatusError("Token de sesion autenticada no disponible.", 401)
+    throw toStatusError("Authenticated session token is not available.", 401)
   }
 
   let authRefreshAttempted = false
@@ -197,7 +197,7 @@ async function getCurrentUserId() {
   } = await supabase.auth.getUser()
 
   if (error) throw error
-  if (!user?.id) throw new Error("Usuario autenticado no encontrado.")
+  if (!user?.id) throw new Error("Authenticated user not found.")
   return user.id
 }
 
@@ -255,7 +255,7 @@ async function acceptLegalConsentFallback(legalTermsId?: number) {
   const resolvedTermsId = legalTermsId ?? (await getActiveLegalTermFromTable())?.id
 
   if (!resolvedTermsId) {
-    throw new Error("No se encontro una version activa de terminos legales.")
+    throw new Error("No active legal terms version was found.")
   }
 
   const acceptedAt = new Date().toISOString()

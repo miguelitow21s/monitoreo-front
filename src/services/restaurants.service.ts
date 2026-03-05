@@ -100,7 +100,7 @@ export async function listMySupervisorRestaurants() {
   return (restaurants ?? [])
     .map(item => ({
       id: Number(item.id),
-      name: String(item.name ?? `Restaurante #${item.id}`),
+      name: String(item.name ?? `Restaurant #${item.id}`),
     }))
     .filter(item => Number.isFinite(item.id)) as SupervisorRestaurantOption[]
 }

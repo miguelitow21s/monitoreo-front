@@ -205,6 +205,18 @@ export default function LoginPage() {
 
   const legalContent = legalStatus?.active_term?.content?.trim() || defaultLegalText[language]
 
+  if (loading || (!blockAutoRedirect && session)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm">
+          <p className="text-sm text-slate-600">
+            {t("Validando sesion...", "Validating session...")}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <form

@@ -19,14 +19,10 @@ import Card from "@/components/ui/Card"
 import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("es-CO")
-}
-
 export default function DashboardPage() {
   const router = useRouter()
   const { showToast } = useToast()
-  const { t } = useI18n()
+  const { formatDateTime, t } = useI18n()
   const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { loading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
 
@@ -183,11 +179,11 @@ export default function DashboardPage() {
                     {runningChecks ? t("Ejecutando...", "Running...") : t("Ejecutar validaciones", "Run validations")}
                   </Button>
                   {checkResults.length > 0 && (
-                    <span className="text-xs text-slate-500">
-                      {t("Ultima ejecucion", "Last run")}: {new Date().toLocaleString("es-CO")}
-                    </span>
-                  )}
-                </div>
+                  <span className="text-xs text-slate-500">
+                      {t("Ultima ejecucion", "Last run")}: {formatDateTime(new Date())}
+                  </span>
+                )}
+              </div>
 
                 {checkResults.length > 0 && (
                   <ul className="mt-4 space-y-2 text-sm">
@@ -227,11 +223,11 @@ export default function DashboardPage() {
                 <ul className="space-y-2 text-sm text-slate-700">
                   {auditEvents.map(item => (
                     <li key={item.id} className="rounded-lg border border-slate-200 p-2">
-                      <p className="font-medium">{item.action}</p>
-                      <p className="text-xs text-slate-500">
+                        <p className="font-medium">{item.action}</p>
+                        <p className="text-xs text-slate-500">
                         {formatDateTime(item.created_at)} | {t("Actor", "Actor")}: {item.actor_id ?? t("sistema", "system")}
-                      </p>
-                    </li>
+                        </p>
+                      </li>
                   ))}
                 </ul>
               </Card>

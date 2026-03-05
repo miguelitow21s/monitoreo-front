@@ -4,6 +4,7 @@ import { ReactNode, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/hooks/useAuth"
+import { useI18n } from "@/hooks/useI18n"
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -12,6 +13,7 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const router = useRouter()
   const { loading, isAuthenticated } = useAuth()
+  const { t } = useI18n()
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -22,7 +24,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center text-sm text-gray-500">
-        Cargando sesion...
+        {t("Cargando sesion...", "Loading session...")}
       </div>
     )
   }
@@ -30,7 +32,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (!isAuthenticated) {
     return (
       <div className="flex h-screen items-center justify-center text-sm text-gray-500">
-        Redirigiendo a login...
+        {t("Redirigiendo a login...", "Redirecting to login...")}
       </div>
     )
   }

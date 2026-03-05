@@ -47,7 +47,7 @@ function normalizeActiveShift(data: unknown): ShiftRecord | null {
 export async function startShift(payload: StartShiftPayload) {
   const { restaurantId, lat, lng, fitForWork, declaration } = payload
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || typeof fitForWork !== "boolean") {
-    throw new Error("Datos incompletos para iniciar turno.")
+    throw new Error("Incomplete data to start shift.")
   }
 
   const data = await invokeEdge<unknown>("shifts_start", {
@@ -67,13 +67,13 @@ export async function startShift(payload: StartShiftPayload) {
     if (typeof shiftId === "number") return shiftId
     if (typeof shiftId === "string" && shiftId.trim()) return Number(shiftId)
   }
-  throw new Error("Respuesta invalida desde shifts_start.")
+  throw new Error("Invalid response from shifts_start.")
 }
 
 export async function endShift(payload: EndShiftPayload) {
   const { shiftId, lat, lng, fitForWork, declaration } = payload
   if (!shiftId || !Number.isFinite(lat) || !Number.isFinite(lng) || typeof fitForWork !== "boolean") {
-    throw new Error("Datos incompletos para finalizar turno.")
+    throw new Error("Incomplete data to end shift.")
   }
 
   return invokeEdge("shifts_end", {
@@ -105,7 +105,7 @@ export async function getMyShiftHistory(page = 1, pageSize = 8): Promise<ShiftHi
     error: userError,
   } = await supabase.auth.getUser()
   if (userError) throw userError
-  if (!user?.id) throw new Error("Usuario autenticado no encontrado.")
+  if (!user?.id) throw new Error("Authenticated user not found.")
 
   const { data, error, count } = await supabase
     .from("shifts")

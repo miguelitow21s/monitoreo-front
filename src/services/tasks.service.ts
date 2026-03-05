@@ -77,9 +77,9 @@ function toNullableNumber(value: unknown) {
 }
 
 function normalizeTaskShotLabel(shot: TaskEvidenceShotKey) {
-  if (shot === "close_up") return "Primer plano"
-  if (shot === "mid_range") return "Plano medio"
-  if (shot === "wide_general") return "Vista general"
+  if (shot === "close_up") return "Close-up"
+  if (shot === "mid_range") return "Mid-range"
+  if (shot === "wide_general") return "Wide shot"
   return shot.replaceAll("_", " ")
 }
 
@@ -104,22 +104,22 @@ export async function fetchTaskEvidenceManifest(
   expiresInSeconds = 3600
 ) {
   if (!task.evidence_path) {
-    throw new Error("La tarea no tiene evidencia registrada.")
+    throw new Error("Task has no registered evidence.")
   }
 
   const manifestSignedUrl = await resolveTaskEvidenceSignedUrl(task.evidence_path, expiresInSeconds)
   if (!manifestSignedUrl) {
-    throw new Error("No se pudo resolver URL del manifiesto de tarea.")
+    throw new Error("Could not resolve task manifest URL.")
   }
 
   const response = await fetch(manifestSignedUrl)
   if (!response.ok) {
-    throw new Error(`No se pudo leer manifiesto de tarea (HTTP ${response.status}).`)
+    throw new Error(`Could not read task manifest (HTTP ${response.status}).`)
   }
 
   const payload = (await response.json()) as unknown
   if (!isRecord(payload)) {
-    throw new Error("El manifiesto de evidencia de tarea es invalido.")
+    throw new Error("Task evidence manifest is invalid.")
   }
 
   const capturedAt = typeof payload.captured_at === "string" ? payload.captured_at : null

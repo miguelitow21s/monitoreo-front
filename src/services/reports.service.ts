@@ -16,17 +16,17 @@ export type ReportColumnKey =
   | "end_evidence"
 
 export const REPORT_COLUMN_OPTIONS: Array<{ key: ReportColumnKey; label: string }> = [
-  { key: "shift_id", label: "Turno" },
-  { key: "restaurant_id", label: "Restaurante" },
-  { key: "employee_id", label: "Empleado" },
-  { key: "supervisor_id", label: "Supervisora" },
-  { key: "start_time", label: "Inicio" },
-  { key: "end_time", label: "Fin" },
-  { key: "status", label: "Estado" },
-  { key: "duration", label: "Duracion" },
-  { key: "incidents", label: "Novedades" },
-  { key: "start_evidence", label: "Evidencia inicio" },
-  { key: "end_evidence", label: "Evidencia fin" },
+  { key: "shift_id", label: "Shift" },
+  { key: "restaurant_id", label: "Restaurant" },
+  { key: "employee_id", label: "Employee" },
+  { key: "supervisor_id", label: "Supervisor" },
+  { key: "start_time", label: "Start" },
+  { key: "end_time", label: "End" },
+  { key: "status", label: "Status" },
+  { key: "duration", label: "Duration" },
+  { key: "incidents", label: "Incidents" },
+  { key: "start_evidence", label: "Start evidence" },
+  { key: "end_evidence", label: "End evidence" },
 ]
 
 export const DEFAULT_REPORT_COLUMNS: ReportColumnKey[] = [
@@ -126,7 +126,7 @@ function formatDurationFromMinutes(durationMinutes: number | null) {
 
 function formatDateTime(value: string | null) {
   if (!value) return "-"
-  return new Date(value).toLocaleString("es-CO")
+  return new Date(value).toLocaleString("en-US")
 }
 
 export function getReportColumnValue(row: ReportRow, column: ReportColumnKey) {
@@ -150,9 +150,9 @@ export function getReportColumnValue(row: ReportRow, column: ReportColumnKey) {
     case "incidents":
       return String(row.incidents_count)
     case "start_evidence":
-      return row.start_evidence_path ? "SI" : "NO"
+      return row.start_evidence_path ? "YES" : "NO"
     case "end_evidence":
-      return row.end_evidence_path ? "SI" : "NO"
+      return row.end_evidence_path ? "YES" : "NO"
     default:
       return "-"
   }

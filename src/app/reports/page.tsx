@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
+import { useI18n } from "@/hooks/useI18n"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -37,11 +38,6 @@ function toEndOfDayIso(value: string) {
   return new Date(`${value}T23:59:59`).toISOString()
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) return "-"
-  return new Date(value).toLocaleString("es-CO")
-}
-
 function formatHistoryFilters(filters: Record<string, unknown> | null) {
   if (!filters) return "-"
   const entries = Object.entries(filters).filter(([, value]) => value !== null && value !== undefined && value !== "")
@@ -52,15 +48,16 @@ function formatHistoryFilters(filters: Record<string, unknown> | null) {
 }
 
 const STATUS_OPTIONS = [
-  { value: "", label: "Todos los estados" },
-  { value: "active", label: "Activo" },
-  { value: "completed", label: "Completado" },
-  { value: "approved", label: "Aprobado" },
-  { value: "rejected", label: "Rechazado" },
+  { value: "", es: "Todos los estados", en: "All statuses" },
+  { value: "active", es: "Activo", en: "Active" },
+  { value: "completed", es: "Completado", en: "Completed" },
+  { value: "approved", es: "Aprobado", en: "Approved" },
+  { value: "rejected", es: "Rechazado", en: "Rejected" },
 ]
 
 export default function ReportsPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
+  const { formatDateTime, language, t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -109,11 +106,11 @@ export default function ReportsPage() {
       })
       setRows(reportRows)
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudieron cargar los reportes.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudieron cargar los reportes.", "Could not load reports."))
     } finally {
       setLoading(false)
     }
-  }, [employeeId, fromDate, restaurantId, showToast, status, toDate])
+  }, [employeeId, fromDate, restaurantId, showToast, status, t, toDate])
 
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true)
@@ -121,11 +118,11 @@ export default function ReportsPage() {
       const rowsHistory = await fetchGeneratedReportsHistory(20)
       setReportHistory(rowsHistory)
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo cargar historial de reportes.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudo cargar historial de reportes.", "Could not load report history."))
     } finally {
       setLoadingHistory(false)
     }
-  }, [showToast])
+  }, [showToast, t])
 
   useEffect(() => {
     if (authLoading) return
@@ -151,7 +148,7 @@ export default function ReportsPage() {
     setSelectedColumns(prev => {
       const hasColumn = prev.includes(column)
       if (hasColumn && prev.length === 1) {
-        showToast("info", "Debes mantener al menos una columna seleccionada.")
+        showToast("info", t("Debes mantener al menos una columna seleccionada.", "You must keep at least one selected column."))
         return prev
       }
       if (hasColumn) return prev.filter(item => item !== column)
@@ -174,7 +171,7 @@ export default function ReportsPage() {
 
   const handleGenerateBackend = async () => {
     if (!restaurantId || !fromDate || !toDate) {
-      showToast("info", "Para generar reporte backend debes seleccionar restaurante, fecha inicial y fecha final.")
+      showToast("info", t("Para generar reporte backend debes seleccionar restaurante, fecha inicial y fecha final.", "To generate backend report you must select restaurant, start date, and end date."))
       return
     }
 
@@ -185,10 +182,10 @@ export default function ReportsPage() {
         periodStart: fromDate,
         periodEnd: toDate,
       })
-      showToast("success", "Reporte generado en backend.")
+      showToast("success", t("Reporte generado en backend.", "Report generated in backend."))
       await loadHistory()
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo generar reporte en backend.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudo generar reporte en backend.", "Could not generate report in backend."))
     } finally {
       setGeneratingBackend(false)
     }
@@ -196,7 +193,7 @@ export default function ReportsPage() {
 
   const handleCopyReadonlyLink = async (report: GeneratedReportHistory) => {
     if (!report.file_path) {
-      showToast("info", "Este reporte no incluye archivo enlazado.")
+      showToast("info", t("Este reporte no incluye archivo enlazado.", "This report does not include a linked file."))
       return
     }
 
@@ -204,13 +201,13 @@ export default function ReportsPage() {
     try {
       const signedUrl = await resolveReportReadonlyUrl(report.file_path)
       if (!signedUrl) {
-        showToast("error", "No se pudo generar enlace de solo lectura.")
+        showToast("error", t("No se pudo generar enlace de solo lectura.", "Could not generate read-only link."))
         return
       }
       await navigator.clipboard.writeText(signedUrl)
-      showToast("success", "Enlace de solo lectura copiado.")
+      showToast("success", t("Enlace de solo lectura copiado.", "Read-only link copied."))
     } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : "No se pudo copiar enlace.")
+      showToast("error", error instanceof Error ? error.message : t("No se pudo copiar enlace.", "Could not copy link."))
     } finally {
       setResolvingReportId(null)
     }
@@ -220,11 +217,11 @@ export default function ReportsPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">Reportes</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t("Reportes", "Reports")}</h1>
 
           <Card
-            title="Filtros y campos del reporte"
-            subtitle="Configura rango, restaurante, empleado y datos incluidos en exportacion."
+            title={t("Filtros y campos del reporte", "Report filters and fields")}
+            subtitle={t("Configura rango, restaurante, empleado y datos incluidos en exportacion.", "Configure date range, restaurant, employee, and included fields.")}
           >
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
               <input
@@ -244,7 +241,7 @@ export default function ReportsPage() {
                 onChange={event => setRestaurantId(event.target.value)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
-                <option value="">Todos los restaurantes</option>
+                <option value="">{t("Todos los restaurantes", "All restaurants")}</option>
                 {restaurants.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -256,7 +253,7 @@ export default function ReportsPage() {
                 onChange={event => setEmployeeId(event.target.value)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
-                <option value="">Todos los empleados</option>
+                <option value="">{t("Todos los empleados", "All employees")}</option>
                 {employeeOptions.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.full_name ?? item.email ?? item.id}
@@ -270,22 +267,22 @@ export default function ReportsPage() {
               >
                 {STATUS_OPTIONS.map(item => (
                   <option key={item.value || "all"} value={item.value}>
-                    {item.label}
+                    {language === "en" ? item.en : item.es}
                   </option>
                 ))}
               </select>
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={() => void loadReport()}>
-                  Aplicar
+                  {t("Aplicar", "Apply")}
                 </Button>
                 <Button variant="ghost" onClick={resetFilters}>
-                  Limpiar
+                  {t("Limpiar", "Reset")}
                 </Button>
               </div>
             </div>
 
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-sm font-medium text-slate-700">Campos incluidos</p>
+              <p className="text-sm font-medium text-slate-700">{t("Campos incluidos", "Included fields")}</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {REPORT_COLUMN_OPTIONS.map(item => (
                   <label key={item.key} className="flex items-center gap-2 text-sm text-slate-700">
@@ -300,35 +297,35 @@ export default function ReportsPage() {
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="ghost" onClick={() => exportReportCsv(rows, selectedColumns)}>
-                  Exportar Excel (CSV)
+                  {t("Exportar Excel (CSV)", "Export Excel (CSV)")}
                 </Button>
                 <Button variant="primary" onClick={exportPdf}>
-                  Exportar PDF
+                  {t("Exportar PDF", "Export PDF")}
                 </Button>
                 <Button variant="secondary" onClick={() => void handleGenerateBackend()} disabled={generatingBackend}>
-                  {generatingBackend ? "Generando..." : "Generar en backend"}
+                  {generatingBackend ? t("Generando...", "Generating...") : t("Generar en backend", "Generate in backend")}
                 </Button>
               </div>
             </div>
           </Card>
 
-          <Card title="Resumen" subtitle="Indicadores del filtro actual.">
+          <Card title={t("Resumen", "Summary")} subtitle={t("Indicadores del filtro actual.", "Indicators for current filter.")}>
             <div className="mt-3 grid gap-2 md:grid-cols-4">
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Turnos totales: {rows.length}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Finalizados: {totalCompleted}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Activos: {totalActive}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">Novedades: {totalIncidents}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">{t("Turnos totales", "Total shifts")}: {rows.length}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">{t("Finalizados", "Completed")}: {totalCompleted}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">{t("Activos", "Active")}: {totalActive}</div>
+              <div className="rounded-lg border border-slate-200 p-3 text-sm">{t("Novedades", "Incidents")}: {totalIncidents}</div>
             </div>
           </Card>
 
-          <Card title="Resultados del reporte" subtitle="Detalle con columnas seleccionadas.">
+          <Card title={t("Resultados del reporte", "Report results")} subtitle={t("Detalle con columnas seleccionadas.", "Detail with selected columns.")}>
             {loading || authLoading ? (
               <Skeleton className="h-28" />
             ) : rows.length === 0 ? (
               <EmptyState
-                title="Sin resultados"
-                description="No hay filas para el filtro seleccionado."
-                actionLabel="Reintentar"
+                title={t("Sin resultados", "No results")}
+                description={t("No hay filas para el filtro seleccionado.", "No rows for selected filter.")}
+                actionLabel={t("Reintentar", "Retry")}
                 onAction={() => void loadReport()}
               />
             ) : (
@@ -374,22 +371,22 @@ export default function ReportsPage() {
             )}
           </Card>
 
-          <Card title="Historial de informes generados" subtitle="Registros historicos y enlace de solo lectura compartible.">
+          <Card title={t("Historial de informes generados", "Generated reports history")} subtitle={t("Registros historicos y enlace de solo lectura compartible.", "Historical records and shareable read-only link.")}>
             {loadingHistory ? (
               <Skeleton className="h-24" />
             ) : reportHistory.length === 0 ? (
-              <p className="text-sm text-slate-500">Aun no hay reportes generados registrados.</p>
+              <p className="text-sm text-slate-500">{t("Aun no hay reportes generados registrados.", "No generated reports recorded yet.")}</p>
             ) : (
               <div className="space-y-2">
                 {reportHistory.map(report => (
                   <div key={report.id} className="rounded-lg border border-slate-200 p-3 text-sm">
-                    <p className="font-medium text-slate-800">Reporte #{String(report.id).slice(0, 8)}</p>
+                    <p className="font-medium text-slate-800">{t("Reporte", "Report")} #{String(report.id).slice(0, 8)}</p>
                     <p className="text-slate-600">
-                      Generado: {formatDateTime(report.generated_at)} | Restaurante: {report.restaurant_id ?? "-"}
+                      {t("Generado", "Generated")}: {formatDateTime(report.generated_at)} | {t("Restaurante", "Restaurant")}: {report.restaurant_id ?? "-"}
                     </p>
-                    <p className="text-slate-600">Generado por: {report.generated_by ?? "-"}</p>
+                    <p className="text-slate-600">{t("Generado por", "Generated by")}: {report.generated_by ?? "-"}</p>
                     <p className="text-xs text-slate-500">
-                      Filtros: {formatHistoryFilters(report.filtros_json)}
+                      {t("Filtros", "Filters")}: {formatHistoryFilters(report.filtros_json)}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Button
@@ -398,7 +395,7 @@ export default function ReportsPage() {
                         disabled={resolvingReportId === report.id}
                         onClick={() => void handleCopyReadonlyLink(report)}
                       >
-                        {resolvingReportId === report.id ? "Generando link..." : "Copiar enlace solo lectura"}
+                        {resolvingReportId === report.id ? t("Generando link...", "Generating link...") : t("Copiar enlace solo lectura", "Copy read-only link")}
                       </Button>
                     </div>
                   </div>

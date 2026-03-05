@@ -66,7 +66,7 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
         maximumAge: 0,
       }
     )
-  }, [onLocation])
+  }, [onLocation, t])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
