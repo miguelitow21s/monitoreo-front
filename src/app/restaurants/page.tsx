@@ -40,6 +40,27 @@ type NominatimSearchRow = {
   importance?: number
 }
 
+type PhotonFeature = {
+  geometry?: {
+    coordinates?: [number, number]
+  }
+  properties?: {
+    osm_id?: number
+    name?: string
+    city?: string
+    state?: string
+    country?: string
+    street?: string
+    housenumber?: string
+    postcode?: string
+    extent?: number[]
+  }
+}
+
+type PhotonSearchResponse = {
+  features?: PhotonFeature[]
+}
+
 function stripDiacritics(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 }
@@ -203,6 +224,34 @@ async function searchNominatim(query: string, options?: { countryCodes?: string;
   return (await response.json()) as NominatimSearchRow[]
 }
 
+async function searchPhoton(query: string, options?: { limit?: number }) {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(options?.limit ?? 8),
+    lang: "en",
+  })
+
+  const controller = new AbortController()
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), 9000)
+  let response: Response
+  try {
+    response = await fetch(`https://photon.komoot.io/api/?${params.toString()}`, {
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    })
+  } finally {
+    globalThis.clearTimeout(timeoutId)
+  }
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  return (await response.json()) as PhotonSearchResponse
+}
+
 export default function RestaurantsPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { t } = useI18n()
@@ -218,15 +267,27 @@ export default function RestaurantsPage() {
   const [lng, setLng] = useState("")
   const [radius, setRadius] = useState("100")
   const [searchingAddress, setSearchingAddress] = useState(false)
+  const [searchingSuggestions, setSearchingSuggestions] = useState(false)
   const [usingCurrentLocation, setUsingCurrentLocation] = useState(false)
   const [addressResults, setAddressResults] = useState<GeocodingCandidate[]>([])
   const [selectedAddressLabel, setSelectedAddressLabel] = useState("")
+  const [locationConfirmed, setLocationConfirmed] = useState(false)
 
   const [assignRestaurant, setAssignRestaurant] = useState("")
   const [assignUser, setAssignUser] = useState("")
 
   const latNumber = parseNullableNumber(lat)
   const lngNumber = parseNullableNumber(lng)
+
+  const mergeCandidate = useCallback(
+    (candidatesById: Map<string, GeocodingCandidate>, candidate: GeocodingCandidate) => {
+      const current = candidatesById.get(candidate.id)
+      if (!current || candidate.matchScore > current.matchScore) {
+        candidatesById.set(candidate.id, candidate)
+      }
+    },
+    []
+  )
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -254,6 +315,115 @@ export default function RestaurantsPage() {
     if (!isAuthenticated || !session?.access_token) return
     void loadData()
   }, [authLoading, isAuthenticated, session?.access_token, loadData])
+
+  useEffect(() => {
+    const query = normalizeAddressInput(addressQuery)
+    if (query.length < 4) {
+      setSearchingSuggestions(false)
+      if (!selectedAddressLabel) {
+        setAddressResults([])
+      }
+      return
+    }
+
+    let cancelled = false
+    const timeoutId = globalThis.setTimeout(() => {
+      void (async () => {
+        setSearchingSuggestions(true)
+        try {
+          const tokens = tokenizeAddressQuery(query)
+          const candidatesById = new Map<string, GeocodingCandidate>()
+          const countryCodes = inferCountryCodes(query)
+          const nominatimRows = await searchNominatim(query, {
+            countryCodes: countryCodes.length > 0 ? countryCodes.join(",") : undefined,
+            limit: 8,
+          })
+
+          for (const row of nominatimRows) {
+            const candidateLat = Number(row.lat)
+            const candidateLng = Number(row.lon)
+            if (!Number.isFinite(candidateLat) || !Number.isFinite(candidateLng)) continue
+
+            const displayName = row.display_name ?? `${candidateLat}, ${candidateLng}`
+            const importance = typeof row.importance === "number" && Number.isFinite(row.importance) ? row.importance : 0
+            const matchScore = scoreAddressMatch(tokens, displayName) + importance * 0.35
+            const id = String(row.place_id ?? `n_${candidateLat}_${candidateLng}`)
+
+            mergeCandidate(candidatesById, {
+              id,
+              displayName,
+              lat: candidateLat,
+              lng: candidateLng,
+              importance,
+              matchScore,
+            })
+          }
+
+          try {
+            const photon = await searchPhoton(query, { limit: 8 })
+            for (const feature of photon.features ?? []) {
+              const coords = feature.geometry?.coordinates
+              if (!coords || coords.length < 2) continue
+              const lngValue = Number(coords[0])
+              const latValue = Number(coords[1])
+              if (!Number.isFinite(latValue) || !Number.isFinite(lngValue)) continue
+
+              const props = feature.properties
+              const displayName = [
+                props?.name,
+                [props?.street, props?.housenumber].filter(Boolean).join(" "),
+                props?.city,
+                props?.state,
+                props?.country,
+                props?.postcode,
+              ]
+                .map(item => item?.trim())
+                .filter(Boolean)
+                .join(", ")
+
+              const fallbackLabel = `${latValue.toFixed(6)}, ${lngValue.toFixed(6)}`
+              const label = displayName || fallbackLabel
+              const matchScore = scoreAddressMatch(tokens, label) + 0.2
+              const id = String(props?.osm_id ?? `p_${latValue}_${lngValue}`)
+
+              mergeCandidate(candidatesById, {
+                id,
+                displayName: label,
+                lat: latValue,
+                lng: lngValue,
+                importance: 0,
+                matchScore,
+              })
+            }
+          } catch {
+            // Photon is best-effort; Nominatim remains the primary source.
+          }
+
+          if (cancelled) return
+          const parsed = Array.from(candidatesById.values())
+            .sort((a, b) => {
+              if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore
+              return b.importance - a.importance
+            })
+            .slice(0, 8)
+          setAddressResults(parsed)
+        } catch {
+          if (!cancelled) {
+            setAddressResults([])
+          }
+        } finally {
+          if (!cancelled) {
+            setSearchingSuggestions(false)
+          }
+        }
+      })()
+    }, 420)
+
+    return () => {
+      cancelled = true
+      globalThis.clearTimeout(timeoutId)
+    }
+  }, [addressQuery, mergeCandidate, selectedAddressLabel])
 
   const handleSearchAddress = async () => {
     const query = addressQuery.trim()
@@ -361,11 +531,26 @@ export default function RestaurantsPage() {
     setLat(candidate.lat.toFixed(6))
     setLng(candidate.lng.toFixed(6))
     setSelectedAddressLabel(candidate.displayName)
+    setLocationConfirmed(false)
     if (!name.trim()) {
       const inferredName = candidate.displayName.split(",")[0]?.trim() ?? ""
       setName(inferredName)
     }
-    showToast("success", t("Coordenadas cargadas desde direccion.", "Coordinates loaded from address."))
+    showToast(
+      "success",
+      t("Ubicacion seleccionada. Revisa el mapa y confirma que sea correcta.", "Location selected. Review the map and confirm it is correct.")
+    )
+  }
+
+  const handleConfirmLocation = () => {
+    const parsedLat = parseNullableNumber(lat)
+    const parsedLng = parseNullableNumber(lng)
+    if (parsedLat === null || parsedLng === null) {
+      showToast("info", t("Primero selecciona una direccion del listado.", "Select an address from the list first."))
+      return
+    }
+    setLocationConfirmed(true)
+    showToast("success", t("Ubicacion confirmada para guardar.", "Location confirmed for saving."))
   }
 
   const handleUseCurrentLocation = async () => {
@@ -380,8 +565,9 @@ export default function RestaurantsPage() {
         setLat(position.coords.latitude.toFixed(6))
         setLng(position.coords.longitude.toFixed(6))
         setSelectedAddressLabel(t("Ubicacion actual", "Current location"))
+        setLocationConfirmed(false)
         setUsingCurrentLocation(false)
-        showToast("success", t("Ubicacion actual cargada.", "Current location loaded."))
+        showToast("success", t("Ubicacion actual cargada. Revisa el mapa y confirma.", "Current location loaded. Review the map and confirm."))
       },
       () => {
         setUsingCurrentLocation(false)
@@ -406,6 +592,17 @@ export default function RestaurantsPage() {
         t(
           "Busca y selecciona una direccion en el mapa antes de guardar.",
           "Search and select an address on the map before saving."
+        )
+      )
+      return
+    }
+
+    if (!locationConfirmed) {
+      showToast(
+        "info",
+        t(
+          "Confirma en el mapa que la direccion sea correcta antes de guardar.",
+          "Confirm on the map that the address is correct before saving."
         )
       )
       return
@@ -437,6 +634,7 @@ export default function RestaurantsPage() {
       setAddressQuery("")
       setAddressResults([])
       setSelectedAddressLabel("")
+      setLocationConfirmed(false)
       setLat("")
       setLng("")
       showToast("success", t("Restaurante creado.", "Restaurant created."))
@@ -501,6 +699,7 @@ export default function RestaurantsPage() {
                       setLat("")
                       setLng("")
                       setSelectedAddressLabel("")
+                      setLocationConfirmed(false)
                       setAddressResults([])
                     }}
                   />
@@ -529,10 +728,23 @@ export default function RestaurantsPage() {
                   </Button>
                 </div>
 
+                <p className="mt-2 text-xs text-slate-500">
+                  {t(
+                    "Escribe direccion, selecciona una sugerencia, valida el pin en el mapa y confirma.",
+                    "Type address, choose a suggestion, validate the pin on the map, and confirm."
+                  )}
+                </p>
+
+                {searchingSuggestions && !searchingAddress && (
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    {t("Buscando sugerencias de direccion...", "Searching address suggestions...")}
+                  </div>
+                )}
+
                 {addressResults.length > 0 && (
                   <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {t("Resultados de direccion", "Address results")}
+                      {t("Sugerencias de direccion", "Address suggestions")}
                     </p>
                     <div className="max-h-48 space-y-2 overflow-auto">
                       {addressResults.map(item => (
@@ -561,6 +773,20 @@ export default function RestaurantsPage() {
                       </p>
                       <p>Lat: {latNumber.toFixed(6)} | Lng: {lngNumber.toFixed(6)}</p>
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant={locationConfirmed ? "secondary" : "primary"} onClick={handleConfirmLocation}>
+                        {locationConfirmed
+                          ? t("Ubicacion confirmada", "Location confirmed")
+                          : t("Confirmar que es aqui", "Confirm this is the place")}
+                      </Button>
+                      {!locationConfirmed && (
+                        <span className="text-xs text-amber-700">
+                          {t("Debes confirmar antes de guardar.", "You must confirm before saving.")}
+                        </span>
+                      )}
+                    </div>
+
                     <div className="overflow-hidden rounded-lg border border-slate-200">
                       <iframe
                         title={t("Vista de mapa", "Map preview")}
