@@ -246,7 +246,7 @@ export default function LoginPage() {
               setEmail(e.target.value)
               if (error) setError(null)
             }}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 caret-slate-900 outline-none transition focus:border-slate-800"
           />
 
           <input
@@ -259,7 +259,7 @@ export default function LoginPage() {
               setPassword(e.target.value)
               if (error) setError(null)
             }}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 caret-slate-900 outline-none transition focus:border-slate-800"
           />
         </div>
 

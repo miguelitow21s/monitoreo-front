@@ -111,6 +111,7 @@ input,
 textarea,
 select {
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  caret-color: #0f172a;
 }
 
 input:focus,

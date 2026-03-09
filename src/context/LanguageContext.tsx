@@ -15,7 +15,15 @@ type LanguageContextValue = {
 
 const STORAGE_LANGUAGE_KEY = "app_ui_language"
 const STORAGE_MANUAL_KEY = "app_ui_language_manual"
-const ENGLISH_ROLES = new Set(["restaurant_owner", "restaurant_admin", "owner", "admin_restaurant"])
+const ROLE_LANGUAGE_MAP: Record<string, AppLanguage> = {
+  super_admin: "es",
+  supervisora: "es",
+  empleado: "es",
+  restaurant_owner: "en",
+  restaurant_admin: "en",
+  owner: "en",
+  admin_restaurant: "en",
+}
 
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined)
 
@@ -24,11 +32,16 @@ function isLanguage(value: string | null): value is AppLanguage {
 }
 
 function detectBrowserLanguage(): AppLanguage {
-  return "en"
+  if (typeof navigator === "undefined") return "es"
+  const browserLanguage = (navigator.language || "es").toLowerCase()
+  return browserLanguage.startsWith("es") ? "es" : "en"
 }
 
 function resolveLanguageByRole(role: string | null | undefined): AppLanguage {
-  if (role && ENGLISH_ROLES.has(role)) return "en"
+  const normalizedRole = (role ?? "").trim().toLowerCase()
+  if (normalizedRole && ROLE_LANGUAGE_MAP[normalizedRole]) {
+    return ROLE_LANGUAGE_MAP[normalizedRole]
+  }
   return detectBrowserLanguage()
 }
 
