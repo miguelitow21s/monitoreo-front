@@ -340,6 +340,7 @@ export default function RestaurantsPage() {
   const [searchingSuggestions, setSearchingSuggestions] = useState(false)
   const [usingCurrentLocation, setUsingCurrentLocation] = useState(false)
   const [resolvingCountryByLocation, setResolvingCountryByLocation] = useState(false)
+  const [attemptedAutoCountryDetection, setAttemptedAutoCountryDetection] = useState(false)
   const [addressResults, setAddressResults] = useState<GeocodingCandidate[]>([])
   const [selectedAddressLabel, setSelectedAddressLabel] = useState("")
   const [locationConfirmed, setLocationConfirmed] = useState(false)
@@ -375,9 +376,12 @@ export default function RestaurantsPage() {
     [countryPreference, detectedCountryCode]
   )
 
-  const detectCountryByBrowserLocation = useCallback(async () => {
+  const detectCountryByBrowserLocation = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true
     if (!navigator.geolocation) {
-      showToast("error", t("Tu navegador no soporta geolocalizacion.", "Your browser does not support geolocation."))
+      if (!silent) {
+        showToast("error", t("Tu navegador no soporta geolocalizacion.", "Your browser does not support geolocation."))
+      }
       return
     }
 
@@ -394,27 +398,33 @@ export default function RestaurantsPage() {
       const response = await reverseCountryFromCoordinates(position.coords.latitude, position.coords.longitude)
       const code = normalizeCountryCode(response.address?.country_code)
       if (!code) {
-        showToast("info", t("No se pudo detectar el pais desde tu ubicacion.", "Could not detect country from your location."))
+        if (!silent) {
+          showToast("info", t("No se pudo detectar el pais desde tu ubicacion.", "Could not detect country from your location."))
+        }
         return
       }
 
       setDetectedCountryCode(code)
       setCountryPreference("auto")
-      showToast(
-        "success",
-        t(
-          `Pais detectado: ${getCountryNameFromCode(code)}. Se priorizaran resultados locales.`,
-          `Detected country: ${getCountryNameFromCode(code)}. Local results will be prioritized.`
+      if (!silent) {
+        showToast(
+          "success",
+          t(
+            `Pais detectado: ${getCountryNameFromCode(code)}. Se priorizaran resultados locales.`,
+            `Detected country: ${getCountryNameFromCode(code)}. Local results will be prioritized.`
+          )
         )
-      )
+      }
     } catch {
-      showToast(
-        "error",
-        t(
-          "No pudimos detectar el pais con tu ubicacion. Puedes elegirlo manualmente.",
-          "We could not detect your country from location. You can choose it manually."
+      if (!silent) {
+        showToast(
+          "error",
+          t(
+            "No pudimos detectar el pais con tu ubicacion. Puedes elegirlo manualmente.",
+            "We could not detect your country from location. You can choose it manually."
+          )
         )
-      )
+      }
     } finally {
       setResolvingCountryByLocation(false)
     }
@@ -446,6 +456,21 @@ export default function RestaurantsPage() {
     if (!isAuthenticated || !session?.access_token) return
     void loadData()
   }, [authLoading, isAuthenticated, session?.access_token, loadData])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!isAuthenticated || !session?.access_token) return
+    if (attemptedAutoCountryDetection) return
+
+    setAttemptedAutoCountryDetection(true)
+    void detectCountryByBrowserLocation({ silent: true })
+  }, [
+    attemptedAutoCountryDetection,
+    authLoading,
+    detectCountryByBrowserLocation,
+    isAuthenticated,
+    session?.access_token,
+  ])
 
   useEffect(() => {
     const query = normalizeAddressInput(addressQuery)
@@ -909,15 +934,9 @@ export default function RestaurantsPage() {
                     <option value="global">{t("Pais: Global", "Country: Global")}</option>
                   </select>
 
-                  <Button
-                    variant="ghost"
-                    onClick={() => void detectCountryByBrowserLocation()}
-                    disabled={resolvingCountryByLocation}
-                  >
-                    {resolvingCountryByLocation
-                      ? t("Detectando pais...", "Detecting country...")
-                      : t("Detectar pais por ubicacion", "Detect country from location")}
-                  </Button>
+                  {countryPreference === "auto" && resolvingCountryByLocation && (
+                    <span className="text-xs text-slate-600">{t("Detectando pais automaticamente...", "Detecting country automatically...")}</span>
+                  )}
 
                   {countryPreference === "auto" && detectedCountryCode && (
                     <span className="text-xs text-slate-600">
