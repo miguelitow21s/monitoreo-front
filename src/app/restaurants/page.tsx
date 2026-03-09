@@ -31,6 +31,8 @@ type GeocodingCandidate = {
   importance: number
   matchScore: number
   countryCode?: string
+  tokenCoverage: number
+  numericCoverage: number
 }
 
 type NominatimSearchRow = {
@@ -224,11 +226,28 @@ function tokenizeAddressQuery(value: string) {
     .filter(token => token.length >= 2)
 }
 
-function scoreAddressMatch(tokens: string[], displayName: string) {
+function getAddressCoverage(tokens: string[], numericTokens: string[], displayName: string) {
+  if (tokens.length === 0) {
+    return {
+      tokenCoverage: 0,
+      numericCoverage: 0,
+    }
+  }
+
+  const normalizedDisplay = stripDiacritics(displayName).toLowerCase()
+  const tokenMatches = tokens.reduce((count, token) => count + (normalizedDisplay.includes(token) ? 1 : 0), 0)
+  const numericMatches = numericTokens.reduce((count, token) => count + (normalizedDisplay.includes(token) ? 1 : 0), 0)
+
+  return {
+    tokenCoverage: tokenMatches / tokens.length,
+    numericCoverage: numericTokens.length > 0 ? numericMatches / numericTokens.length : 1,
+  }
+}
+
+function scoreAddressMatch(tokens: string[], numericTokens: string[], displayName: string) {
+  const { tokenCoverage, numericCoverage } = getAddressCoverage(tokens, numericTokens, displayName)
   if (tokens.length === 0) return 0
-  const normalizedDisplay = displayName.toLowerCase()
-  const matches = tokens.reduce((count, token) => count + (normalizedDisplay.includes(token) ? 1 : 0), 0)
-  return matches / tokens.length
+  return tokenCoverage * 0.62 + numericCoverage * 0.38
 }
 
 async function searchNominatim(query: string, options?: { countryCodes?: string; limit?: number }) {
@@ -488,6 +507,7 @@ export default function RestaurantsPage() {
         setSearchingSuggestions(true)
         try {
           const tokens = tokenizeAddressQuery(query)
+          const numericTokens = tokens.filter(token => /^\d+$/.test(token))
           const candidatesById = new Map<string, GeocodingCandidate>()
           const countryCodes = resolveCountryCodesForQuery(query)
           const preferredCountry = countryCodes[0] ?? ""
@@ -505,7 +525,8 @@ export default function RestaurantsPage() {
             const importance = typeof row.importance === "number" && Number.isFinite(row.importance) ? row.importance : 0
             const rowCountry = inferCountryFromLabel(displayName)
             const countryBoost = preferredCountry && rowCountry === preferredCountry ? 0.35 : 0
-            const matchScore = scoreAddressMatch(tokens, displayName) + importance * 0.35 + countryBoost
+            const coverage = getAddressCoverage(tokens, numericTokens, displayName)
+            const matchScore = scoreAddressMatch(tokens, numericTokens, displayName) + importance * 0.35 + countryBoost
             const id = String(row.place_id ?? `n_${candidateLat}_${candidateLng}`)
 
             mergeCandidate(candidatesById, {
@@ -516,6 +537,8 @@ export default function RestaurantsPage() {
               importance,
               matchScore,
               countryCode: rowCountry || undefined,
+              tokenCoverage: coverage.tokenCoverage,
+              numericCoverage: coverage.numericCoverage,
             })
           }
 
@@ -548,7 +571,8 @@ export default function RestaurantsPage() {
                 continue
               }
               const countryBoost = preferredCountry && photonCountry === preferredCountry ? 0.35 : 0
-              const matchScore = scoreAddressMatch(tokens, label) + 0.2 + countryBoost
+              const coverage = getAddressCoverage(tokens, numericTokens, label)
+              const matchScore = scoreAddressMatch(tokens, numericTokens, label) + 0.2 + countryBoost
               const id = String(props?.osm_id ?? `p_${latValue}_${lngValue}`)
 
               mergeCandidate(candidatesById, {
@@ -559,6 +583,8 @@ export default function RestaurantsPage() {
                 importance: 0,
                 matchScore,
                 countryCode: photonCountry || undefined,
+                tokenCoverage: coverage.tokenCoverage,
+                numericCoverage: coverage.numericCoverage,
               })
             }
           } catch {
@@ -566,12 +592,16 @@ export default function RestaurantsPage() {
           }
 
           if (cancelled) return
-          const parsed = Array.from(candidatesById.values())
+          const ranked = Array.from(candidatesById.values())
             .sort((a, b) => {
               if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore
               return b.importance - a.importance
             })
-            .slice(0, 8)
+          const needsStrictNumeric = numericTokens.length >= 2
+          const strictNumeric = needsStrictNumeric
+            ? ranked.filter(item => item.numericCoverage >= 0.67 && item.tokenCoverage >= 0.45)
+            : ranked
+          const parsed = (strictNumeric.length > 0 ? strictNumeric : ranked).slice(0, 8)
           setAddressResults(parsed)
         } catch {
           if (!cancelled) {
@@ -604,6 +634,7 @@ export default function RestaurantsPage() {
       const countryCodes = resolveCountryCodesForQuery(normalizedQuery)
       const queryVariants = buildAddressSearchQueries(normalizedQuery, countryCodes[0])
       const queryTokens = tokenizeAddressQuery(normalizedQuery)
+      const numericTokens = queryTokens.filter(token => /^\d+$/.test(token))
       const candidatesById = new Map<string, GeocodingCandidate>()
       const failures: string[] = []
       const preferredCountry = countryCodes[0] ?? ""
@@ -617,7 +648,8 @@ export default function RestaurantsPage() {
           const importance = typeof row.importance === "number" && Number.isFinite(row.importance) ? row.importance : 0
           const rowCountry = inferCountryFromLabel(displayName)
           const countryBoost = preferredCountry && rowCountry === preferredCountry ? 0.35 : 0
-          const matchScore = scoreAddressMatch(queryTokens, displayName) + importance * 0.35 + countryBoost
+          const coverage = getAddressCoverage(queryTokens, numericTokens, displayName)
+          const matchScore = scoreAddressMatch(queryTokens, numericTokens, displayName) + importance * 0.35 + countryBoost
           const id = String(row.place_id ?? `${candidateLat}_${candidateLng}`)
 
           const nextCandidate: GeocodingCandidate = {
@@ -628,6 +660,8 @@ export default function RestaurantsPage() {
             importance,
             matchScore,
             countryCode: rowCountry || undefined,
+            tokenCoverage: coverage.tokenCoverage,
+            numericCoverage: coverage.numericCoverage,
           }
 
           const current = candidatesById.get(id)
@@ -661,12 +695,16 @@ export default function RestaurantsPage() {
         }
       }
 
-      const parsed = Array.from(candidatesById.values())
+      const ranked = Array.from(candidatesById.values())
         .sort((a, b) => {
           if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore
           return b.importance - a.importance
         })
-        .slice(0, 10)
+      const needsStrictNumeric = numericTokens.length >= 2
+      const strictNumeric = needsStrictNumeric
+        ? ranked.filter(item => item.numericCoverage >= 0.67 && item.tokenCoverage >= 0.45)
+        : ranked
+      const parsed = (strictNumeric.length > 0 ? strictNumeric : ranked).slice(0, 10)
 
       setAddressResults(parsed)
       if (parsed.length === 0) {
