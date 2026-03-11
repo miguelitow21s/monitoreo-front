@@ -101,3 +101,9 @@ Use this checklist so backend can validate the complete flow in one pass, includ
 - 2026-03-10: Frontend aligned shift Edge requests with backend security requirements for `shifts_start` and `shifts_end`: enforced `Authorization` bearer from current session, generated `Idempotency-Key`, and attached `x-device-fingerprint` + `x-shift-otp-token` headers on every request.
 - 2026-03-10: Frontend now blocks start/end shift calls when shift OTP token is missing and returns explicit guidance to complete phone OTP verification first.
 - 2026-03-10: Employee shifts UI now includes in-flow OTP controls (`phone_otp_send` and `phone_otp_verify`) with device fingerprint binding, local OTP token persistence, and submit blockers when OTP is pending.
+- 2026-03-10: Scheduling service migrated to `scheduled_shifts_manage` (`assign`, `bulk_assign`, `reschedule`, `cancel`, `list`) with upcoming-only filtering preserved in frontend.
+- 2026-03-10: Operational tasks service migrated to `operational_tasks_manage` for `create`, `list_my_open`, `list_supervision`, `complete`; task manifest upload now uses `request_manifest_upload` signed token flow.
+- 2026-03-10: Incidents creation migrated to `incidents_create` endpoint contract (`shift_id`, `description`) for employee/supervision notes.
+- 2026-03-10: Reports backend generation updated to consume signed URLs (`url_pdf`, `url_excel`) from `reports_generate` and open outputs directly when present.
+- 2026-03-10: Evidence upload client now supports new `evidence_upload` request payload shape (`upload.token`, `upload.path`, `bucket`) with backward compatibility to URL-based upload responses.
+- 2026-03-10: Edge client now appends `request_id` to surfaced error messages for support/debug traceability.

@@ -57,6 +57,8 @@ import {
   OperationalTask,
   TaskPriority,
   TaskEvidenceManifestResolved,
+  requestTaskManifestUpload,
+  uploadTaskManifestViaSignedToken,
 } from "@/services/tasks.service"
 import { listMySupervisorRestaurants, listRestaurants, Restaurant, SupervisorRestaurantOption } from "@/services/restaurants.service"
 import { uploadEvidenceObject } from "@/services/storageEvidence.service"
@@ -171,7 +173,6 @@ export default function ShiftsPage() {
   const [processing, setProcessing] = useState(false)
   const [sendingOtp, setSendingOtp] = useState(false)
   const [verifyingOtp, setVerifyingOtp] = useState(false)
-  const [otpPhone, setOtpPhone] = useState("")
   const [otpCode, setOtpCode] = useState("")
   const [shiftOtpReady, setShiftOtpReady] = useState(false)
   const [otpVerifiedAt, setOtpVerifiedAt] = useState<string | null>(null)
@@ -615,7 +616,7 @@ export default function ShiftsPage() {
   const handleSendShiftOtp = async () => {
     setSendingOtp(true)
     try {
-      await sendShiftPhoneOtp(otpPhone.trim() || null)
+      await sendShiftPhoneOtp()
       showToast("success", t("Codigo OTP enviado. Revisa tu telefono.", "OTP code sent. Check your phone."))
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo enviar OTP.", "Could not send OTP.")))
@@ -632,7 +633,7 @@ export default function ShiftsPage() {
 
     setVerifyingOtp(true)
     try {
-      await verifyShiftPhoneOtp({ code: otpCode, phone: otpPhone.trim() || null })
+      await verifyShiftPhoneOtp({ code: otpCode })
       setShiftOtpReady(true)
       setOtpVerifiedAt(new Date().toISOString())
       setOtpCode("")
@@ -915,16 +916,20 @@ export default function ShiftsPage() {
       const manifestBlob = new Blob([JSON.stringify(manifestPayload, null, 2)], {
         type: "application/json",
       })
-      const manifestEvidence = await uploadEvidence("task-manifest", manifestBlob, taskCoords, {
-        extension: "json",
+      const manifestUpload = await requestTaskManifestUpload(selectedTaskId)
+      await uploadTaskManifestViaSignedToken({
+        bucket: manifestUpload.bucket,
+        path: manifestUpload.path,
+        token: manifestUpload.token,
+        file: manifestBlob,
       })
 
       await completeOperationalTask({
         taskId: selectedTaskId,
-        evidencePath: manifestEvidence.filePath,
-        evidenceHash: manifestEvidence.evidenceHash,
-        evidenceMimeType: manifestEvidence.evidenceMimeType,
-        evidenceSizeBytes: manifestEvidence.evidenceSizeBytes,
+        evidencePath: manifestUpload.path,
+        evidenceHash: "",
+        evidenceMimeType: manifestUpload.requiredMime,
+        evidenceSizeBytes: manifestBlob.size,
       })
       resetTaskEvidenceCapture()
       setSelectedTaskId(null)
@@ -1189,21 +1194,13 @@ export default function ShiftsPage() {
                   )}
                 </p>
 
-                <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">
-                  <input
-                    value={otpPhone}
-                    onChange={event => setOtpPhone(event.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder={t("Telefono (opcional si backend lo requiere)", "Phone (optional if backend requires it)")}
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
-                      {sendingOtp ? t("Enviando OTP...", "Sending OTP...") : t("Enviar OTP", "Send OTP")}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
-                      {t("Reiniciar OTP", "Reset OTP")}
-                    </Button>
-                  </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
+                    {sendingOtp ? t("Enviando OTP...", "Sending OTP...") : t("Enviar OTP", "Send OTP")}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
+                    {t("Reiniciar OTP", "Reset OTP")}
+                  </Button>
                 </div>
 
                 <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">

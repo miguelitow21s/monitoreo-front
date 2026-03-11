@@ -1,5 +1,6 @@
 import { supabase } from "@/services/supabaseClient"
 import { createEvidenceSignedUrl } from "@/services/storageEvidence.service"
+import { invokeEdge } from "@/services/edgeClient"
 
 export interface SupervisorShiftRow {
   id: string
@@ -37,14 +38,25 @@ export async function updateShiftStatus(shiftId: string, status: string) {
 }
 
 export async function createShiftIncident(shiftId: string, note: string) {
-  const { data, error } = await supabase
-    .from("shift_incidents")
-    .insert({ shift_id: shiftId, note })
-    .select("id,shift_id,note,created_at")
-    .single()
+  const payload = await invokeEdge<unknown>("incidents_create", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      shift_id: Number(shiftId),
+      description: note,
+    },
+  })
 
-  if (error) throw error
-  return data as ShiftIncident
+  const incidentId =
+    payload && typeof payload === "object" && "incident_id" in (payload as Record<string, unknown>)
+      ? (payload as Record<string, unknown>).incident_id
+      : null
+
+  return {
+    id: typeof incidentId === "number" ? String(incidentId) : String(incidentId ?? ""),
+    shift_id: shiftId,
+    note,
+    created_at: new Date().toISOString(),
+  } as ShiftIncident
 }
 
 export async function getShiftIncidents(shiftId: string) {

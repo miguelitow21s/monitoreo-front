@@ -1,8 +1,14 @@
 import { invokeEdge } from "@/services/edgeClient"
+import { supabase } from "@/services/supabaseClient"
 
 type EvidenceType = "inicio" | "fin"
 
 interface RequestUploadResponse {
+  upload?: {
+    token?: string
+    path?: string
+  }
+  bucket?: string
   upload_url?: string
   signed_url?: string
   url?: string
@@ -25,7 +31,15 @@ function resolveUploadUrl(payload: RequestUploadResponse) {
 }
 
 function resolveUploadPath(payload: RequestUploadResponse) {
-  return payload.path ?? null
+  return payload.upload?.path ?? payload.path ?? null
+}
+
+function resolveUploadToken(payload: RequestUploadResponse) {
+  return payload.upload?.token ?? null
+}
+
+function resolveUploadBucket(payload: RequestUploadResponse) {
+  return payload.bucket ?? null
 }
 
 async function requestUpload(shiftId: number, type: EvidenceType) {
@@ -67,22 +81,38 @@ export async function uploadShiftEvidence(payload: {
   const requested = await requestUpload(payload.shiftId, payload.type)
   const uploadUrl = resolveUploadUrl(requested)
   const uploadPath = resolveUploadPath(requested)
+  const uploadToken = resolveUploadToken(requested)
+  const uploadBucket = resolveUploadBucket(requested)
 
-  if (!uploadUrl || !uploadPath) {
-    throw new Error("Invalid upload payload from backend (missing upload URL/path).")
+  if (!uploadPath) {
+    throw new Error("Invalid upload payload from backend (missing upload path).")
   }
 
-  const uploadResponse = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": payload.file.type || "application/octet-stream",
-      ...(requested.headers ?? {}),
-    },
-    body: payload.file,
-  })
+  if (uploadBucket && uploadToken) {
+    const { error } = await supabase.storage
+      .from(uploadBucket)
+      .uploadToSignedUrl(uploadPath, uploadToken, payload.file)
 
-  if (!uploadResponse.ok) {
-    throw new Error(`Could not upload evidence binary (HTTP ${uploadResponse.status}).`)
+    if (error) {
+      throw new Error(`Could not upload evidence binary via signed token: ${error.message}`)
+    }
+  } else {
+    if (!uploadUrl) {
+      throw new Error("Invalid upload payload from backend (missing upload URL).")
+    }
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": payload.file.type || "application/octet-stream",
+        ...(requested.headers ?? {}),
+      },
+      body: payload.file,
+    })
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Could not upload evidence binary (HTTP ${uploadResponse.status}).`)
+    }
   }
 
   await finalizeUpload({

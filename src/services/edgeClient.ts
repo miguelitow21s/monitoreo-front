@@ -20,7 +20,8 @@ type EdgeInvokeOptions = {
 }
 
 function toError(message: string, status?: number, code?: string, requestId?: string) {
-  const err = new Error(message) as Error & { status?: number; code?: string; request_id?: string }
+  const decoratedMessage = requestId ? `${message} (request_id: ${requestId})` : message
+  const err = new Error(decoratedMessage) as Error & { status?: number; code?: string; request_id?: string }
   if (typeof status === "number") err.status = status
   if (code) err.code = code
   if (requestId) err.request_id = requestId

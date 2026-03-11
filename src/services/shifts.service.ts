@@ -46,25 +46,23 @@ function extractVerificationToken(payload: unknown) {
   return typeof token === "string" && token.trim().length > 0 ? token.trim() : null
 }
 
-export async function sendShiftPhoneOtp(phone?: string | null) {
+export async function sendShiftPhoneOtp() {
   const fingerprint = getOrCreateDeviceFingerprint()
-  const normalizedPhone = phone?.trim() ?? ""
 
   return invokeEdge<unknown>("phone_otp_send", {
     idempotencyKey: crypto.randomUUID(),
     extraHeaders: {
       "x-device-fingerprint": fingerprint,
     },
-    body: normalizedPhone ? { phone: normalizedPhone } : {},
+    body: { device_fingerprint: fingerprint },
   })
 }
 
-export async function verifyShiftPhoneOtp(payload: { code: string; phone?: string | null }) {
+export async function verifyShiftPhoneOtp(payload: { code: string }) {
   const code = payload.code.trim()
   if (!code) throw new Error("OTP code is required.")
 
   const fingerprint = getOrCreateDeviceFingerprint()
-  const normalizedPhone = payload.phone?.trim() ?? ""
 
   const data = await invokeEdge<unknown>("phone_otp_verify", {
     idempotencyKey: crypto.randomUUID(),
@@ -73,7 +71,7 @@ export async function verifyShiftPhoneOtp(payload: { code: string; phone?: strin
     },
     body: {
       code,
-      ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+      device_fingerprint: fingerprint,
     },
   })
 

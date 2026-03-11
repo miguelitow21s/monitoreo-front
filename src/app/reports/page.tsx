@@ -269,12 +269,18 @@ export default function ReportsPage() {
 
     setGeneratingBackend(true)
     try {
-      await generateBackendReport({
+      const generated = await generateBackendReport({
         restaurantId,
         periodStart: fromDate,
         periodEnd: toDate,
       })
       showToast("success", t("Reporte generado en backend.", "Report generated in backend."))
+      if (generated.url_pdf) {
+        window.open(generated.url_pdf, "_blank", "noopener,noreferrer")
+      }
+      if (generated.url_excel) {
+        window.open(generated.url_excel, "_blank", "noopener,noreferrer")
+      }
       await loadHistory()
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudo generar reporte en backend.", "Could not generate report in backend."))

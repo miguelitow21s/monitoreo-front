@@ -1,4 +1,4 @@
-import { supabase } from "@/services/supabaseClient"
+import { invokeEdge } from "@/services/edgeClient"
 
 export interface ScheduledShift {
   id: number
@@ -15,6 +15,62 @@ interface ReprogramScheduledShiftPayload {
   scheduledStartIso: string
   scheduledEndIso: string
   notes?: string
+}
+
+function toNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function toStringValue(value: unknown) {
+  return typeof value === "string" ? value : null
+}
+
+function normalizeScheduledShift(raw: unknown): ScheduledShift | null {
+  if (!raw || typeof raw !== "object") return null
+  const row = raw as Record<string, unknown>
+
+  const id = toNumber(row.id)
+  const employeeId = toStringValue(row.employee_id)
+  const restaurantId = toNumber(row.restaurant_id)
+  const scheduledStart = toStringValue(row.scheduled_start)
+  const scheduledEnd = toStringValue(row.scheduled_end)
+
+  if (
+    id === null ||
+    !employeeId ||
+    restaurantId === null ||
+    !scheduledStart ||
+    !scheduledEnd
+  ) {
+    return null
+  }
+
+  return {
+    id,
+    employee_id: employeeId,
+    restaurant_id: restaurantId,
+    scheduled_start: scheduledStart,
+    scheduled_end: scheduledEnd,
+    status: toStringValue(row.status) ?? "scheduled",
+    notes: toStringValue(row.notes),
+  }
+}
+
+function normalizeScheduledItems(payload: unknown) {
+  const direct = Array.isArray(payload) ? payload : []
+  if (direct.length > 0) {
+    return direct.map(normalizeScheduledShift).filter((item): item is ScheduledShift => item !== null)
+  }
+
+  if (!payload || typeof payload !== "object") return [] as ScheduledShift[]
+  const wrapped = payload as { items?: unknown }
+  const items = Array.isArray(wrapped.items) ? wrapped.items : []
+  return items.map(normalizeScheduledShift).filter((item): item is ScheduledShift => item !== null)
 }
 
 function filterUpcomingScheduledShifts(items: ScheduledShift[]) {
@@ -35,106 +91,87 @@ export async function assignScheduledShift(payload: {
 }) {
   const { employeeId, restaurantId, scheduledStartIso, scheduledEndIso, notes } = payload
 
-  const { data, error } = await supabase.rpc("assign_scheduled_shift", {
-    p_employee_id: employeeId,
-    p_restaurant_id: Number(restaurantId),
-    p_scheduled_start: scheduledStartIso,
-    p_scheduled_end: scheduledEndIso,
-    p_notes: notes ?? null,
+  return invokeEdge("scheduled_shifts_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "assign",
+      employee_id: employeeId,
+      restaurant_id: Number(restaurantId),
+      scheduled_start: scheduledStartIso,
+      scheduled_end: scheduledEndIso,
+      notes: notes ?? null,
+    },
   })
-
-  if (error) throw error
-  return data
 }
 
 export async function listMyScheduledShifts(limit = 10) {
-  const rpcResult = await supabase.rpc("list_my_scheduled_shifts", {
-    p_limit: limit,
+  const data = await invokeEdge<unknown>("scheduled_shifts_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list",
+      status: "scheduled",
+      limit,
+    },
   })
-
-  if (rpcResult.error) {
-    const retryWithoutArgs = await supabase.rpc("list_my_scheduled_shifts")
-    if (!retryWithoutArgs.error) {
-      return filterUpcomingScheduledShifts((retryWithoutArgs.data ?? []) as ScheduledShift[]).slice(0, limit)
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) throw rpcResult.error
-
-    const fallback = await supabase
-      .from("scheduled_shifts")
-      .select("id,employee_id,restaurant_id,scheduled_start,scheduled_end,status,notes")
-      .eq("employee_id", user.id)
-      .order("scheduled_start", { ascending: true })
-      .limit(limit)
-
-    if (fallback.error) throw rpcResult.error
-    return filterUpcomingScheduledShifts((fallback.data ?? []) as ScheduledShift[])
-  }
-
-  return filterUpcomingScheduledShifts((rpcResult.data ?? []) as ScheduledShift[]).slice(0, limit)
+  return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
 }
 
 export async function listScheduledShifts(limit = 50) {
-  const rpcResult = await supabase.rpc("list_scheduled_shifts", {
-    p_limit: limit,
+  const data = await invokeEdge<unknown>("scheduled_shifts_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list",
+      status: "scheduled",
+      limit,
+    },
   })
-
-  if (rpcResult.error) {
-    const retryWithoutArgs = await supabase.rpc("list_scheduled_shifts")
-    if (!retryWithoutArgs.error) {
-      return filterUpcomingScheduledShifts((retryWithoutArgs.data ?? []) as ScheduledShift[]).slice(0, limit)
-    }
-
-    const fallback = await supabase
-      .from("scheduled_shifts")
-      .select("id,employee_id,restaurant_id,scheduled_start,scheduled_end,status,notes")
-      .order("scheduled_start", { ascending: true })
-      .limit(limit)
-
-    if (fallback.error) throw rpcResult.error
-    return filterUpcomingScheduledShifts((fallback.data ?? []) as ScheduledShift[])
-  }
-
-  return filterUpcomingScheduledShifts((rpcResult.data ?? []) as ScheduledShift[]).slice(0, limit)
+  return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
 }
 
 export async function cancelScheduledShift(scheduledShiftId: number, notes?: string) {
-  const { data, error } = await supabase
-    .from("scheduled_shifts")
-    .update({
-      status: "cancelled",
-      notes: notes?.trim() || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", scheduledShiftId)
-    .select("*")
-    .single()
+  await invokeEdge("scheduled_shifts_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "cancel",
+      scheduled_shift_id: scheduledShiftId,
+      reason: notes?.trim() || null,
+    },
+  })
 
-  if (error) throw error
-  return data as ScheduledShift
+  return {
+    id: scheduledShiftId,
+    employee_id: "",
+    restaurant_id: 0,
+    scheduled_start: "",
+    scheduled_end: "",
+    status: "cancelled",
+    notes: notes?.trim() || null,
+  } as ScheduledShift
 }
 
 export async function reprogramScheduledShift(payload: ReprogramScheduledShiftPayload) {
   const { scheduledShiftId, scheduledStartIso, scheduledEndIso, notes } = payload
 
-  const { data, error } = await supabase
-    .from("scheduled_shifts")
-    .update({
+  await invokeEdge("scheduled_shifts_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "reschedule",
+      scheduled_shift_id: scheduledShiftId,
       scheduled_start: scheduledStartIso,
       scheduled_end: scheduledEndIso,
-      status: "scheduled",
       notes: notes?.trim() || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", scheduledShiftId)
-    .select("*")
-    .single()
+    },
+  })
 
-  if (error) throw error
-  return data as ScheduledShift
+  return {
+    id: scheduledShiftId,
+    employee_id: "",
+    restaurant_id: 0,
+    scheduled_start: scheduledStartIso,
+    scheduled_end: scheduledEndIso,
+    status: "scheduled",
+    notes: notes?.trim() || null,
+  } as ScheduledShift
 }
 
 export async function assignScheduledShiftsBulk(payload: {
@@ -146,17 +183,17 @@ export async function assignScheduledShiftsBulk(payload: {
   const blocks = payload.blocks.filter(item => item.scheduledStartIso && item.scheduledEndIso)
   if (blocks.length === 0) return [] as unknown[]
 
-  const results = await Promise.all(
-    blocks.map(block =>
-      assignScheduledShift({
-        employeeId: payload.employeeId,
-        restaurantId: payload.restaurantId,
-        scheduledStartIso: block.scheduledStartIso,
-        scheduledEndIso: block.scheduledEndIso,
-        notes: payload.notes,
-      })
-    )
-  )
-
-  return results
+  return invokeEdge("scheduled_shifts_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "bulk_assign",
+      entries: blocks.map(block => ({
+        employee_id: payload.employeeId,
+        restaurant_id: Number(payload.restaurantId),
+        scheduled_start: block.scheduledStartIso,
+        scheduled_end: block.scheduledEndIso,
+        notes: payload.notes ?? null,
+      })),
+    },
+  })
 }

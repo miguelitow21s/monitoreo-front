@@ -1,5 +1,6 @@
 import { supabase } from "@/services/supabaseClient"
 import { createEvidenceSignedUrl } from "@/services/storageEvidence.service"
+import { invokeEdge } from "@/services/edgeClient"
 
 export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled"
 export type TaskPriority = "low" | "normal" | "high" | "critical"
@@ -42,6 +43,16 @@ interface CompleteOperationalTaskPayload {
   evidenceHash: string
   evidenceMimeType: string
   evidenceSizeBytes: number
+}
+
+interface TaskManageUploadResponse {
+  upload?: {
+    token?: string
+    path?: string
+  }
+  bucket?: string
+  path?: string
+  required_mime?: string
 }
 
 export interface TaskEvidenceManifestItem {
@@ -91,6 +102,57 @@ function extractEvidencePath(rawEvidence: Record<string, unknown>) {
     (typeof rawEvidence.evidence_path === "string" && rawEvidence.evidence_path) ||
     null
   return pathCandidate
+}
+
+function normalizeTaskRow(raw: unknown): OperationalTask | null {
+  if (!raw || typeof raw !== "object") return null
+  const row = raw as Record<string, unknown>
+
+  const id = toNullableNumber(row.id)
+  const shiftId = toNullableNumber(row.shift_id)
+  const restaurantId = toNullableNumber(row.restaurant_id)
+  const assignedEmployeeId = typeof row.assigned_employee_id === "string" ? row.assigned_employee_id : null
+  const createdBy = typeof row.created_by === "string" ? row.created_by : ""
+  const title = typeof row.title === "string" ? row.title : ""
+  const description = typeof row.description === "string" ? row.description : ""
+  const priority = (typeof row.priority === "string" ? row.priority : "normal") as TaskPriority
+  const status = (typeof row.status === "string" ? row.status : "pending") as TaskStatus
+  const createdAt = typeof row.created_at === "string" ? row.created_at : new Date(0).toISOString()
+  const updatedAt = typeof row.updated_at === "string" ? row.updated_at : createdAt
+
+  if (id === null || shiftId === null || restaurantId === null || !assignedEmployeeId) return null
+
+  return {
+    id,
+    shift_id: shiftId,
+    restaurant_id: restaurantId,
+    assigned_employee_id: assignedEmployeeId,
+    created_by: createdBy,
+    title,
+    description,
+    priority,
+    status,
+    due_at: typeof row.due_at === "string" ? row.due_at : null,
+    resolved_at: typeof row.resolved_at === "string" ? row.resolved_at : null,
+    resolved_by: typeof row.resolved_by === "string" ? row.resolved_by : null,
+    evidence_path: typeof row.evidence_path === "string" ? row.evidence_path : null,
+    evidence_hash: typeof row.evidence_hash === "string" ? row.evidence_hash : null,
+    evidence_mime_type: typeof row.evidence_mime_type === "string" ? row.evidence_mime_type : null,
+    evidence_size_bytes: toNullableNumber(row.evidence_size_bytes),
+    created_at: createdAt,
+    updated_at: updatedAt,
+  }
+}
+
+function normalizeTaskRowsFromEnvelope(payload: unknown) {
+  if (Array.isArray(payload)) {
+    return payload.map(normalizeTaskRow).filter((item): item is OperationalTask => item !== null)
+  }
+
+  if (!payload || typeof payload !== "object") return [] as OperationalTask[]
+  const wrapped = payload as { items?: unknown }
+  const items = Array.isArray(wrapped.items) ? wrapped.items : []
+  return items.map(normalizeTaskRow).filter((item): item is OperationalTask => item !== null)
 }
 
 export async function resolveTaskEvidenceSignedUrl(path: string | null | undefined, expiresInSeconds = 3600) {
@@ -179,45 +241,57 @@ export async function fetchTaskEvidenceManifest(
 }
 
 export async function listMyOperationalTasks(limit = 30) {
-  const { data, error } = await supabase
-    .from("operational_tasks")
-    .select("*")
-    .in("status", ["pending", "in_progress"])
-    .order("created_at", { ascending: false })
-    .limit(limit)
+  const payload = await invokeEdge<unknown>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list_my_open",
+      limit,
+    },
+  })
 
-  if (error) throw error
-  return (data ?? []) as OperationalTask[]
+  return normalizeTaskRowsFromEnvelope(payload)
 }
 
 export async function listSupervisorOperationalTasks(limit = 50) {
-  const { data, error } = await supabase
-    .from("operational_tasks")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit)
+  const payload = await invokeEdge<unknown>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list_supervision",
+      limit,
+    },
+  })
 
-  if (error) throw error
-  return (data ?? []) as OperationalTask[]
+  return normalizeTaskRowsFromEnvelope(payload)
 }
 
 export async function createOperationalTask(payload: CreateOperationalTaskPayload) {
-  const { data, error } = await supabase
-    .from("operational_tasks")
-    .insert({
+  const created = await invokeEdge<unknown>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "create",
       shift_id: payload.shiftId,
-      restaurant_id: payload.restaurantId,
       assigned_employee_id: payload.assignedEmployeeId,
       title: payload.title.trim(),
       description: payload.description.trim(),
       priority: payload.priority ?? "normal",
       due_at: payload.dueAt ?? null,
-    })
-    .select("*")
-    .single()
+    },
+  })
 
-  if (error) throw error
-  return data as OperationalTask
+  const taskId =
+    created && typeof created === "object" && "task_id" in (created as Record<string, unknown>)
+      ? toNullableNumber((created as Record<string, unknown>).task_id)
+      : null
+
+  if (taskId === null) {
+    throw new Error("Could not parse task id from create response.")
+  }
+
+  const refreshed = await listSupervisorOperationalTasks(200)
+  const found = refreshed.find(item => item.id === taskId)
+  if (found) return found
+
+  throw new Error("Task created but could not be loaded from supervision list.")
 }
 
 export async function markTaskInProgress(taskId: number) {
@@ -233,20 +307,60 @@ export async function markTaskInProgress(taskId: number) {
 }
 
 export async function completeOperationalTask(payload: CompleteOperationalTaskPayload) {
-  const { data, error } = await supabase
-    .from("operational_tasks")
-    .update({
-      status: "completed",
-      resolved_at: new Date().toISOString(),
+  await invokeEdge("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "complete",
+      task_id: payload.taskId,
       evidence_path: payload.evidencePath,
-      evidence_hash: payload.evidenceHash,
-      evidence_mime_type: payload.evidenceMimeType,
-      evidence_size_bytes: payload.evidenceSizeBytes,
-    })
-    .eq("id", payload.taskId)
-    .select("*")
-    .single()
+    },
+  })
+
+  const mine = await listMyOperationalTasks(200)
+  const mineTask = mine.find(item => item.id === payload.taskId)
+  if (mineTask) return mineTask
+
+  const supervised = await listSupervisorOperationalTasks(200)
+  const supervisedTask = supervised.find(item => item.id === payload.taskId)
+  if (supervisedTask) return supervisedTask
+
+  throw new Error("Task completed but could not be refreshed from API.")
+}
+
+export async function requestTaskManifestUpload(taskId: number) {
+  const payload = await invokeEdge<TaskManageUploadResponse>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "request_manifest_upload",
+      task_id: taskId,
+    },
+  })
+
+  const token = payload.upload?.token
+  const path = payload.upload?.path ?? payload.path
+  const bucket = payload.bucket
+
+  if (!token || !path || !bucket) {
+    throw new Error("Invalid manifest upload payload from backend.")
+  }
+
+  return {
+    token,
+    path,
+    bucket,
+    requiredMime: payload.required_mime ?? "application/json",
+  }
+}
+
+export async function uploadTaskManifestViaSignedToken(payload: {
+  bucket: string
+  path: string
+  token: string
+  file: Blob
+}) {
+  const { error } = await supabase.storage
+    .from(payload.bucket)
+    .uploadToSignedUrl(payload.path, payload.token, payload.file)
 
   if (error) throw error
-  return data as OperationalTask
 }

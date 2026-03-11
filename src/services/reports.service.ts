@@ -78,6 +78,15 @@ export interface GeneratedReportHistory {
   filtros_json: Record<string, unknown> | null
 }
 
+export interface GeneratedBackendReportResult {
+  report_id: number
+  generated_at: string | null
+  file_path: string | null
+  hash_documento: string | null
+  url_pdf: string | null
+  url_excel: string | null
+}
+
 function normalizeReportHistoryRow(row: Record<string, unknown>): GeneratedReportHistory {
   return {
     id: String(row.id ?? ""),
@@ -274,7 +283,7 @@ export async function generateBackendReport(payload: {
   periodStart: string
   periodEnd: string
 }) {
-  return invokeEdge("reports_generate", {
+  const raw = await invokeEdge<unknown>("reports_generate", {
     idempotencyKey: crypto.randomUUID(),
     body: {
       restaurant_id: Number(payload.restaurantId),
@@ -282,6 +291,20 @@ export async function generateBackendReport(payload: {
       period_end: payload.periodEnd,
     },
   })
+
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid backend report response.")
+  }
+
+  const row = raw as Record<string, unknown>
+  return {
+    report_id: Number(row.report_id ?? 0),
+    generated_at: typeof row.generated_at === "string" ? row.generated_at : null,
+    file_path: typeof row.file_path === "string" ? row.file_path : null,
+    hash_documento: typeof row.hash_documento === "string" ? row.hash_documento : null,
+    url_pdf: typeof row.url_pdf === "string" ? row.url_pdf : null,
+    url_excel: typeof row.url_excel === "string" ? row.url_excel : null,
+  } satisfies GeneratedBackendReportResult
 }
 
 export async function resolveReportReadonlyUrl(path: string | null | undefined, expiresInSeconds = 3600) {
