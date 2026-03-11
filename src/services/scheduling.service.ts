@@ -17,6 +17,15 @@ interface ReprogramScheduledShiftPayload {
   notes?: string
 }
 
+function filterUpcomingScheduledShifts(items: ScheduledShift[]) {
+  const now = Date.now()
+  return items.filter(item => {
+    if ((item.status ?? "").toLowerCase() !== "scheduled") return false
+    const startsAt = new Date(item.scheduled_start).getTime()
+    return Number.isFinite(startsAt) && startsAt > now
+  })
+}
+
 export async function assignScheduledShift(payload: {
   employeeId: string
   restaurantId: string
@@ -46,7 +55,7 @@ export async function listMyScheduledShifts(limit = 10) {
   if (rpcResult.error) {
     const retryWithoutArgs = await supabase.rpc("list_my_scheduled_shifts")
     if (!retryWithoutArgs.error) {
-      return ((retryWithoutArgs.data ?? []) as ScheduledShift[]).slice(0, limit)
+      return filterUpcomingScheduledShifts((retryWithoutArgs.data ?? []) as ScheduledShift[]).slice(0, limit)
     }
 
     const {
@@ -62,10 +71,10 @@ export async function listMyScheduledShifts(limit = 10) {
       .limit(limit)
 
     if (fallback.error) throw rpcResult.error
-    return (fallback.data ?? []) as ScheduledShift[]
+    return filterUpcomingScheduledShifts((fallback.data ?? []) as ScheduledShift[])
   }
 
-  return (rpcResult.data ?? []) as ScheduledShift[]
+  return filterUpcomingScheduledShifts((rpcResult.data ?? []) as ScheduledShift[]).slice(0, limit)
 }
 
 export async function listScheduledShifts(limit = 50) {
@@ -76,7 +85,7 @@ export async function listScheduledShifts(limit = 50) {
   if (rpcResult.error) {
     const retryWithoutArgs = await supabase.rpc("list_scheduled_shifts")
     if (!retryWithoutArgs.error) {
-      return ((retryWithoutArgs.data ?? []) as ScheduledShift[]).slice(0, limit)
+      return filterUpcomingScheduledShifts((retryWithoutArgs.data ?? []) as ScheduledShift[]).slice(0, limit)
     }
 
     const fallback = await supabase
@@ -86,10 +95,10 @@ export async function listScheduledShifts(limit = 50) {
       .limit(limit)
 
     if (fallback.error) throw rpcResult.error
-    return (fallback.data ?? []) as ScheduledShift[]
+    return filterUpcomingScheduledShifts((fallback.data ?? []) as ScheduledShift[])
   }
 
-  return (rpcResult.data ?? []) as ScheduledShift[]
+  return filterUpcomingScheduledShifts((rpcResult.data ?? []) as ScheduledShift[]).slice(0, limit)
 }
 
 export async function cancelScheduledShift(scheduledShiftId: number, notes?: string) {

@@ -1,5 +1,10 @@
 import { supabase } from "@/services/supabaseClient"
 import { invokeEdge } from "@/services/edgeClient"
+import {
+  getOrCreateDeviceFingerprint,
+  getShiftOtpToken,
+  setShiftOtpToken,
+} from "@/services/securityContext.service"
 
 export type ShiftStatus = "active" | "completed" | "cancelled" | string
 
@@ -26,6 +31,59 @@ interface EndShiftPayload {
   declaration: string | null
 }
 
+function extractVerificationToken(payload: unknown) {
+  if (!payload || typeof payload !== "object") return null
+  const candidate = payload as {
+    verification_token?: unknown
+    token?: unknown
+    otp_token?: unknown
+    shift_otp_token?: unknown
+  }
+
+  const token =
+    candidate.verification_token ?? candidate.token ?? candidate.otp_token ?? candidate.shift_otp_token
+
+  return typeof token === "string" && token.trim().length > 0 ? token.trim() : null
+}
+
+export async function sendShiftPhoneOtp(phone?: string | null) {
+  const fingerprint = getOrCreateDeviceFingerprint()
+  const normalizedPhone = phone?.trim() ?? ""
+
+  return invokeEdge<unknown>("phone_otp_send", {
+    idempotencyKey: crypto.randomUUID(),
+    extraHeaders: {
+      "x-device-fingerprint": fingerprint,
+    },
+    body: normalizedPhone ? { phone: normalizedPhone } : {},
+  })
+}
+
+export async function verifyShiftPhoneOtp(payload: { code: string; phone?: string | null }) {
+  const code = payload.code.trim()
+  if (!code) throw new Error("OTP code is required.")
+
+  const fingerprint = getOrCreateDeviceFingerprint()
+  const normalizedPhone = payload.phone?.trim() ?? ""
+
+  const data = await invokeEdge<unknown>("phone_otp_verify", {
+    idempotencyKey: crypto.randomUUID(),
+    extraHeaders: {
+      "x-device-fingerprint": fingerprint,
+    },
+    body: {
+      code,
+      ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+    },
+  })
+
+  const token = extractVerificationToken(data)
+  if (!token) throw new Error("Phone verification succeeded but verification token was not returned.")
+
+  setShiftOtpToken(token)
+  return token
+}
+
 export interface ShiftHistoryResult {
   rows: ShiftRecord[]
   total: number
@@ -50,8 +108,19 @@ export async function startShift(payload: StartShiftPayload) {
     throw new Error("Incomplete data to start shift.")
   }
 
+  const otpToken = getShiftOtpToken()
+  if (!otpToken) {
+    throw new Error("OTP token is required. Verify your phone before starting a shift.")
+  }
+
+  const fingerprint = getOrCreateDeviceFingerprint()
+
   const data = await invokeEdge<unknown>("shifts_start", {
     idempotencyKey: crypto.randomUUID(),
+    extraHeaders: {
+      "x-device-fingerprint": fingerprint,
+      "x-shift-otp-token": otpToken,
+    },
     body: {
       restaurant_id: restaurantId,
       lat,
@@ -76,8 +145,19 @@ export async function endShift(payload: EndShiftPayload) {
     throw new Error("Incomplete data to end shift.")
   }
 
+  const otpToken = getShiftOtpToken()
+  if (!otpToken) {
+    throw new Error("OTP token is required. Verify your phone before ending a shift.")
+  }
+
+  const fingerprint = getOrCreateDeviceFingerprint()
+
   return invokeEdge("shifts_end", {
     idempotencyKey: crypto.randomUUID(),
+    extraHeaders: {
+      "x-device-fingerprint": fingerprint,
+      "x-shift-otp-token": otpToken,
+    },
     body: {
       shift_id: Number(shiftId),
       lat,

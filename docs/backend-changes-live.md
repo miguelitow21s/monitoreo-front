@@ -98,3 +98,6 @@ Use this checklist so backend can validate the complete flow in one pass, includ
 - 2026-03-10: No new backend schema required for this supplies/gastos enhancement. It reuses existing `supplies` (`unit_cost`) and `supply_deliveries` (`quantity`, `delivered_at`) contracts.
 - 2026-03-10: Supplies operational reporting now includes printable PDF export (browser print/save as PDF) for the same period/restaurant expense breakdown used in CSV export.
 - 2026-03-10: No backend API or schema changes required for this PDF export enhancement.
+- 2026-03-10: Frontend aligned shift Edge requests with backend security requirements for `shifts_start` and `shifts_end`: enforced `Authorization` bearer from current session, generated `Idempotency-Key`, and attached `x-device-fingerprint` + `x-shift-otp-token` headers on every request.
+- 2026-03-10: Frontend now blocks start/end shift calls when shift OTP token is missing and returns explicit guidance to complete phone OTP verification first.
+- 2026-03-10: Employee shifts UI now includes in-flow OTP controls (`phone_otp_send` and `phone_otp_verify`) with device fingerprint binding, local OTP token persistence, and submit blockers when OTP is pending.

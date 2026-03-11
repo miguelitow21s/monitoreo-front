@@ -27,9 +27,12 @@ import {
   endShift,
   getMyActiveShift,
   getMyShiftHistory,
+  sendShiftPhoneOtp,
   ShiftRecord,
   startShift,
+  verifyShiftPhoneOtp,
 } from "@/services/shifts.service"
+import { clearShiftOtpToken, getShiftOtpToken, getOrCreateDeviceFingerprint } from "@/services/securityContext.service"
 import { uploadShiftEvidence } from "@/services/evidence.service"
 import {
   listMySupervisorPresence,
@@ -166,6 +169,12 @@ export default function ShiftsPage() {
   const [history, setHistory] = useState<ShiftRecord[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [processing, setProcessing] = useState(false)
+  const [sendingOtp, setSendingOtp] = useState(false)
+  const [verifyingOtp, setVerifyingOtp] = useState(false)
+  const [otpPhone, setOtpPhone] = useState("")
+  const [otpCode, setOtpCode] = useState("")
+  const [shiftOtpReady, setShiftOtpReady] = useState(false)
+  const [otpVerifiedAt, setOtpVerifiedAt] = useState<string | null>(null)
   const [historyPage, setHistoryPage] = useState(1)
   const [historyTotalPages, setHistoryTotalPages] = useState(1)
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([])
@@ -232,6 +241,7 @@ export default function ShiftsPage() {
     !!coords &&
     !!photo &&
     !processing &&
+    shiftOtpReady &&
     healthAnswered &&
     (!healthDeclarationRequired || healthDeclarationProvided) &&
     (activeShift ? endChecklistComplete : startChecklistComplete)
@@ -336,6 +346,14 @@ export default function ShiftsPage() {
       )
     }
     if (!photo) blockers.push(t("Debes capturar evidencia fotografica.", "You must capture photo evidence."))
+    if (!shiftOtpReady) {
+      blockers.push(
+        t(
+          "Debes validar OTP del telefono para iniciar/finalizar turno.",
+          "Phone OTP verification is required to start/end shift."
+        )
+      )
+    }
     if (!healthAnswered) {
       blockers.push(
         activeShift
@@ -373,6 +391,7 @@ export default function ShiftsPage() {
     healthDeclarationRequired,
     healthDeclarationProvided,
     processing,
+    shiftOtpReady,
     activeShift,
     startChecklistComplete,
     endChecklistComplete,
@@ -466,6 +485,12 @@ export default function ShiftsPage() {
     if (!canOperateEmployee) return
     void loadEmployeeData(historyPage)
   }, [historyPage, canOperateEmployee, loadEmployeeData])
+
+  useEffect(() => {
+    if (!canOperateEmployee) return
+    getOrCreateDeviceFingerprint()
+    setShiftOtpReady(Boolean(getShiftOtpToken()))
+  }, [canOperateEmployee])
 
   useEffect(() => {
     if (!canOperateSupervisor) return
@@ -585,6 +610,47 @@ export default function ShiftsPage() {
     setTaskPhotoClose(null)
     setTaskPhotoMid(null)
     setTaskPhotoWide(null)
+  }
+
+  const handleSendShiftOtp = async () => {
+    setSendingOtp(true)
+    try {
+      await sendShiftPhoneOtp(otpPhone.trim() || null)
+      showToast("success", t("Codigo OTP enviado. Revisa tu telefono.", "OTP code sent. Check your phone."))
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo enviar OTP.", "Could not send OTP.")))
+    } finally {
+      setSendingOtp(false)
+    }
+  }
+
+  const handleVerifyShiftOtp = async () => {
+    if (!otpCode.trim()) {
+      showToast("info", t("Ingresa el codigo OTP.", "Enter OTP code."))
+      return
+    }
+
+    setVerifyingOtp(true)
+    try {
+      await verifyShiftPhoneOtp({ code: otpCode, phone: otpPhone.trim() || null })
+      setShiftOtpReady(true)
+      setOtpVerifiedAt(new Date().toISOString())
+      setOtpCode("")
+      showToast("success", t("Telefono verificado. Ya puedes operar turnos.", "Phone verified. You can now operate shifts."))
+    } catch (error: unknown) {
+      setShiftOtpReady(false)
+      showToast("error", extractErrorMessage(error, t("No se pudo verificar OTP.", "Could not verify OTP.")))
+    } finally {
+      setVerifyingOtp(false)
+    }
+  }
+
+  const handleResetShiftOtp = () => {
+    clearShiftOtpToken()
+    setShiftOtpReady(false)
+    setOtpVerifiedAt(null)
+    setOtpCode("")
+    showToast("info", t("Verificacion OTP reiniciada para este dispositivo/sesion.", "OTP verification reset for this device/session."))
   }
 
   const handleStart = async () => {
@@ -1104,6 +1170,55 @@ export default function ShiftsPage() {
               title={t("Accion principal", "Main action")}
               subtitle={activeShift ? t("Finalizar turno activo", "End active shift") : t("Iniciar nuevo turno", "Start new shift")}
             >
+              <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={shiftOtpReady ? "success" : "warning"}>
+                    {shiftOtpReady ? t("OTP verificado", "OTP verified") : t("OTP pendiente", "OTP pending")}
+                  </Badge>
+                  {otpVerifiedAt && (
+                    <span className="text-xs text-slate-600">
+                      {t("Validado", "Verified")}: {formatDateTime(otpVerifiedAt)}
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-2 text-xs text-slate-700">
+                  {t(
+                    "Debes completar OTP de telefono para iniciar/finalizar turno en este dispositivo.",
+                    "Phone OTP must be completed to start/end shift on this device."
+                  )}
+                </p>
+
+                <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">
+                  <input
+                    value={otpPhone}
+                    onChange={event => setOtpPhone(event.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder={t("Telefono (opcional si backend lo requiere)", "Phone (optional if backend requires it)")}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
+                      {sendingOtp ? t("Enviando OTP...", "Sending OTP...") : t("Enviar OTP", "Send OTP")}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
+                      {t("Reiniciar OTP", "Reset OTP")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">
+                  <input
+                    value={otpCode}
+                    onChange={event => setOtpCode(event.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder={t("Codigo OTP", "OTP code")}
+                  />
+                  <Button size="sm" variant="primary" onClick={() => void handleVerifyShiftOtp()} disabled={verifyingOtp}>
+                    {verifyingOtp ? t("Verificando...", "Verifying...") : t("Verificar OTP", "Verify OTP")}
+                  </Button>
+                </div>
+              </div>
+
               {!activeShift ? (
                 <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                   <p className="font-semibold text-slate-800">{t("Checklist de validacion de inicio", "Start validation checklist")}</p>

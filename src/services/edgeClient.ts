@@ -16,6 +16,7 @@ type EdgeInvokeOptions = {
   body?: Record<string, unknown> | string | Blob | ArrayBuffer | FormData
   idempotencyKey?: string
   accessToken?: string
+  extraHeaders?: Record<string, string>
 }
 
 function toError(message: string, status?: number, code?: string, requestId?: string) {
@@ -35,8 +36,22 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
     headers["Idempotency-Key"] = options.idempotencyKey
   }
 
-  if (options.accessToken) {
-    headers.Authorization = `Bearer ${options.accessToken}`
+  let token = options.accessToken
+  if (!token) {
+    const { data } = await supabase.auth.getSession()
+    token = data.session?.access_token ?? undefined
+  }
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  if (options.extraHeaders) {
+    for (const [key, value] of Object.entries(options.extraHeaders)) {
+      if (typeof value === "string" && value.trim().length > 0) {
+        headers[key] = value
+      }
+    }
   }
 
   const { data, error } = await supabase.functions.invoke(fn, {
