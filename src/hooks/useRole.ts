@@ -37,6 +37,7 @@ export function useRole() {
 
   useEffect(() => {
     let mounted = true
+    let roleChannel: ReturnType<typeof supabase.channel> | null = null
 
     const loadRoleFromProfile = async () => {
       if (!user?.id) {
@@ -47,21 +48,46 @@ export function useRole() {
 
       setLoadingRole(true)
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .maybeSingle()
 
       if (!mounted) return
-      setProfileRole(normalizeRole(data?.role) ?? null)
+      if (!error) {
+        setProfileRole(normalizeRole(data?.role) ?? null)
+      } else {
+        setProfileRole(null)
+      }
       setLoadingRole(false)
+
+      roleChannel = supabase
+        .channel(`role-profile-${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${user.id}`,
+          },
+          payload => {
+            if (!mounted) return
+            const nextRole = normalizeRole((payload.new as { role?: unknown } | null)?.role)
+            setProfileRole(nextRole ?? null)
+          }
+        )
+        .subscribe()
     }
 
     void loadRoleFromProfile()
 
     return () => {
       mounted = false
+      if (roleChannel) {
+        void supabase.removeChannel(roleChannel)
+      }
     }
   }, [user?.id])
 
