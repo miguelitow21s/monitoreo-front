@@ -218,10 +218,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-3 sm:px-4">
       <form
         onSubmit={handleLogin}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
       >
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -283,8 +283,8 @@ export default function LoginPage() {
             </label>
           </div>
 
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] text-slate-500">
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="min-w-0 break-words text-[11px] leading-4 text-slate-500">
               {loadingLegalStatus
                 ? t("Cargando terminos legales...", "Loading legal terms...")
                 : legalStatus?.active_term
@@ -296,7 +296,7 @@ export default function LoginPage() {
             </p>
             <button
               type="button"
-              className="text-[11px] font-semibold text-slate-700 underline"
+              className="self-start text-[11px] font-semibold text-slate-700 underline sm:self-auto"
               onClick={() => setShowLegalContent(prev => !prev)}
             >
               {showLegalContent ? t("Ocultar terminos", "Hide terms") : t("Ver terminos", "View terms")}
@@ -334,7 +334,7 @@ export default function LoginPage() {
           )}
         </div>
 
-        {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+        {error && <div className="mt-3 break-words text-sm text-red-600">{error}</div>}
 
         <button
           type="submit"

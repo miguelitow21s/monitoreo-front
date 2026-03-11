@@ -55,6 +55,20 @@ const STATUS_OPTIONS = [
   { value: "rejected", es: "Rechazado", en: "Rejected" },
 ]
 
+const COLUMN_LABELS: Record<ReportColumnKey, { es: string; en: string }> = {
+  shift_id: { es: "Turno", en: "Shift" },
+  restaurant_id: { es: "Restaurante", en: "Restaurant" },
+  employee_id: { es: "Empleado", en: "Employee" },
+  supervisor_id: { es: "Supervisora", en: "Supervisor" },
+  start_time: { es: "Inicio", en: "Start" },
+  end_time: { es: "Fin", en: "End" },
+  status: { es: "Estado", en: "Status" },
+  duration: { es: "Duracion", en: "Duration" },
+  incidents: { es: "Novedades", en: "Incidents" },
+  start_evidence: { es: "Evidencia inicial", en: "Start evidence" },
+  end_evidence: { es: "Evidencia final", en: "End evidence" },
+}
+
 export default function ReportsPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { formatDateTime, language, t } = useI18n()
@@ -96,10 +110,19 @@ export default function ReportsPage() {
     [restaurants]
   )
 
+  const localizedColumnOptions = useMemo(
+    () =>
+      REPORT_COLUMN_OPTIONS.map(item => ({
+        ...item,
+        label: language === "en" ? COLUMN_LABELS[item.key].en : COLUMN_LABELS[item.key].es,
+      })),
+    [language]
+  )
+
   const visibleColumns = useMemo(() => {
     const selectedSet = new Set(selectedColumns)
-    return REPORT_COLUMN_OPTIONS.filter(item => selectedSet.has(item.key))
-  }, [selectedColumns])
+    return localizedColumnOptions.filter(item => selectedSet.has(item.key))
+  }, [localizedColumnOptions, selectedColumns])
 
   const loadCatalogs = useCallback(async () => {
     try {
@@ -229,8 +252,10 @@ export default function ReportsPage() {
       employee_id: getDisplayValue(item, "employee_id"),
       supervisor_id: getDisplayValue(item, "supervisor_id"),
     }))
-    exportReportCsv(exportRows, selectedColumns)
-  }, [getDisplayValue, rows, selectedColumns])
+    exportReportCsv(exportRows, selectedColumns, key =>
+      language === "en" ? COLUMN_LABELS[key].en : COLUMN_LABELS[key].es
+    )
+  }, [getDisplayValue, language, rows, selectedColumns])
 
   const exportPdf = () => {
     window.print()
@@ -370,7 +395,7 @@ export default function ReportsPage() {
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-medium text-slate-700">{t("Campos incluidos", "Included fields")}</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {REPORT_COLUMN_OPTIONS.map(item => (
+                {localizedColumnOptions.map(item => (
                   <label key={item.key} className="flex items-center gap-2 text-sm text-slate-700">
                     <input
                       type="checkbox"
@@ -382,13 +407,13 @@ export default function ReportsPage() {
                 ))}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="ghost" onClick={handleExportCsv}>
+                <Button variant="ghost" onClick={handleExportCsv} className="sm:w-auto">
                   {t("Exportar Excel (CSV)", "Export Excel (CSV)")}
                 </Button>
-                <Button variant="primary" onClick={exportPdf}>
+                <Button variant="primary" onClick={exportPdf} className="sm:w-auto">
                   {t("Exportar PDF", "Export PDF")}
                 </Button>
-                <Button variant="secondary" onClick={() => void handleGenerateBackend()} disabled={generatingBackend}>
+                <Button variant="secondary" onClick={() => void handleGenerateBackend()} disabled={generatingBackend} className="sm:w-auto">
                   {generatingBackend ? t("Generando...", "Generating...") : t("Generar en backend", "Generate in backend")}
                 </Button>
               </div>

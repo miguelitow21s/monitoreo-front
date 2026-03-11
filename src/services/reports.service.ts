@@ -298,9 +298,15 @@ export async function resolveReportReadonlyUrl(path: string | null | undefined, 
   return null
 }
 
-export function exportReportCsv(rows: ReportRow[], selectedColumns: ReportColumnKey[]) {
+export function exportReportCsv(
+  rows: ReportRow[],
+  selectedColumns: ReportColumnKey[],
+  getColumnLabel?: (column: ReportColumnKey) => string
+) {
   const columns = selectedColumns.length > 0 ? selectedColumns : DEFAULT_REPORT_COLUMNS
-  const header = columns.map(column => REPORT_COLUMN_OPTIONS.find(item => item.key === column)?.label ?? column)
+  const header = columns.map(
+    column => getColumnLabel?.(column) ?? REPORT_COLUMN_OPTIONS.find(item => item.key === column)?.label ?? column
+  )
   const lines = rows.map(row => columns.map(column => getReportColumnValue(row, column)))
   const csv = [header, ...lines]
     .map(line => line.map(value => `"${String(value).replaceAll('"', '""')}"`).join(","))

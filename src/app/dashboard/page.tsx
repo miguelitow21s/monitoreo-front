@@ -93,6 +93,35 @@ export default function DashboardPage() {
     }
   }, [showToast, t])
 
+  const localizedMetrics = useMemo(
+    () =>
+      metrics.map(metric => {
+        const labelMap: Record<string, { es: string; en: string }> = {
+          "Active shifts": { es: "Turnos activos", en: "Active shifts" },
+          Compliance: { es: "Cumplimiento", en: "Compliance" },
+          Incidents: { es: "Novedades", en: "Incidents" },
+          "Avg shift duration": { es: "Duracion promedio", en: "Avg shift duration" },
+          "Estimated supply cost": { es: "Costo estimado insumos", en: "Estimated supply cost" },
+          "Monitored sites": { es: "Sitios monitoreados", en: "Monitored sites" },
+        }
+        const trendMap: Record<string, { es: string; en: string }> = {
+          "Real-time updates": { es: "Actualizacion en tiempo real", en: "Real-time updates" },
+          "Closed shifts vs total": { es: "Turnos cerrados vs total", en: "Closed shifts vs total" },
+          "Accumulated operational reports": { es: "Reportes operativos acumulados", en: "Accumulated operational reports" },
+          "Productivity baseline": { es: "Linea base de productividad", en: "Productivity baseline" },
+          "Deliveries x unit cost": { es: "Entregas x costo unitario", en: "Deliveries x unit cost" },
+          "Total registered coverage": { es: "Cobertura total registrada", en: "Total registered coverage" },
+        }
+
+        return {
+          ...metric,
+          label: labelMap[metric.label] ? t(labelMap[metric.label].es, labelMap[metric.label].en) : metric.label,
+          trend: trendMap[metric.trend] ? t(trendMap[metric.trend].es, trendMap[metric.trend].en) : metric.trend,
+        }
+      }),
+    [metrics, t]
+  )
+
   return (
     <ProtectedRoute>
       <section className="space-y-5">
@@ -116,7 +145,7 @@ export default function DashboardPage() {
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {metrics.map(metric => (
+              {localizedMetrics.map(metric => (
                 <Card
                   key={metric.label}
                   title={metric.label}
