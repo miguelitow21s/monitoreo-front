@@ -218,10 +218,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-3 sm:px-4">
+    <div className="flex min-h-screen items-start justify-center bg-slate-100 px-3 pb-6 pt-6 sm:items-center sm:px-4">
       <form
         onSubmit={handleLogin}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7"
       >
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -230,7 +230,7 @@ export default function LoginPage() {
           <LanguageSwitch />
         </div>
 
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">{t("Iniciar sesion", "Sign in")}</h1>
+        <h1 className="mt-2 text-xl font-bold text-slate-900 sm:text-2xl">{t("Iniciar sesion", "Sign in")}</h1>
         <p className="mt-2 text-sm text-slate-600">
           {t("Ingresa tus credenciales para continuar.", "Enter your credentials to continue.")}
         </p>
@@ -263,7 +263,7 @@ export default function LoginPage() {
           />
         </div>
 
-        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 sm:p-3">
           <div className="flex items-start gap-2">
             <input
               id="accept-data-treatment"
@@ -275,7 +275,7 @@ export default function LoginPage() {
               }}
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900"
             />
-            <label htmlFor="accept-data-treatment" className="leading-5">
+            <label htmlFor="accept-data-treatment" className="leading-5 break-words text-[11px] sm:text-xs">
               {t(
                 "Autorizo el tratamiento de mis datos personales para control operativo y fines de auditoria legal.",
                 "I authorize personal data processing for operational control and legal audit purposes."
@@ -284,7 +284,7 @@ export default function LoginPage() {
           </div>
 
           <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="min-w-0 break-words text-[11px] leading-4 text-slate-500">
+            <p className="min-w-0 break-words text-[10px] leading-4 text-slate-500 sm:text-[11px]">
               {loadingLegalStatus
                 ? t("Cargando terminos legales...", "Loading legal terms...")
                 : legalStatus?.active_term
@@ -296,7 +296,7 @@ export default function LoginPage() {
             </p>
             <button
               type="button"
-              className="self-start text-[11px] font-semibold text-slate-700 underline sm:self-auto"
+              className="self-start text-[10px] font-semibold text-slate-700 underline sm:self-auto sm:text-[11px]"
               onClick={() => setShowLegalContent(prev => !prev)}
             >
               {showLegalContent ? t("Ocultar terminos", "Hide terms") : t("Ver terminos", "View terms")}
@@ -304,7 +304,7 @@ export default function LoginPage() {
           </div>
 
           {showLegalContent && (
-            <div className="mt-2 max-h-64 space-y-2 overflow-auto rounded border border-slate-200 bg-white p-3 text-[11px] text-slate-600">
+            <div className="mt-2 max-h-52 space-y-2 overflow-auto rounded border border-slate-200 bg-white p-2.5 text-[10px] text-slate-600 sm:max-h-64 sm:p-3 sm:text-[11px]">
               {legalStatus?.active_term ? (
                 <p>
                   <span className="font-semibold">{t("Codigo", "Code")}:</span> {legalStatus.active_term.code ?? "-"} |{" "}
