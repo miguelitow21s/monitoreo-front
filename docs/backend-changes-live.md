@@ -34,6 +34,52 @@ It will be updated incrementally on each new change.
 - Frontend includes compatibility fallback for `restaurants.is_active` missing column in list queries.
 - Full functionality (restaurant activation and cost metrics) requires backend to apply the migration.
 
+## Backend Validation Checklist (End-to-End Sign-off)
+Use this checklist so backend can validate the complete flow in one pass, including shift access and operational controls.
+
+### A) Access and roles (critical)
+- Validate role access to `/shifts` and related data:
+  - `empleado`: can start/end own shift, view own history and assigned schedule.
+  - `supervisora`: can view active shifts, register supervisor presence, create incidents/tasks, supervise scheduled shifts.
+  - `super_admin`: full visibility and control across modules.
+- Confirm RLS/policies prevent cross-user data leaks (employee should not read/write other employees' shifts/tasks/evidence).
+
+### B) Shift integrity and attendance hardening
+- Confirm backend remains authoritative for attendance timestamp (`server time`) on start/end operations.
+- Validate geofence enforcement server-side against assigned restaurant coordinates/radius.
+- Validate anti-spoof controls server-side (mocked/suspicious GPS and low-quality location handling policy).
+- Ensure single active shift per employee is enforced (`no overlapping active shift`).
+
+### C) Evidence and storage
+- Validate start/end shift evidence upload + finalize flow (`evidence_upload` and storage object path integrity).
+- Validate task evidence closure flow (triple evidence manifest for close/mid/wide shots).
+- Validate supervisor presence evidence flow and signed URL read access rules.
+
+### D) Scheduling and supervision flows
+- Validate `scheduled_shifts` contracts used by frontend:
+  - assign single shift
+  - assign bulk shifts
+  - reprogram shift
+  - cancel shift
+- Confirm status transitions are consistent (`scheduled`, `cancelled`, etc.) and auditable.
+
+### E) Reports and audits
+- Validate report queries across `shifts`, `shift_incidents`, and `scheduled_shifts` include:
+  - filters by period, restaurant, employee, supervisor, status
+  - evidence path resolution for signed read-only links
+- Validate report history retrieval from `reports` table (`generated_at`, `generado_por`, `filtros_json`, `file_path`, `hash_documento`).
+
+### F) Supplies and operational expenses
+- Validate `supplies.unit_cost` availability and non-negative constraint (`>= 0`).
+- Validate `supply_deliveries` consumption by period and restaurant (`quantity`, `delivered_at`).
+- Validate operational expense reports (restaurant/period aggregation) used by frontend CSV/PDF outputs.
+
+### G) Pending DB actions to unlock full production behavior
+- Apply `sql/08_release_readiness.sql` (pending approval):
+  - `restaurants.is_active`
+  - `supplies.unit_cost` + constraint
+- Re-run smoke test after migration on: restaurants activation, supplies costs, dashboard cost metrics, supplies analytics.
+
 ## Update Log
 - 2026-03-10: File initialized and first two backend change requests documented.
 - 2026-03-10: Frontend added scheduled shift controls (bulk scheduling, cancel, reschedule) for Super Admin and Supervision panel.
