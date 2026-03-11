@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #eef2f7;
+  --background: #f3f6fb;
   --foreground: #0b1220;
   --card: #ffffff;
   --card-foreground: #0b1220;
-  --border: #d6deea;
+  --border: #d9e2ee;
   --primary: #0b1220;
-  --primary-hover: #1a2438;
+  --primary-hover: #1e293b;
   --muted: #5f6c83;
-  --radius: 0.9rem;
+  --radius: 0.85rem;
 }
 
 html,
@@ -20,12 +20,14 @@ body {
 
 body {
   background:
-    radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.09), transparent 36%),
-    radial-gradient(circle at 85% 0%, rgba(30, 64, 175, 0.08), transparent 38%),
+    radial-gradient(circle at 10% 10%, rgba(14, 165, 233, 0.06), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(59, 130, 246, 0.06), transparent 35%),
     var(--background);
   color: var(--foreground);
-  font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Manrope", "DM Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  line-height: 1.45;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
 }
@@ -55,9 +57,7 @@ h3 {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem;
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.05),
-    0 10px 25px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
 .btn {
@@ -65,11 +65,11 @@ h3 {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.625rem;
+  border-radius: 0.75rem;
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
-  transition: all 0.2s ease;
+  transition: all 0.16s ease;
 }
 
 .btn-primary {
@@ -88,36 +88,59 @@ h3 {
 }
 
 .btn-secondary:hover {
-  background-color: #f8fafc;
+  background-color: #f1f5f9;
 }
 
 .input {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 0.625rem;
+  border-radius: 0.75rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   background-color: #fff;
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.16s ease;
 }
 
 .input:focus {
   border-color: #1e40af;
-  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.15);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
 }
 
 input,
 textarea,
 select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background-color: #fff;
+  color: #0f172a;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
   caret-color: #0f172a;
+}
+
+textarea {
+  min-height: 5.5rem;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: #2563eb !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
   outline: none;
+}
+
+@media (max-width: 640px) {
+  body {
+    background: var(--background);
+  }
 }

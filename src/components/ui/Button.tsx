@@ -14,11 +14,11 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-slate-900 text-white hover:bg-slate-700 border border-slate-900 shadow-[0_6px_14px_rgba(15,23,42,0.2)] hover:shadow-[0_8px_18px_rgba(15,23,42,0.25)]",
-  secondary: "bg-white text-slate-700 hover:bg-slate-100 border border-slate-300",
-  ghost: "bg-transparent text-slate-700 hover:bg-slate-100 border border-transparent",
+    "border border-slate-900 bg-slate-900 text-white hover:bg-slate-800",
+  secondary: "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+  ghost: "border border-transparent bg-transparent text-slate-700 hover:bg-slate-100",
   danger:
-    "bg-red-600 text-white hover:bg-red-500 border border-red-600 shadow-[0_6px_14px_rgba(220,38,38,0.2)]",
+    "border border-red-600 bg-red-600 text-white hover:bg-red-500",
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -41,7 +41,7 @@ export default function Button({
     <button
       type={type}
       className={[
-        "inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-transform duration-150 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors duration-150 active:translate-y-[1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/35 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
         variantClasses[variant],
         sizeClasses[size],
         fullWidth ? "w-full" : "",

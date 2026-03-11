@@ -453,7 +453,7 @@ export default function SuppliesPage() {
   return (
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]}>
-        <div className="space-y-4">
+        <div className="space-y-5">
           <h1 className="text-2xl font-bold text-slate-900">{t("Insumos", "Supplies")}</h1>
 
           {loading || authLoading ? (
@@ -461,7 +461,7 @@ export default function SuppliesPage() {
           ) : (
             <>
               <Card title={t("Crear insumo", "Create supply")} subtitle={t("Datos basicos del inventario.", "Basic inventory data.")}>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   <input
                     value={supplyName}
                     onChange={event => setSupplyName(event.target.value)}
@@ -491,7 +491,7 @@ export default function SuppliesPage() {
               </Card>
 
               <Card title={t("Registrar entrega", "Register delivery")} subtitle={t("Asocia la cantidad entregada a un restaurante.", "Associate delivered quantity to a restaurant.")}>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   <select
                     value={deliverySupplyId}
                     onChange={event => setDeliverySupplyId(event.target.value)}
@@ -536,7 +536,7 @@ export default function SuppliesPage() {
                 title={t("Control de gastos operativos", "Operational expense control")}
                 subtitle={t("Filtra por restaurante y periodo para revisar consumo y gastos.", "Filter by restaurant and period to review consumption and expenses.")}
               >
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   <input
                     type="date"
                     value={periodFrom}
@@ -564,8 +564,10 @@ export default function SuppliesPage() {
                   <Button variant="secondary" onClick={() => void loadAnalytics()}>
                     {t("Actualizar", "Refresh")}
                   </Button>
-                  <Button onClick={handleExportOperationalReport}>{t("Exportar gastos CSV", "Export expense CSV")}</Button>
-                  <Button variant="ghost" onClick={handleExportOperationalReportPdf}>{t("Exportar PDF", "Export PDF")}</Button>
+                  <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-3 xl:col-span-2">
+                    <Button onClick={handleExportOperationalReport}>{t("Exportar gastos CSV", "Export expense CSV")}</Button>
+                    <Button variant="ghost" onClick={handleExportOperationalReportPdf}>{t("Exportar PDF", "Export PDF")}</Button>
+                  </div>
                 </div>
                 <p className="mt-3 text-sm text-slate-600">
                   {t("Gasto total estimado del periodo", "Estimated total expense in period")}: ${totalExpenseInPeriod.toFixed(2)}
@@ -581,7 +583,7 @@ export default function SuppliesPage() {
                 ) : expenseByRestaurant.length === 0 ? (
                   <p className="text-sm text-slate-500">{t("Sin datos para el periodo seleccionado.", "No data for selected period.")}</p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
                     <table className="min-w-full text-sm">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -617,7 +619,7 @@ export default function SuppliesPage() {
                 ) : historicalConsumption.length === 0 ? (
                   <p className="text-sm text-slate-500">{t("Aun no hay consumo registrado para analizar.", "No registered consumption yet.")}</p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
                     <table className="min-w-full text-sm">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -689,7 +691,7 @@ export default function SuppliesPage() {
                       ))}
                     </div>
 
-                    <div className="hidden overflow-x-auto md:block">
+                    <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
                       <table className="min-w-full text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 text-left text-slate-500">

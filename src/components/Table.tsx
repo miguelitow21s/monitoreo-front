@@ -19,14 +19,14 @@ export default function Table<T extends Record<string, unknown>>({
   const { t } = useI18n()
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full rounded bg-white shadow">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <table className="min-w-full text-sm">
         <thead>
-          <tr>
+          <tr className="border-b border-slate-200 bg-slate-50/80">
             {columns.map(col => (
               <th
                 key={String(col.key)}
-                className="bg-gray-100 px-4 py-2 text-left text-sm font-semibold"
+                className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
               >
                 {col.label}
               </th>
@@ -39,7 +39,7 @@ export default function Table<T extends Record<string, unknown>>({
             <tr>
               <td
                 colSpan={columns.length}
-                className="px-4 py-6 text-center text-sm text-gray-500"
+                className="px-4 py-8 text-center text-sm text-slate-500"
               >
                 {t("No hay datos para mostrar", "No data to display")}
               </td>
@@ -47,11 +47,11 @@ export default function Table<T extends Record<string, unknown>>({
           )}
 
           {data.map((row, idx) => (
-            <tr key={idx} className="border-b last:border-0">
+            <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
               {columns.map(col => (
                 <td
                   key={String(col.key)}
-                  className="px-4 py-2 text-sm"
+                  className="px-4 py-2.5 text-sm text-slate-700"
                 >
                   {String(row[col.key] ?? "")}
                 </td>

@@ -24,22 +24,22 @@ export default function Card({
   return (
     <article
       className={[
-        "rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_14px_32px_rgba(15,23,42,0.06)] backdrop-blur sm:p-5",
+        "rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5",
         className ?? "",
       ].join(" ")}
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</p>
 
       {variant === "stat" && (
         <>
-          <p className="mt-2 text-3xl font-bold text-slate-900">{value ?? "-"}</p>
-          {trend && <p className="mt-2 text-xs text-emerald-600">{trend}</p>}
+          <p className="mt-2 text-2xl font-bold text-slate-900 sm:text-3xl">{value ?? "-"}</p>
+          {trend && <p className="mt-2 text-xs text-slate-500">{trend}</p>}
         </>
       )}
 
       {variant === "content" && (
         <>
-          {subtitle && <p className="mt-2 text-sm text-slate-600">{subtitle}</p>}
+          {subtitle && <p className="mt-2 text-sm text-slate-500">{subtitle}</p>}
           {children}
         </>
       )}

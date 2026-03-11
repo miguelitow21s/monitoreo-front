@@ -134,7 +134,7 @@ export default function Sidebar({
       />
 
       <aside
-        className={`fixed left-0 top-0 z-50 h-screen w-72 transform border-r border-slate-200/90 bg-white/95 backdrop-blur transition-all duration-300 md:top-16 md:z-40 md:h-[calc(100vh-4rem)] md:translate-x-0 ${desktopWidth} ${mobileTranslate}`}
+        className={`fixed left-0 top-0 z-50 h-screen w-72 transform border-r border-slate-200 bg-white transition-all duration-300 md:top-16 md:z-40 md:h-[calc(100vh-4rem)] md:translate-x-0 ${desktopWidth} ${mobileTranslate}`}
       >
         <div className="flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 md:hidden">
@@ -150,7 +150,7 @@ export default function Sidebar({
           <div className="hidden px-3 py-3 md:block">
             <button
               onClick={() => onToggle(v => !v)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-100"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-50"
             >
               {collapsed ? t("Expandir", "Expand") : t("Contraer", "Collapse")}
             </button>
@@ -174,17 +174,17 @@ export default function Sidebar({
                     onClick={onCloseMobile}
                     className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${compact} ${
                       active
-                        ? "bg-slate-900 text-white shadow-md shadow-slate-900/25"
-                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                        ? "border border-blue-200 bg-blue-50 text-blue-900"
+                        : "border border-transparent text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                     }`}
                   >
                     <span
                       className={`absolute bottom-1 top-1 left-0 w-1 rounded-r-full transition ${
-                        active ? "bg-cyan-300" : "bg-transparent group-hover:bg-slate-300"
+                        active ? "bg-blue-500" : "bg-transparent group-hover:bg-slate-300"
                       }`}
                       aria-hidden="true"
                     />
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-current/20">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-current/15 bg-white/70">
                       <Icon name={item.key} />
                     </span>
                     <span className={collapsed ? "md:hidden" : ""}>{item.label}</span>

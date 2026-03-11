@@ -988,11 +988,11 @@ export default function ShiftsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="space-y-6">
+      <div className="space-y-5">
         <Card title={t("Turnos", "Shifts")} subtitle={t("Operacion de empleado y supervision en un solo modulo.", "Employee operation and supervision in one module.")} />
 
         {canOperateEmployee && (
-          <section className="space-y-4">
+          <section className="space-y-5">
             <h2 className="text-lg font-semibold text-slate-900">{t("Operacion de empleado", "Employee operations")}</h2>
 
             {loadingData ? (
@@ -1030,7 +1030,7 @@ export default function ShiftsPage() {
               </div>
             )}
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 xl:grid-cols-2">
               <Card
                 title={t("Restaurante y horario asignados", "Assigned restaurant and schedule")}
                 subtitle={t("Verifica tu ubicacion y horario asignado.", "Check your assigned location and schedule.")}
@@ -1110,14 +1110,14 @@ export default function ShiftsPage() {
                   <div className="mt-2 space-y-2">
                     <div>
                       <p className="text-xs text-slate-600">{t("Tienes EPP completo para este turno?", "Do you have complete PPE for this shift?")}</p>
-                      <div className="mt-1 flex gap-4">
+                      <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:gap-4">
                         <label className="flex items-center gap-2"><input type="radio" name="start-ppe" checked={startPpeReady === true} onChange={() => setStartPpeReady(true)} />{t("Si", "Yes")}</label>
                         <label className="flex items-center gap-2"><input type="radio" name="start-ppe" checked={startPpeReady === false} onChange={() => setStartPpeReady(false)} />{t("No", "No")}</label>
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-slate-600">{t("Estas libre de sintomas que impidan trabajo seguro?", "Are you free of symptoms that prevent safe work?")}</p>
-                      <div className="mt-1 flex gap-4">
+                      <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:gap-4">
                         <label className="flex items-center gap-2"><input type="radio" name="start-symptoms" checked={startNoSymptoms === true} onChange={() => setStartNoSymptoms(true)} />{t("Si", "Yes")}</label>
                         <label className="flex items-center gap-2"><input type="radio" name="start-symptoms" checked={startNoSymptoms === false} onChange={() => setStartNoSymptoms(false)} />{t("No", "No")}</label>
                       </div>
@@ -1152,7 +1152,7 @@ export default function ShiftsPage() {
                     ? t("Finalizaste el turno en buenas condiciones?", "Did you finish the shift in good condition?")
                     : t("Estas iniciando en buenas condiciones?", "Are you starting in good condition?")}
                 </p>
-                <div className="mt-2 flex gap-4">
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:gap-4">
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
@@ -1275,7 +1275,7 @@ export default function ShiftsPage() {
                         <p className="mt-1 text-xs text-slate-500">
                           {t("Prioridad", "Priority")}: {task.priority} | {t("Estado", "Status")}: {task.status} | {t("Creada", "Created")}: {formatDateTime(task.created_at)}
                         </p>
-                        <div className="mt-2 flex gap-2">
+                        <div className="mt-2 flex flex-wrap gap-2">
                           {task.status === "pending" && (
                             <Button size="sm" variant="secondary" onClick={() => void handleSetTaskInProgress(task.id)}>
                               {t("Iniciar tarea", "Start task")}
@@ -1402,7 +1402,7 @@ export default function ShiftsPage() {
                 />
               ) : (
                 <>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
                     <table className="min-w-full border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -1475,7 +1475,7 @@ export default function ShiftsPage() {
         )}
 
         {canOperateSupervisor && (
-          <section className="space-y-4">
+          <section className="space-y-5">
             <h2 className="text-lg font-semibold text-slate-900">{t("Panel de supervision", "Supervision panel")}</h2>
 
             {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (

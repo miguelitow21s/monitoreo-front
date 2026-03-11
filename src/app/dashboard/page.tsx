@@ -95,7 +95,7 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <section className="space-y-4">
+      <section className="space-y-5">
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{t("Panel operativo", "Operations dashboard")}</h1>
           <p className="mt-1 text-sm text-slate-600">{roleSummary}</p>
@@ -103,7 +103,7 @@ export default function DashboardPage() {
 
         {loading || authLoading || loadingData ? (
           <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-28" />
               ))}
@@ -165,11 +165,11 @@ export default function DashboardPage() {
                     {runningChecks ? t("Ejecutando...", "Running...") : t("Ejecutar validaciones", "Run validations")}
                   </Button>
                   {checkResults.length > 0 && (
-                  <span className="text-xs text-slate-500">
+                    <span className="text-xs text-slate-500">
                       {t("Ultima ejecucion", "Last run")}: {formatDateTime(new Date())}
-                  </span>
-                )}
-              </div>
+                    </span>
+                  )}
+                </div>
 
                 {checkResults.length > 0 && (
                   <ul className="mt-4 space-y-2 text-sm">
@@ -208,10 +208,10 @@ export default function DashboardPage() {
               <Card title={t("Linea de tiempo de auditoria", "Audit timeline")} subtitle={t("Ultimos eventos operativos.", "Latest operational events.")}>
                 <ul className="space-y-2 text-sm text-slate-700">
                   {auditEvents.map(item => (
-                    <li key={item.id} className="rounded-lg border border-slate-200 p-2">
+                      <li key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5">
                         <p className="font-medium">{item.action}</p>
                         <p className="text-xs text-slate-500">
-                        {formatDateTime(item.created_at)} | {t("Actor", "Actor")}: {item.actor_id ?? t("sistema", "system")}
+                          {formatDateTime(item.created_at)} | {t("Actor", "Actor")}: {item.actor_id ?? t("sistema", "system")}
                         </p>
                       </li>
                   ))}
@@ -220,7 +220,7 @@ export default function DashboardPage() {
             )}
 
             {isEmpleado && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                 {t("Revisa tus turnos activos y finalizalos con evidencia de salida.", "Review your active shifts and close them with exit evidence.")}
               </div>
             )}

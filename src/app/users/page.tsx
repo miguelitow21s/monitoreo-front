@@ -338,7 +338,7 @@ export default function UsersPage() {
               </Card>
 
               <Card title={t("Programar turno", "Schedule shift")} subtitle={t("Fecha, hora y restaurante.", "Date, time, and restaurant.")}>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   <select
                     value={scheduleEmployeeId}
                     onChange={event => setScheduleEmployeeId(event.target.value)}
@@ -392,7 +392,7 @@ export default function UsersPage() {
                   className="mt-2 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
                 />
 
-                <div className="mt-3 rounded-md border border-slate-200 p-3">
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
                   <p className="text-xs text-slate-500">{t("Agrega varios bloques para distintos dias u horas.", "Add multiple blocks for different days or hours.")}</p>
 
@@ -436,13 +436,13 @@ export default function UsersPage() {
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       {t("Turnos programados recientes", "Recent scheduled shifts")}
                     </p>
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {scheduled.slice(0, 12).map(item => {
                         const employee = usersById.get(item.employee_id)
                         const restaurant = restaurantsById.get(String(item.restaurant_id))
                         const editing = editingScheduledId === item.id
                         return (
-                          <div key={item.id} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
+                          <div key={item.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
                             <p className="font-medium text-slate-800">
                               {employee?.full_name ?? employee?.email ?? item.employee_id} - {restaurant?.name ?? `#${item.restaurant_id}`}
                             </p>

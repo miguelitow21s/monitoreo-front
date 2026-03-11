@@ -943,7 +943,7 @@ export default function RestaurantsPage() {
   return (
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
-        <div className="space-y-4">
+        <div className="space-y-5">
           <h1 className="text-2xl font-bold text-slate-900">{t("Restaurantes", "Restaurants")}</h1>
 
           {loading || authLoading ? (
@@ -951,7 +951,7 @@ export default function RestaurantsPage() {
           ) : (
             <>
               <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Completa direccion, radio y guarda.", "Complete address, radius, and save.")}>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     placeholder={t("Nombre", "Name")}
@@ -1093,7 +1093,7 @@ export default function RestaurantsPage() {
               </Card>
 
               <Card title={t("Asignaciones", "Assignments")} subtitle={t("Asigna empleados o supervisoras por restaurante.", "Assign employees or supervisors by restaurant.")}>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={assignRoleFilter}
@@ -1131,7 +1131,7 @@ export default function RestaurantsPage() {
                       </option>
                       ))}
                   </select>
-                  <Button variant="secondary" onClick={handleAssign}>
+                  <Button variant="secondary" onClick={handleAssign} className="sm:col-span-2 lg:col-span-1">
                     {t("Asignar", "Assign")}
                   </Button>
                 </div>
@@ -1148,7 +1148,7 @@ export default function RestaurantsPage() {
                 ) : (
                   <div className="space-y-3">
                     {rows.map(item => (
-                      <div key={item.id} className="rounded-lg border border-slate-200 p-3">
+                      <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
                             <p className="font-semibold text-slate-900">{item.name}</p>

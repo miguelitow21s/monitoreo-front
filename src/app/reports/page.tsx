@@ -283,14 +283,14 @@ export default function ReportsPage() {
   return (
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
-        <div className="space-y-4">
+        <div className="space-y-5">
           <h1 className="text-2xl font-bold text-slate-900">{t("Reportes", "Reports")}</h1>
 
           <Card
             title={t("Filtros del reporte", "Report filters")}
             subtitle={t("Selecciona periodo y aplica.", "Choose period and apply.")}
           >
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               <input
                 type="date"
                 value={fromDate}
@@ -350,7 +350,7 @@ export default function ReportsPage() {
                   </option>
                 ))}
               </select>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={() => void loadReport()}>
                   {t("Aplicar", "Apply")}
                 </Button>
@@ -360,7 +360,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
               <span>{t("Max filas", "Max rows")}: {reportLimit}</span>
               <Button size="sm" variant="ghost" onClick={() => setReportLimit(prev => Math.min(prev + 500, 5000))}>
                 {t("Cargar mas filas", "Load more rows")}
@@ -396,11 +396,11 @@ export default function ReportsPage() {
           </Card>
 
           <Card title={t("Resumen", "Summary")} subtitle={t("Indicadores del filtro actual.", "Indicators for current filter.")}>
-            <div className="mt-3 grid gap-2 md:grid-cols-4">
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">{t("Turnos totales", "Total shifts")}: {rows.length}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">{t("Finalizados", "Completed")}: {totalCompleted}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">{t("Activos", "Active")}: {totalActive}</div>
-              <div className="rounded-lg border border-slate-200 p-3 text-sm">{t("Novedades", "Incidents")}: {totalIncidents}</div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Turnos totales", "Total shifts")}: {rows.length}</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Finalizados", "Completed")}: {totalCompleted}</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Activos", "Active")}: {totalActive}</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Novedades", "Incidents")}: {totalIncidents}</div>
             </div>
           </Card>
 
@@ -445,7 +445,7 @@ export default function ReportsPage() {
                   ))}
                 </div>
 
-                <div className="hidden overflow-x-auto md:block">
+                <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 text-left text-slate-500">
