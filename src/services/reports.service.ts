@@ -34,11 +34,14 @@ export const DEFAULT_REPORT_COLUMNS: ReportColumnKey[] = [
   "shift_id",
   "restaurant_id",
   "employee_id",
+  "supervisor_id",
   "start_time",
   "end_time",
   "status",
   "duration",
   "incidents",
+  "start_evidence",
+  "end_evidence",
 ]
 
 export interface ReportRow {
@@ -60,7 +63,9 @@ export interface ReportFilters {
   toIso?: string
   restaurantId?: string
   employeeId?: string
+  supervisorId?: string
   status?: string
+  limit?: number
 }
 
 export interface GeneratedReportHistory {
@@ -151,16 +156,17 @@ export function getReportColumnValue(row: ReportRow, column: ReportColumnKey) {
     case "incidents":
       return String(row.incidents_count)
     case "start_evidence":
-      return row.start_evidence_path ? "YES" : "NO"
+      return row.start_evidence_path ?? "-"
     case "end_evidence":
-      return row.end_evidence_path ? "YES" : "NO"
+      return row.end_evidence_path ?? "-"
     default:
       return "-"
   }
 }
 
 export async function fetchShiftsReport(filters: ReportFilters = {}) {
-  const { fromIso, toIso, restaurantId, employeeId, status } = filters
+  const { fromIso, toIso, restaurantId, employeeId, supervisorId, status } = filters
+  const resultLimit = Math.max(1, Math.min(filters.limit ?? 500, 5000))
 
   return withRetry(async () => {
     let query = supabase
@@ -174,7 +180,7 @@ export async function fetchShiftsReport(filters: ReportFilters = {}) {
     if (employeeId) query = query.eq("employee_id", employeeId)
     if (status) query = query.eq("status", status)
 
-    const { data, error } = await query.limit(500)
+    const { data, error } = await query.limit(resultLimit)
     if (error) throw error
 
     const baseRows = (data ?? []) as Array<{
@@ -215,7 +221,11 @@ export async function fetchShiftsReport(filters: ReportFilters = {}) {
       }
     }
 
-    return baseRows.map(item => {
+    const filteredRows = supervisorId
+      ? baseRows.filter(item => (supervisorByShift.get(String(item.id)) ?? null) === supervisorId)
+      : baseRows
+
+    return filteredRows.map(item => {
       const shiftId = String(item.id)
       return {
         id: shiftId,

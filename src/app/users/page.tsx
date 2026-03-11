@@ -11,7 +11,14 @@ import Card from "@/components/ui/Card"
 import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 import { listRestaurants, Restaurant } from "@/services/restaurants.service"
-import { assignScheduledShift, listScheduledShifts, ScheduledShift } from "@/services/scheduling.service"
+import {
+  assignScheduledShift,
+  assignScheduledShiftsBulk,
+  cancelScheduledShift,
+  listScheduledShifts,
+  reprogramScheduledShift,
+  ScheduledShift,
+} from "@/services/scheduling.service"
 import { listUserProfiles, updateUserProfileRole, updateUserProfileStatus, UserProfile } from "@/services/users.service"
 import { useI18n } from "@/hooks/useI18n"
 import { ROLES, Role } from "@/utils/permissions"
@@ -37,6 +44,13 @@ export default function UsersPage() {
   const [scheduleStart, setScheduleStart] = useState("")
   const [scheduleEnd, setScheduleEnd] = useState("")
   const [scheduleNotes, setScheduleNotes] = useState("")
+  const [scheduledLimit, setScheduledLimit] = useState(40)
+  const [scheduleBlocks, setScheduleBlocks] = useState<Array<{ id: number; start: string; end: string }>>([])
+  const [savingBulk, setSavingBulk] = useState(false)
+  const [editingScheduledId, setEditingScheduledId] = useState<number | null>(null)
+  const [editScheduledStart, setEditScheduledStart] = useState("")
+  const [editScheduledEnd, setEditScheduledEnd] = useState("")
+  const [editScheduledNotes, setEditScheduledNotes] = useState("")
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -44,7 +58,7 @@ export default function UsersPage() {
       const [usersData, restaurantsData, scheduledData] = await Promise.all([
         listUserProfiles(),
         listRestaurants(),
-        listScheduledShifts(40),
+        listScheduledShifts(scheduledLimit),
       ])
       setRows(usersData)
       setRestaurants(restaurantsData)
@@ -58,7 +72,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [showToast, t])
+  }, [scheduledLimit, showToast, t])
 
   useEffect(() => {
     if (authLoading) return
@@ -119,6 +133,110 @@ export default function UsersPage() {
     }
   }
 
+  const handleAddScheduleBlock = () => {
+    setScheduleBlocks(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000), start: "", end: "" }])
+  }
+
+  const handleScheduleBlockChange = (blockId: number, key: "start" | "end", value: string) => {
+    setScheduleBlocks(prev => prev.map(item => (item.id === blockId ? { ...item, [key]: value } : item)))
+  }
+
+  const handleRemoveScheduleBlock = (blockId: number) => {
+    setScheduleBlocks(prev => prev.filter(item => item.id !== blockId))
+  }
+
+  const handleAssignScheduledShiftBulk = async () => {
+    if (!scheduleEmployeeId || !scheduleRestaurantId) {
+      showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
+      return
+    }
+
+    const validBlocks = scheduleBlocks
+      .map(item => ({
+        startIso: item.start ? new Date(item.start).toISOString() : "",
+        endIso: item.end ? new Date(item.end).toISOString() : "",
+      }))
+      .filter(item => item.startIso && item.endIso)
+
+    if (validBlocks.length === 0) {
+      showToast("info", t("Agrega al menos un bloque de fecha/hora valido.", "Add at least one valid date/time block."))
+      return
+    }
+
+    const hasInvalidRange = validBlocks.some(item => new Date(item.endIso).getTime() <= new Date(item.startIso).getTime())
+    if (hasInvalidRange) {
+      showToast("info", t("Todos los bloques deben tener fin posterior al inicio.", "All blocks must have end time after start time."))
+      return
+    }
+
+    setSavingBulk(true)
+    try {
+      await assignScheduledShiftsBulk({
+        employeeId: scheduleEmployeeId,
+        restaurantId: scheduleRestaurantId,
+        blocks: validBlocks.map(item => ({ scheduledStartIso: item.startIso, scheduledEndIso: item.endIso })),
+        notes: scheduleNotes.trim() || undefined,
+      })
+      showToast("success", t("Turnos en lote programados correctamente.", "Bulk shifts scheduled successfully."))
+      setScheduleBlocks([])
+      await loadData()
+    } catch (error: unknown) {
+      showToast("error", error instanceof Error ? error.message : t("No se pudieron programar turnos en lote.", "Could not schedule bulk shifts."))
+    } finally {
+      setSavingBulk(false)
+    }
+  }
+
+  const handleCancelScheduled = async (item: ScheduledShift) => {
+    try {
+      await cancelScheduledShift(item.id, item.notes ?? undefined)
+      showToast("success", t("Turno cancelado.", "Shift cancelled."))
+      await loadData()
+    } catch (error: unknown) {
+      showToast("error", error instanceof Error ? error.message : t("No se pudo cancelar el turno.", "Could not cancel shift."))
+    }
+  }
+
+  const handleStartEditScheduled = (item: ScheduledShift) => {
+    setEditingScheduledId(item.id)
+    setEditScheduledStart(item.scheduled_start ? new Date(item.scheduled_start).toISOString().slice(0, 16) : "")
+    setEditScheduledEnd(item.scheduled_end ? new Date(item.scheduled_end).toISOString().slice(0, 16) : "")
+    setEditScheduledNotes(item.notes ?? "")
+  }
+
+  const handleSaveReprogramScheduled = async () => {
+    if (!editingScheduledId || !editScheduledStart || !editScheduledEnd) {
+      showToast("info", t("Completa inicio y fin para reprogramar.", "Fill start and end to reschedule."))
+      return
+    }
+    const startIso = new Date(editScheduledStart).toISOString()
+    const endIso = new Date(editScheduledEnd).toISOString()
+    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+      showToast("info", t("La hora de fin debe ser posterior a inicio.", "End time must be after start."))
+      return
+    }
+
+    try {
+      await reprogramScheduledShift({
+        scheduledShiftId: editingScheduledId,
+        scheduledStartIso: startIso,
+        scheduledEndIso: endIso,
+        notes: editScheduledNotes,
+      })
+      showToast("success", t("Turno reprogramado.", "Shift rescheduled."))
+      setEditingScheduledId(null)
+      setEditScheduledStart("")
+      setEditScheduledEnd("")
+      setEditScheduledNotes("")
+      await loadData()
+    } catch (error: unknown) {
+      showToast("error", error instanceof Error ? error.message : t("No se pudo reprogramar el turno.", "Could not reschedule shift."))
+    }
+  }
+
+  const usersById = new Map(rows.map(item => [item.id, item]))
+  const restaurantsById = new Map(restaurants.map(item => [String(item.id), item]))
+
   return (
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
@@ -129,7 +247,7 @@ export default function UsersPage() {
             <Skeleton className="h-28" />
           ) : (
             <div className="space-y-4">
-              <Card title={t("Gestion de usuarios", "User management")} subtitle={t("Asignacion de rol y activacion/desactivacion.", "Role assignment and enable/disable controls.")}>
+              <Card title={t("Gestion de usuarios", "User management")} subtitle={t("Roles y estado.", "Roles and status.")}>
                 {rows.length === 0 ? (
                   <EmptyState
                     title={t("Sin usuarios", "No users")}
@@ -219,7 +337,7 @@ export default function UsersPage() {
                 )}
               </Card>
 
-              <Card title={t("Programar turno", "Schedule shift")} subtitle={t("Asigna fecha, hora y restaurante a un empleado activo.", "Assign date, time, and restaurant to an active employee.")}>
+              <Card title={t("Programar turno", "Schedule shift")} subtitle={t("Fecha, hora y restaurante.", "Date, time, and restaurant.")}>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <select
                     value={scheduleEmployeeId}
@@ -274,18 +392,126 @@ export default function UsersPage() {
                   className="mt-2 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
                 />
 
+                <div className="mt-3 rounded-md border border-slate-200 p-3">
+                  <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
+                  <p className="text-xs text-slate-500">{t("Agrega varios bloques para distintos dias u horas.", "Add multiple blocks for different days or hours.")}</p>
+
+                  <div className="mt-2 space-y-2">
+                    {scheduleBlocks.length === 0 && (
+                      <p className="text-xs text-slate-500">{t("No hay bloques agregados.", "No blocks added.")}</p>
+                    )}
+                    {scheduleBlocks.map(block => (
+                      <div key={block.id} className="grid gap-2 sm:grid-cols-3">
+                        <input
+                          type="datetime-local"
+                          value={block.start}
+                          onChange={event => handleScheduleBlockChange(block.id, "start", event.target.value)}
+                          className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                        />
+                        <input
+                          type="datetime-local"
+                          value={block.end}
+                          onChange={event => handleScheduleBlockChange(block.id, "end", event.target.value)}
+                          className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                        />
+                        <Button size="sm" variant="ghost" onClick={() => handleRemoveScheduleBlock(block.id)}>
+                          {t("Quitar", "Remove")}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="secondary" onClick={handleAddScheduleBlock}>
+                      {t("Agregar bloque", "Add block")}
+                    </Button>
+                    <Button size="sm" onClick={() => void handleAssignScheduledShiftBulk()} disabled={savingBulk}>
+                      {savingBulk ? t("Guardando lote...", "Saving bulk...") : t("Programar lote", "Schedule bulk")}
+                    </Button>
+                  </div>
+                </div>
+
                 {scheduled.length > 0 && (
                   <div className="mt-4 space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       {t("Turnos programados recientes", "Recent scheduled shifts")}
                     </p>
                     <div className="space-y-1">
-                      {scheduled.slice(0, 8).map(item => (
-                        <div key={item.id} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
-                          {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)} | {t("Estado", "Status")}: {item.status}
-                        </div>
-                      ))}
+                      {scheduled.slice(0, 12).map(item => {
+                        const employee = usersById.get(item.employee_id)
+                        const restaurant = restaurantsById.get(String(item.restaurant_id))
+                        const editing = editingScheduledId === item.id
+                        return (
+                          <div key={item.id} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
+                            <p className="font-medium text-slate-800">
+                              {employee?.full_name ?? employee?.email ?? item.employee_id} - {restaurant?.name ?? `#${item.restaurant_id}`}
+                            </p>
+                            {!editing ? (
+                              <>
+                                <p className="text-slate-600">
+                                  {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)}
+                                </p>
+                                <p className="text-xs text-slate-500">{t("Estado", "Status")}: {item.status}</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {item.status !== "cancelled" && (
+                                    <Button size="sm" variant="ghost" onClick={() => handleStartEditScheduled(item)}>
+                                      {t("Reprogramar", "Reschedule")}
+                                    </Button>
+                                  )}
+                                  {item.status !== "cancelled" && (
+                                    <Button size="sm" variant="danger" onClick={() => void handleCancelScheduled(item)}>
+                                      {t("Cancelar", "Cancel")}
+                                    </Button>
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                <input
+                                  type="datetime-local"
+                                  value={editScheduledStart}
+                                  onChange={event => setEditScheduledStart(event.target.value)}
+                                  className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                                />
+                                <input
+                                  type="datetime-local"
+                                  value={editScheduledEnd}
+                                  onChange={event => setEditScheduledEnd(event.target.value)}
+                                  className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                                />
+                                <textarea
+                                  rows={2}
+                                  value={editScheduledNotes}
+                                  onChange={event => setEditScheduledNotes(event.target.value)}
+                                  className="sm:col-span-2 rounded-md border border-slate-300 px-2 py-2 text-sm"
+                                  placeholder={t("Notas", "Notes")}
+                                />
+                                <div className="sm:col-span-2 flex flex-wrap gap-2">
+                                  <Button size="sm" variant="primary" onClick={() => void handleSaveReprogramScheduled()}>
+                                    {t("Guardar", "Save")}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setEditingScheduledId(null)
+                                      setEditScheduledStart("")
+                                      setEditScheduledEnd("")
+                                      setEditScheduledNotes("")
+                                    }}
+                                  >
+                                    {t("Cerrar", "Close")}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
+                    <Button size="sm" variant="ghost" onClick={() => setScheduledLimit(prev => Math.min(prev + 40, 1000))}>
+                      {t("Cargar mas historial", "Load more history")}
+                    </Button>
                   </div>
                 )}
               </Card>

@@ -95,14 +95,10 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <section className="space-y-6">
-        <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 px-4 py-5 text-white shadow-sm sm:px-6 sm:py-6">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-300">{t("Panel principal", "Main panel")}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-bold sm:text-3xl">{t("Panel operativo", "Operations dashboard")}</h1>
-            <Badge variant="info">{t("Actualizado", "Updated")}</Badge>
-          </div>
-          <p className="mt-2 max-w-2xl text-sm text-slate-200">{roleSummary}</p>
+      <section className="space-y-4">
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{t("Panel operativo", "Operations dashboard")}</h1>
+          <p className="mt-1 text-sm text-slate-600">{roleSummary}</p>
         </div>
 
         {loading || authLoading || loadingData ? (
@@ -119,7 +115,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {metrics.map(metric => (
                 <Card
                   key={metric.label}
@@ -131,29 +127,8 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-3">
-              <Card
-                title={t("Estado operativo", "Operations status")}
-                subtitle={t("Monitoreo diario con trazabilidad y control por rol.", "Daily monitoring with traceability and role control.")}
-                className="lg:col-span-2"
-              >
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">{t("Supervision", "Supervision")}</p>
-                    <p className="text-sm font-semibold text-slate-800">
-                      {isSuperAdmin || isSupervisora ? t("Habilitada", "Enabled") : t("Solo lectura", "Read only")}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">{t("Auditoria", "Audit")}</p>
-                    <p className="text-sm font-semibold text-slate-800">
-                      {t(`${auditEvents.length} eventos recientes`, `${auditEvents.length} recent events`)}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card title={t("Acciones rapidas", "Quick actions")} subtitle={t("Atajos disponibles para tu rol.", "Shortcuts available for your role.")}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card title={t("Acciones rapidas", "Quick actions")} subtitle={t("Solo lo esencial.", "Only essentials.")}>
                 <div className="mt-4 space-y-2">
                   {quickActions.map(action => (
                     <Button
@@ -166,6 +141,17 @@ export default function DashboardPage() {
                     </Button>
                   ))}
                 </div>
+              </Card>
+
+              <Card title={t("Estado", "Status")} subtitle={t("Resumen rapido.", "Quick summary.")}>
+                <p className="text-sm text-slate-700">
+                  {isSuperAdmin || isSupervisora
+                    ? t("Supervision habilitada.", "Supervision enabled.")
+                    : t("Vista de empleado activa.", "Employee view active.")}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {t("Eventos recientes", "Recent events")}: {auditEvents.length}
+                </p>
               </Card>
             </div>
 

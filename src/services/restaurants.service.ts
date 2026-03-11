@@ -3,6 +3,7 @@ import { supabase } from "@/services/supabaseClient"
 export interface Restaurant {
   id: string
   name: string
+  is_active?: boolean
   lat: number | null
   lng: number | null
   geofence_radius_m: number | null
@@ -25,10 +26,26 @@ export interface SupervisorRestaurantOption {
   name: string
 }
 
-export async function listRestaurants() {
-  const { data, error } = await supabase.from("restaurants").select("*").order("name")
-  if (error) throw error
-  return (data ?? []) as Restaurant[]
+export async function listRestaurants(options?: { includeInactive?: boolean }) {
+  const includeInactive = options?.includeInactive === true
+  let query = supabase.from("restaurants").select("*").order("name")
+  if (!includeInactive) {
+    query = query.eq("is_active", true)
+  }
+
+  const result = await query
+  if (!result.error) {
+    return (result.data ?? []) as Restaurant[]
+  }
+
+  const missingColumn = typeof result.error.message === "string" && result.error.message.includes("is_active")
+  if (missingColumn) {
+    const fallback = await supabase.from("restaurants").select("*").order("name")
+    if (fallback.error) throw fallback.error
+    return (fallback.data ?? []) as Restaurant[]
+  }
+
+  throw result.error
 }
 
 export async function createRestaurant(payload: Omit<Restaurant, "id">) {
@@ -41,6 +58,18 @@ export async function updateRestaurant(id: string, payload: Partial<Omit<Restaur
   const { data, error } = await supabase
     .from("restaurants")
     .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single()
+
+  if (error) throw error
+  return data as Restaurant
+}
+
+export async function updateRestaurantStatus(id: string, isActive: boolean) {
+  const { data, error } = await supabase
+    .from("restaurants")
+    .update({ is_active: isActive })
     .eq("id", id)
     .select("*")
     .single()

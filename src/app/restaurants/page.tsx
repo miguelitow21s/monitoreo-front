@@ -19,6 +19,7 @@ import {
   Restaurant,
   RestaurantEmployee,
   updateRestaurant,
+  updateRestaurantStatus,
 } from "@/services/restaurants.service"
 import { listUserProfiles, UserProfile } from "@/services/users.service"
 import { ROLES } from "@/utils/permissions"
@@ -65,6 +66,7 @@ type PhotonSearchResponse = {
 }
 
 type CountryPreference = "auto" | "co" | "us" | "global"
+type AssignmentRoleFilter = "employee" | "supervisor"
 
 type ReverseNominatimResponse = {
   address?: {
@@ -368,6 +370,7 @@ export default function RestaurantsPage() {
 
   const [assignRestaurant, setAssignRestaurant] = useState("")
   const [assignUser, setAssignUser] = useState("")
+  const [assignRoleFilter, setAssignRoleFilter] = useState<AssignmentRoleFilter>("employee")
 
   const latNumber = parseNullableNumber(lat)
   const lngNumber = parseNullableNumber(lng)
@@ -452,12 +455,22 @@ export default function RestaurantsPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [restaurantRows, profileRows] = await Promise.all([listRestaurants(), listUserProfiles()])
+      const [restaurantRows, profileRows] = await Promise.all([
+        listRestaurants({ includeInactive: true }),
+        listUserProfiles(),
+      ])
       setRows(restaurantRows)
       setProfiles(profileRows)
 
-      setAssignRestaurant(prev => prev || restaurantRows[0]?.id || "")
-      setAssignUser(prev => prev || profileRows[0]?.id || "")
+      const activeRestaurants = restaurantRows.filter(item => item.is_active !== false)
+      const assignable = profileRows.filter(
+        item =>
+          item.is_active !== false &&
+          (assignRoleFilter === "employee" ? item.role === ROLES.EMPLEADO : item.role === ROLES.SUPERVISORA)
+      )
+
+      setAssignRestaurant(prev => prev || activeRestaurants[0]?.id || restaurantRows[0]?.id || "")
+      setAssignUser(prev => prev || assignable[0]?.id || "")
 
       const assignmentEntries = await Promise.all(
         restaurantRows.slice(0, 8).map(async item => [item.id, await listRestaurantEmployees(item.id)] as const)
@@ -468,7 +481,16 @@ export default function RestaurantsPage() {
     } finally {
       setLoading(false)
     }
-  }, [showToast, t])
+  }, [assignRoleFilter, showToast, t])
+
+  useEffect(() => {
+    const assignable = profiles.filter(
+      item =>
+        item.is_active !== false &&
+        (assignRoleFilter === "employee" ? item.role === ROLES.EMPLEADO : item.role === ROLES.SUPERVISORA)
+    )
+    setAssignUser(assignable[0]?.id ?? "")
+  }, [assignRoleFilter, profiles])
 
   useEffect(() => {
     if (authLoading) return
@@ -897,6 +919,27 @@ export default function RestaurantsPage() {
     }
   }
 
+  const handleToggleRestaurantActive = async (restaurant: Restaurant) => {
+    const current = restaurant.is_active !== false
+    try {
+      const updated = await updateRestaurantStatus(restaurant.id, !current)
+      setRows(prev => prev.map(item => (item.id === updated.id ? updated : item)))
+      showToast(
+        "success",
+        current
+          ? t("Restaurante desactivado.", "Restaurant deactivated.")
+          : t("Restaurante activado.", "Restaurant activated.")
+      )
+    } catch (error: unknown) {
+      showToast(
+        "error",
+        error instanceof Error
+          ? error.message
+          : t("No se pudo actualizar el estado del restaurante.", "Could not update restaurant status.")
+      )
+    }
+  }
+
   return (
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
@@ -907,7 +950,7 @@ export default function RestaurantsPage() {
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Busca direccion completa (calle, ciudad, estado, ZIP) y confirma en mapa.", "Search full address (street, city, state, ZIP) and confirm on map.")}>
+              <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Completa direccion, radio y guarda.", "Complete address, radius, and save.")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -952,13 +995,6 @@ export default function RestaurantsPage() {
                     {t("Guardar", "Save")}
                   </Button>
                 </div>
-
-                <p className="mt-2 text-xs text-slate-500">
-                  {t(
-                    "Escribe direccion, selecciona una sugerencia, valida el pin en el mapa y confirma.",
-                    "Type address, choose a suggestion, validate the pin on the map, and confirm."
-                  )}
-                </p>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <select
@@ -1056,14 +1092,22 @@ export default function RestaurantsPage() {
                 ) : null}
               </Card>
 
-              <Card title={t("Asignar empleados", "Assign employees")} subtitle={t("Asocia usuarios operativos con restaurantes.", "Associate operational users with restaurants.")}>
+              <Card title={t("Asignaciones", "Assignments")} subtitle={t("Asigna empleados o supervisoras por restaurante.", "Assign employees or supervisors by restaurant.")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  <select
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={assignRoleFilter}
+                    onChange={event => setAssignRoleFilter(event.target.value as AssignmentRoleFilter)}
+                  >
+                    <option value="employee">{t("Empleado", "Employee")}</option>
+                    <option value="supervisor">{t("Supervisora", "Supervisor")}</option>
+                  </select>
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={assignRestaurant}
                     onChange={event => setAssignRestaurant(event.target.value)}
                   >
-                    {rows.map(item => (
+                    {rows.filter(item => item.is_active !== false).map(item => (
                       <option key={item.id} value={item.id}>
                         {item.name}
                       </option>
@@ -1075,7 +1119,12 @@ export default function RestaurantsPage() {
                     onChange={event => setAssignUser(event.target.value)}
                   >
                     {profiles
-                      .filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false)
+                      .filter(item => {
+                        if (item.is_active === false) return false
+                        return assignRoleFilter === "employee"
+                          ? item.role === ROLES.EMPLEADO
+                          : item.role === ROLES.SUPERVISORA
+                      })
                       .map(item => (
                       <option key={item.id} value={item.id}>
                         {item.full_name ?? item.email ?? item.id}
@@ -1088,7 +1137,7 @@ export default function RestaurantsPage() {
                 </div>
               </Card>
 
-              <Card title={t("Listado de restaurantes", "Restaurant list")} subtitle={t("Configuracion operativa actual.", "Current operational configuration.")}>
+              <Card title={t("Restaurantes", "Restaurants")} subtitle={t("Configuracion operativa.", "Operational setup.")}>
                 {rows.length === 0 ? (
                   <EmptyState
                     title={t("Sin restaurantes", "No restaurants")}
@@ -1107,6 +1156,9 @@ export default function RestaurantsPage() {
                               Lat: {item.lat ?? "-"} | Lng: {item.lng ?? "-"} | {t("Radio", "Radius")}:{" "}
                               {item.geofence_radius_m ?? "-"} m
                             </p>
+                            <p className="text-xs text-slate-500">
+                              {t("Estado", "Status")}: {item.is_active === false ? t("Inactivo", "Inactive") : t("Activo", "Active")}
+                            </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <input
@@ -1115,6 +1167,13 @@ export default function RestaurantsPage() {
                               onBlur={event => void handleRadiusUpdate(item, event.target.value)}
                             />
                             <span className="text-xs text-slate-500">m</span>
+                            <Button
+                              size="sm"
+                              variant={item.is_active === false ? "secondary" : "ghost"}
+                              onClick={() => void handleToggleRestaurantActive(item)}
+                            >
+                              {item.is_active === false ? t("Activar", "Enable") : t("Desactivar", "Disable")}
+                            </Button>
                           </div>
                         </div>
                         {(assignments[item.id] ?? []).length > 0 && (

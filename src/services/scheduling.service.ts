@@ -10,6 +10,13 @@ export interface ScheduledShift {
   notes: string | null
 }
 
+interface ReprogramScheduledShiftPayload {
+  scheduledShiftId: number
+  scheduledStartIso: string
+  scheduledEndIso: string
+  notes?: string
+}
+
 export async function assignScheduledShift(payload: {
   employeeId: string
   restaurantId: string
@@ -47,4 +54,64 @@ export async function listScheduledShifts(limit = 50) {
 
   if (error) throw error
   return (data ?? []) as ScheduledShift[]
+}
+
+export async function cancelScheduledShift(scheduledShiftId: number, notes?: string) {
+  const { data, error } = await supabase
+    .from("scheduled_shifts")
+    .update({
+      status: "cancelled",
+      notes: notes?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", scheduledShiftId)
+    .select("*")
+    .single()
+
+  if (error) throw error
+  return data as ScheduledShift
+}
+
+export async function reprogramScheduledShift(payload: ReprogramScheduledShiftPayload) {
+  const { scheduledShiftId, scheduledStartIso, scheduledEndIso, notes } = payload
+
+  const { data, error } = await supabase
+    .from("scheduled_shifts")
+    .update({
+      scheduled_start: scheduledStartIso,
+      scheduled_end: scheduledEndIso,
+      status: "scheduled",
+      notes: notes?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", scheduledShiftId)
+    .select("*")
+    .single()
+
+  if (error) throw error
+  return data as ScheduledShift
+}
+
+export async function assignScheduledShiftsBulk(payload: {
+  employeeId: string
+  restaurantId: string
+  blocks: Array<{ scheduledStartIso: string; scheduledEndIso: string }>
+  notes?: string
+}) {
+  const blocks = payload.blocks.filter(item => item.scheduledStartIso && item.scheduledEndIso)
+  if (blocks.length === 0) return [] as unknown[]
+
+  const results = await Promise.all(
+    blocks.map(block =>
+      assignScheduledShift({
+        employeeId: payload.employeeId,
+        restaurantId: payload.restaurantId,
+        scheduledStartIso: block.scheduledStartIso,
+        scheduledEndIso: block.scheduledEndIso,
+        notes: payload.notes,
+      })
+    )
+  )
+
+  return results
 }

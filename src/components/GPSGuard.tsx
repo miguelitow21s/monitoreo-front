@@ -8,6 +8,9 @@ import { useI18n } from "@/hooks/useI18n"
 export interface Coordinates {
   lat: number
   lng: number
+  accuracyMeters?: number
+  capturedAtMs?: number
+  isMocked?: boolean
 }
 
 type GpsState = "idle" | "loading" | "ready" | "error"
@@ -36,9 +39,16 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
 
     navigator.geolocation.getCurrentPosition(
       position => {
+        const coordsAny = position.coords as GeolocationCoordinates & { mocked?: boolean }
+        const positionAny = position as GeolocationPosition & { mocked?: boolean }
+        const mocked = coordsAny.mocked === true || positionAny.mocked === true
+
         const nextCoords = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
+          accuracyMeters: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : undefined,
+          capturedAtMs: Number.isFinite(position.timestamp) ? position.timestamp : Date.now(),
+          isMocked: mocked,
         }
 
         setCoords(nextCoords)
@@ -82,6 +92,14 @@ export default function GPSGuard({ onLocation }: GPSGuardProps) {
       {state === "ready" && coords && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           {t("GPS activo.", "GPS ready.")} Lat: {coords.lat.toFixed(6)} | Lng: {coords.lng.toFixed(6)}
+          {typeof coords.accuracyMeters === "number" && (
+            <span> | {t("Precision", "Accuracy")}: {Math.round(coords.accuracyMeters)}m</span>
+          )}
+          {coords.isMocked && (
+            <span className="ml-2 font-semibold text-red-700">
+              {t("Ubicacion sospechosa detectada", "Suspicious location detected")}
+            </span>
+          )}
         </div>
       )}
 

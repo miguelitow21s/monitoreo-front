@@ -1,5 +1,7 @@
 "use client"
 
+import { useI18n } from "@/hooks/useI18n"
+
 type Column<T> = {
   key: keyof T
   label: string
@@ -14,6 +16,8 @@ export default function Table<T extends Record<string, unknown>>({
   columns,
   data,
 }: TableProps<T>) {
+  const { t } = useI18n()
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full rounded bg-white shadow">
@@ -37,7 +41,7 @@ export default function Table<T extends Record<string, unknown>>({
                 colSpan={columns.length}
                 className="px-4 py-6 text-center text-sm text-gray-500"
               >
-                No hay datos para mostrar
+                {t("No hay datos para mostrar", "No data to display")}
               </td>
             </tr>
           )}

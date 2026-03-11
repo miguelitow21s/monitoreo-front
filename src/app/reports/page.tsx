@@ -69,14 +69,31 @@ export default function ReportsPage() {
   const [toDate, setToDate] = useState("")
   const [restaurantId, setRestaurantId] = useState("")
   const [employeeId, setEmployeeId] = useState("")
+  const [supervisorId, setSupervisorId] = useState("")
   const [status, setStatus] = useState("")
   const [selectedColumns, setSelectedColumns] = useState<ReportColumnKey[]>(DEFAULT_REPORT_COLUMNS)
   const [generatingBackend, setGeneratingBackend] = useState(false)
   const [resolvingReportId, setResolvingReportId] = useState<string | null>(null)
+  const [reportLimit, setReportLimit] = useState(500)
+  const [historyLimit, setHistoryLimit] = useState(20)
 
   const employeeOptions = useMemo(
     () => employees.filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false),
     [employees]
+  )
+
+  const supervisorOptions = useMemo(
+    () =>
+      employees.filter(
+        item => (item.role === ROLES.SUPERVISORA || item.role === ROLES.SUPER_ADMIN) && item.is_active !== false
+      ),
+    [employees]
+  )
+
+  const usersById = useMemo(() => new Map(employees.map(item => [item.id, item])), [employees])
+  const restaurantsById = useMemo(
+    () => new Map(restaurants.map(item => [String(item.id), item])),
+    [restaurants]
   )
 
   const visibleColumns = useMemo(() => {
@@ -102,7 +119,9 @@ export default function ReportsPage() {
         toIso: toEndOfDayIso(toDate),
         restaurantId: restaurantId || undefined,
         employeeId: employeeId || undefined,
+        supervisorId: supervisorId || undefined,
         status: status || undefined,
+        limit: reportLimit,
       })
       setRows(reportRows)
     } catch (error: unknown) {
@@ -110,19 +129,19 @@ export default function ReportsPage() {
     } finally {
       setLoading(false)
     }
-  }, [employeeId, fromDate, restaurantId, showToast, status, t, toDate])
+  }, [employeeId, fromDate, reportLimit, restaurantId, showToast, status, supervisorId, t, toDate])
 
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true)
     try {
-      const rowsHistory = await fetchGeneratedReportsHistory(20)
+      const rowsHistory = await fetchGeneratedReportsHistory(historyLimit)
       setReportHistory(rowsHistory)
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudo cargar historial de reportes.", "Could not load report history."))
     } finally {
       setLoadingHistory(false)
     }
-  }, [showToast, t])
+  }, [historyLimit, showToast, t])
 
   useEffect(() => {
     if (authLoading) return
@@ -161,9 +180,57 @@ export default function ReportsPage() {
     setToDate("")
     setRestaurantId("")
     setEmployeeId("")
+    setSupervisorId("")
     setStatus("")
     setSelectedColumns(DEFAULT_REPORT_COLUMNS)
   }
+
+  const getDisplayValue = useCallback(
+    (row: ReportRow, column: ReportColumnKey) => {
+      if (column === "restaurant_id") {
+        const restaurant = row.restaurant_id ? restaurantsById.get(String(row.restaurant_id)) : null
+        return restaurant?.name ?? (row.restaurant_id ?? "-")
+      }
+      if (column === "employee_id") {
+        const employee = row.employee_id ? usersById.get(row.employee_id) : null
+        return employee?.full_name ?? employee?.email ?? (row.employee_id ?? "-")
+      }
+      if (column === "supervisor_id") {
+        const supervisor = row.supervisor_id ? usersById.get(row.supervisor_id) : null
+        return supervisor?.full_name ?? supervisor?.email ?? (row.supervisor_id ?? "-")
+      }
+      return getReportColumnValue(row, column)
+    },
+    [restaurantsById, usersById]
+  )
+
+  const openEvidenceReadonly = useCallback(
+    async (path: string | null | undefined) => {
+      if (!path) {
+        showToast("info", t("No hay evidencia asociada.", "No linked evidence."))
+        return
+      }
+
+      const signedUrl = await resolveReportReadonlyUrl(path)
+      if (!signedUrl) {
+        showToast("error", t("No se pudo generar enlace de evidencia.", "Could not generate evidence link."))
+        return
+      }
+
+      window.open(signedUrl, "_blank", "noopener,noreferrer")
+    },
+    [showToast, t]
+  )
+
+  const handleExportCsv = useCallback(() => {
+    const exportRows = rows.map(item => ({
+      ...item,
+      restaurant_id: getDisplayValue(item, "restaurant_id"),
+      employee_id: getDisplayValue(item, "employee_id"),
+      supervisor_id: getDisplayValue(item, "supervisor_id"),
+    }))
+    exportReportCsv(exportRows, selectedColumns)
+  }, [getDisplayValue, rows, selectedColumns])
 
   const exportPdf = () => {
     window.print()
@@ -220,10 +287,10 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold text-slate-900">{t("Reportes", "Reports")}</h1>
 
           <Card
-            title={t("Filtros y campos del reporte", "Report filters and fields")}
-            subtitle={t("Configura rango, restaurante, empleado y datos incluidos en exportacion.", "Configure date range, restaurant, employee, and included fields.")}
+            title={t("Filtros del reporte", "Report filters")}
+            subtitle={t("Selecciona periodo y aplica.", "Choose period and apply.")}
           >
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
               <input
                 type="date"
                 value={fromDate}
@@ -241,7 +308,7 @@ export default function ReportsPage() {
                 onChange={event => setRestaurantId(event.target.value)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
-                <option value="">{t("Todos los restaurantes", "All restaurants")}</option>
+                <option value="">{t("Todos los clientes/restaurantes", "All clients/restaurants")}</option>
                 {restaurants.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -255,6 +322,18 @@ export default function ReportsPage() {
               >
                 <option value="">{t("Todos los empleados", "All employees")}</option>
                 {employeeOptions.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.full_name ?? item.email ?? item.id}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={supervisorId}
+                onChange={event => setSupervisorId(event.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">{t("Todas las supervisoras", "All supervisors")}</option>
+                {supervisorOptions.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.full_name ?? item.email ?? item.id}
                   </option>
@@ -281,6 +360,13 @@ export default function ReportsPage() {
               </div>
             </div>
 
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span>{t("Max filas", "Max rows")}: {reportLimit}</span>
+              <Button size="sm" variant="ghost" onClick={() => setReportLimit(prev => Math.min(prev + 500, 5000))}>
+                {t("Cargar mas filas", "Load more rows")}
+              </Button>
+            </div>
+
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-medium text-slate-700">{t("Campos incluidos", "Included fields")}</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -296,7 +382,7 @@ export default function ReportsPage() {
                 ))}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="ghost" onClick={() => exportReportCsv(rows, selectedColumns)}>
+                <Button variant="ghost" onClick={handleExportCsv}>
                   {t("Exportar Excel (CSV)", "Export Excel (CSV)")}
                 </Button>
                 <Button variant="primary" onClick={exportPdf}>
@@ -336,7 +422,23 @@ export default function ReportsPage() {
                       {visibleColumns.map(column => (
                         <p key={`${item.id}-${column.key}`} className="mt-1 text-sm text-slate-700">
                           <span className="font-medium">{column.label}:</span>{" "}
-                          {getReportColumnValue(item, column.key)}
+                          {column.key === "start_evidence" || column.key === "end_evidence" ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                void openEvidenceReadonly(
+                                  column.key === "start_evidence" ? item.start_evidence_path : item.end_evidence_path
+                                )
+                              }
+                            >
+                              {column.key === "start_evidence"
+                                ? t("Ver foto inicial", "View start photo")
+                                : t("Ver foto final", "View end photo")}
+                            </Button>
+                          ) : (
+                            getDisplayValue(item, column.key)
+                          )}
                         </p>
                       ))}
                     </div>
@@ -359,7 +461,23 @@ export default function ReportsPage() {
                         <tr key={item.id} className="border-b border-slate-100">
                           {visibleColumns.map(column => (
                             <td key={`${item.id}-${column.key}`} className="py-2 pr-3">
-                              {getReportColumnValue(item, column.key)}
+                              {column.key === "start_evidence" || column.key === "end_evidence" ? (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() =>
+                                    void openEvidenceReadonly(
+                                      column.key === "start_evidence" ? item.start_evidence_path : item.end_evidence_path
+                                    )
+                                  }
+                                >
+                                  {column.key === "start_evidence"
+                                    ? t("Ver foto inicial", "View start photo")
+                                    : t("Ver foto final", "View end photo")}
+                                </Button>
+                              ) : (
+                                getDisplayValue(item, column.key)
+                              )}
                             </td>
                           ))}
                         </tr>
@@ -400,6 +518,12 @@ export default function ReportsPage() {
                     </div>
                   </div>
                 ))}
+
+                <div className="pt-2">
+                  <Button size="sm" variant="ghost" onClick={() => setHistoryLimit(prev => Math.min(prev + 20, 500))}>
+                    {t("Cargar mas historial", "Load more history")}
+                  </Button>
+                </div>
               </div>
             )}
           </Card>

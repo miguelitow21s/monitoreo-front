@@ -36,7 +36,13 @@ import {
   registerSupervisorPresence,
   SupervisorPresenceLog,
 } from "@/services/supervisorPresence.service"
-import { listMyScheduledShifts, ScheduledShift } from "@/services/scheduling.service"
+import {
+  cancelScheduledShift,
+  listMyScheduledShifts,
+  listScheduledShifts,
+  reprogramScheduledShift,
+  ScheduledShift,
+} from "@/services/scheduling.service"
 import { supabase } from "@/services/supabaseClient"
 import {
   completeOperationalTask,
@@ -49,22 +55,18 @@ import {
   TaskPriority,
   TaskEvidenceManifestResolved,
 } from "@/services/tasks.service"
-import { listMySupervisorRestaurants, listRestaurants, SupervisorRestaurantOption } from "@/services/restaurants.service"
+import { listMySupervisorRestaurants, listRestaurants, Restaurant, SupervisorRestaurantOption } from "@/services/restaurants.service"
 import { uploadEvidenceObject } from "@/services/storageEvidence.service"
 
 const HISTORY_PAGE_SIZE = 8
-const TASK_EVIDENCE_SHOTS = [
-  { key: "close_up", label: "Close-up", helper: "Capture a direct detail of the intervened area." },
-  { key: "mid_range", label: "Mid-range shot", helper: "Capture from mid distance showing nearby context." },
-  { key: "wide_general", label: "Wide overview", helper: "Capture a final panoramic view of the full space." },
-] as const
+const MAX_GPS_ACCURACY_METERS = 80
 const TASK_SHOT_ORDER: Record<string, number> = {
   close_up: 1,
   mid_range: 2,
   wide_general: 3,
 }
 
-type TaskEvidenceShotKey = (typeof TASK_EVIDENCE_SHOTS)[number]["key"]
+type TaskEvidenceShotKey = "close_up" | "mid_range" | "wide_general"
 
 function formatDuration(start: string, end: string | null) {
   const startDate = new Date(start).getTime()
@@ -75,6 +77,32 @@ function formatDuration(start: string, end: string | null) {
   const hours = Math.floor(minutes / 60)
   const restMinutes = minutes % 60
   return `${hours}h ${restMinutes}m`
+}
+
+function durationMinutes(start: string, end: string | null) {
+  if (!end) return 0
+  const startDate = new Date(start).getTime()
+  const endDate = new Date(end).getTime()
+  if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || endDate < startDate) return 0
+  return Math.floor((endDate - startDate) / 60000)
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180
+}
+
+function distanceMeters(from: { lat: number; lng: number }, to: { lat: number; lng: number }) {
+  const earthRadiusMeters = 6371000
+  const dLat = toRadians(to.lat - from.lat)
+  const dLng = toRadians(to.lng - from.lng)
+  const lat1 = toRadians(from.lat)
+  const lat2 = toRadians(to.lat)
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return earthRadiusMeters * c
 }
 
 function extractErrorMessage(error: unknown, fallback: string) {
@@ -117,7 +145,7 @@ async function sha256Hex(blob: Blob) {
 
 export default function ShiftsPage() {
   const { isEmpleado, isSupervisora, isSuperAdmin } = useRole()
-  const { formatDateTime: formatDateTimeI18n } = useI18n()
+  const { formatDateTime: formatDateTimeI18n, t } = useI18n()
   const { showToast } = useToast()
 
   const formatDateTime = useCallback(
@@ -141,10 +169,15 @@ export default function ShiftsPage() {
   const [historyPage, setHistoryPage] = useState(1)
   const [historyTotalPages, setHistoryTotalPages] = useState(1)
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([])
+  const [supervisionScheduledShifts, setSupervisionScheduledShifts] = useState<ScheduledShift[]>([])
   const [startObservation, setStartObservation] = useState("")
   const [endObservation, setEndObservation] = useState("")
   const [startFitForWork, setStartFitForWork] = useState<boolean | null>(null)
   const [endFitForWork, setEndFitForWork] = useState<boolean | null>(null)
+  const [startPpeReady, setStartPpeReady] = useState<boolean | null>(null)
+  const [startNoSymptoms, setStartNoSymptoms] = useState<boolean | null>(null)
+  const [endIncidentsOccurred, setEndIncidentsOccurred] = useState<boolean | null>(null)
+  const [endAreaDelivered, setEndAreaDelivered] = useState<boolean | null>(null)
   const [startHealthDeclaration, setStartHealthDeclaration] = useState("")
   const [endHealthDeclaration, setEndHealthDeclaration] = useState("")
   const [employeeIncident, setEmployeeIncident] = useState("")
@@ -180,6 +213,10 @@ export default function ShiftsPage() {
   const [taskDetailManifest, setTaskDetailManifest] = useState<TaskEvidenceManifestResolved | null>(null)
   const [loadingTaskDetailManifest, setLoadingTaskDetailManifest] = useState(false)
   const [taskDetailManifestError, setTaskDetailManifestError] = useState<string | null>(null)
+  const [editingSupervisionScheduledId, setEditingSupervisionScheduledId] = useState<number | null>(null)
+  const [editSupervisionScheduledStart, setEditSupervisionScheduledStart] = useState("")
+  const [editSupervisionScheduledEnd, setEditSupervisionScheduledEnd] = useState("")
+  const [knownRestaurants, setKnownRestaurants] = useState<Restaurant[]>([])
 
   const healthAnswered = activeShift ? endFitForWork !== null : startFitForWork !== null
   const healthDeclarationRequired =
@@ -188,25 +225,16 @@ export default function ShiftsPage() {
     ? endHealthDeclaration.trim().length > 0
     : startHealthDeclaration.trim().length > 0
 
-  const canSubmit = !!coords && !!photo && !processing && healthAnswered && (!healthDeclarationRequired || healthDeclarationProvided)
+  const startChecklistComplete = startPpeReady !== null && startNoSymptoms !== null
+  const endChecklistComplete = endIncidentsOccurred !== null && endAreaDelivered !== null
 
-  const submitBlockers = useMemo(() => {
-    const blockers: string[] = []
-    if (!coords) blockers.push("You must capture GPS location.")
-    if (!photo) blockers.push("You must capture photo evidence.")
-    if (!healthAnswered) {
-      blockers.push(
-        activeShift
-          ? "You must answer the exit health condition."
-          : "You must answer the entry health condition."
-      )
-    }
-    if (healthDeclarationRequired && !healthDeclarationProvided) {
-      blockers.push("You must provide a declaration when health condition is not optimal.")
-    }
-    if (processing) blockers.push("There is an action in progress.")
-    return blockers
-  }, [coords, photo, healthAnswered, healthDeclarationRequired, healthDeclarationProvided, processing, activeShift])
+  const canSubmit =
+    !!coords &&
+    !!photo &&
+    !processing &&
+    healthAnswered &&
+    (!healthDeclarationRequired || healthDeclarationProvided) &&
+    (activeShift ? endChecklistComplete : startChecklistComplete)
 
   const canOperateEmployee = isEmpleado || isSuperAdmin
   const canOperateSupervisor = isSupervisora || isSuperAdmin
@@ -240,10 +268,125 @@ export default function ShiftsPage() {
     }
     return Array.from(latestByRestaurant.values()).filter(item => item.phase === "start")
   }, [supervisorPresence])
+
+  const totalWorkedMinutes = useMemo(
+    () => history.reduce((acc, item) => acc + durationMinutes(item.start_time, item.end_time), 0),
+    [history]
+  )
+
+  const nextScheduledShift = useMemo(
+    () =>
+      [...scheduledShifts]
+        .filter(item => item.status === "scheduled")
+        .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())[0] ?? null,
+    [scheduledShifts]
+  )
+
+  const currentScheduledRestaurant = useMemo(() => {
+    const currentRestaurantId = getCurrentScheduledRestaurantId(scheduledShifts)
+    if (!currentRestaurantId) return null
+    return knownRestaurants.find(item => Number(item.id) === Number(currentRestaurantId)) ?? null
+  }, [knownRestaurants, scheduledShifts])
+
+  const geofenceValidation = useMemo(() => {
+    if (
+      !coords ||
+      !currentScheduledRestaurant ||
+      currentScheduledRestaurant.lat === null ||
+      currentScheduledRestaurant.lng === null ||
+      currentScheduledRestaurant.geofence_radius_m === null
+    ) {
+      return null
+    }
+
+    const meters = distanceMeters(
+      { lat: coords.lat, lng: coords.lng },
+      { lat: Number(currentScheduledRestaurant.lat), lng: Number(currentScheduledRestaurant.lng) }
+    )
+
+    const allowedMeters = Number(currentScheduledRestaurant.geofence_radius_m)
+    return {
+      distanceMeters: meters,
+      allowedMeters,
+      withinGeofence: meters <= allowedMeters,
+    }
+  }, [coords, currentScheduledRestaurant])
+
+  const expectedRestaurantId = useMemo(() => {
+    if (currentScheduledRestaurant?.id) return Number(currentScheduledRestaurant.id)
+    if (nextScheduledShift?.restaurant_id) return Number(nextScheduledShift.restaurant_id)
+    return null
+  }, [currentScheduledRestaurant, nextScheduledShift])
+
+  const selectedTask = useMemo(
+    () => employeeTasks.find(task => task.id === selectedTaskId) ?? null,
+    [employeeTasks, selectedTaskId]
+  )
+
+  const submitBlockers = useMemo(() => {
+    const blockers: string[] = []
+    if (!coords) blockers.push(t("Debes capturar la ubicacion GPS.", "You must capture GPS location."))
+    if (coords?.isMocked) blockers.push(t("Se detecto una fuente GPS sospechosa. Desactiva ubicacion simulada antes de registrar.", "Suspicious GPS source detected. Disable simulated location before registering."))
+    if (typeof coords?.accuracyMeters === "number" && coords.accuracyMeters > MAX_GPS_ACCURACY_METERS) {
+      blockers.push(
+        t(
+          `La precision GPS es baja (${Math.round(coords.accuracyMeters)}m). Ubicate en un lugar abierto e intenta de nuevo.`,
+          `GPS accuracy too low (${Math.round(coords.accuracyMeters)}m). Move to open sky and retry.`
+        )
+      )
+    }
+    if (!photo) blockers.push(t("Debes capturar evidencia fotografica.", "You must capture photo evidence."))
+    if (!healthAnswered) {
+      blockers.push(
+        activeShift
+          ? t("Debes responder la condicion de salud de salida.", "You must answer the exit health condition.")
+          : t("Debes responder la condicion de salud de ingreso.", "You must answer the entry health condition.")
+      )
+    }
+    if (healthDeclarationRequired && !healthDeclarationProvided) {
+      blockers.push(t("Debes registrar una declaracion cuando la condicion de salud no es optima.", "You must provide a declaration when health condition is not optimal."))
+    }
+    if (!activeShift && !startChecklistComplete) {
+      blockers.push(t("Completa todas las preguntas del checklist de inicio.", "Complete all start checklist questions."))
+    }
+    if (activeShift && !endChecklistComplete) {
+      blockers.push(t("Completa todas las preguntas del checklist de salida.", "Complete all end checklist questions."))
+    }
+    if (!activeShift && geofenceValidation && !geofenceValidation.withinGeofence) {
+      blockers.push(
+        t(
+          `Estas fuera de la geocerca permitida del restaurante (${Math.round(geofenceValidation.distanceMeters)}m del punto, maximo ${Math.round(
+            geofenceValidation.allowedMeters
+          )}m).`,
+          `Outside allowed restaurant geofence (${Math.round(geofenceValidation.distanceMeters)}m from site, max ${Math.round(
+            geofenceValidation.allowedMeters
+          )}m).`
+        )
+      )
+    }
+    if (processing) blockers.push(t("Hay una accion en curso.", "There is an action in progress."))
+    return blockers
+  }, [
+    coords,
+    photo,
+    healthAnswered,
+    healthDeclarationRequired,
+    healthDeclarationProvided,
+    processing,
+    activeShift,
+    startChecklistComplete,
+    endChecklistComplete,
+    geofenceValidation,
+    t,
+  ])
+
   const shiftOverlayLines = [
-    `User: ${currentUserId ?? "unknown"}`,
-    `Phase: ${activeShift ? "shift-end" : "shift-start"}`,
-    coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : "GPS: pending",
+    `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+    `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+    `${t("Restaurante", "Restaurant")}: ${expectedRestaurantId ?? "-"}`,
+    `${t("Turno", "Shift")}: ${activeShift ? `#${activeShift.id}` : t("inicio", "start")}`,
+    `${t("Fase", "Phase")}: ${activeShift ? t("fin-turno", "shift-end") : t("inicio-turno", "shift-start")}`,
+    coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : t("GPS: pendiente", "GPS: pending"),
   ]
 
   const loadEmployeeData = useCallback(async (page: number) => {
@@ -259,11 +402,11 @@ export default function ShiftsPage() {
       setHistoryTotalPages(historyResult.totalPages)
       setScheduledShifts(scheduledResult)
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not load shift information."))
+      showToast("error", extractErrorMessage(error, t("No se pudo cargar la informacion de turnos.", "Could not load shift information.")))
     } finally {
       setLoadingData(false)
     }
-  }, [showToast])
+  }, [showToast, t])
 
   const loadSupervisorData = useCallback(async () => {
     setLoadingSupervisor(true)
@@ -271,11 +414,30 @@ export default function ShiftsPage() {
       const rows = await getActiveShiftsForSupervision(30)
       setSupervisorRows(rows)
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not load active shifts."))
+      showToast("error", extractErrorMessage(error, t("No se pudieron cargar los turnos activos.", "Could not load active shifts.")))
     } finally {
       setLoadingSupervisor(false)
     }
-  }, [showToast])
+  }, [showToast, t])
+
+  const loadSupervisionScheduledShifts = useCallback(async () => {
+    if (!canOperateSupervisor) return
+    try {
+      const rows = await listScheduledShifts(120)
+      setSupervisionScheduledShifts(rows)
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudieron cargar los turnos programados.", "Could not load scheduled shifts.")))
+    }
+  }, [canOperateSupervisor, showToast, t])
+
+  const loadKnownRestaurants = useCallback(async () => {
+    try {
+      const rows = await listRestaurants({ includeInactive: false })
+      setKnownRestaurants(rows)
+    } catch {
+      // Best effort: backend remains source of truth for geofence validation.
+    }
+  }, [])
 
   const loadPresenceRestaurants = useCallback(async () => {
     if (!canOperateSupervisor) return
@@ -296,9 +458,9 @@ export default function ShiftsPage() {
         return items[0].id
       })
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not load restaurants for supervisor presence."))
+      showToast("error", extractErrorMessage(error, t("No se pudieron cargar los restaurantes para presencia de supervision.", "Could not load restaurants for supervisor presence.")))
     }
-  }, [canOperateSupervisor, isSuperAdmin, showToast])
+  }, [canOperateSupervisor, isSuperAdmin, showToast, t])
 
   useEffect(() => {
     if (!canOperateEmployee) return
@@ -312,8 +474,17 @@ export default function ShiftsPage() {
 
   useEffect(() => {
     if (!canOperateSupervisor) return
+    void loadSupervisionScheduledShifts()
+  }, [canOperateSupervisor, loadSupervisionScheduledShifts])
+
+  useEffect(() => {
+    if (!canOperateSupervisor) return
     void loadPresenceRestaurants()
   }, [canOperateSupervisor, loadPresenceRestaurants])
+
+  useEffect(() => {
+    void loadKnownRestaurants()
+  }, [loadKnownRestaurants])
 
   useEffect(() => {
     let mounted = true
@@ -342,11 +513,11 @@ export default function ShiftsPage() {
         setSupervisorTasks(items)
       }
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not load operational tasks."))
+      showToast("error", extractErrorMessage(error, t("No se pudieron cargar las tareas operativas.", "Could not load operational tasks.")))
     } finally {
       setLoadingTasks(false)
     }
-  }, [canOperateEmployee, canOperateSupervisor, showToast])
+  }, [canOperateEmployee, canOperateSupervisor, showToast, t])
 
   const loadPresenceLogs = useCallback(async () => {
     if (!canOperateSupervisor) return
@@ -354,9 +525,9 @@ export default function ShiftsPage() {
       const rows = await listMySupervisorPresence(20)
       setSupervisorPresence(rows)
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not load supervisor presence records."))
+      showToast("error", extractErrorMessage(error, t("No se pudieron cargar los registros de presencia de supervision.", "Could not load supervisor presence records.")))
     }
-  }, [canOperateSupervisor, showToast])
+  }, [canOperateSupervisor, showToast, t])
 
   useEffect(() => {
     void loadTasks()
@@ -385,7 +556,7 @@ export default function ShiftsPage() {
       extension?: string
     }
   ) => {
-    if (!currentUserId) throw new Error("Authenticated user was not found.")
+    if (!currentUserId) throw new Error(t("No se encontro el usuario autenticado.", "Authenticated user was not found."))
     const timestamp = new Date().toISOString().replaceAll(":", "-")
     const coordTag = `${position.lat.toFixed(6)}_${position.lng.toFixed(6)}`
     const rawExtension = (options?.extension ?? "jpg").replace(/^\./, "").toLowerCase()
@@ -422,15 +593,15 @@ export default function ShiftsPage() {
     let startedShiftId: number | null = null
 
     try {
-      if (startFitForWork === null) throw new Error("You must confirm you are fit for work at shift start.")
+      if (startFitForWork === null) throw new Error(t("Debes confirmar que estas apto para iniciar el turno.", "You must confirm you are fit for work at shift start."))
 
       const latestActive = await getMyActiveShift()
       if (latestActive) {
         setActiveShift(latestActive)
-        throw new Error("There is already an active shift. End it before starting another.")
+        throw new Error(t("Ya existe un turno activo. Finalizalo antes de iniciar otro.", "There is already an active shift. End it before starting another."))
       }
 
-      if (!photo) throw new Error("You must capture photo evidence.")
+      if (!photo) throw new Error(t("Debes capturar evidencia fotografica.", "You must capture photo evidence."))
       const currentRestaurantId = getCurrentScheduledRestaurantId(scheduledShifts)
       const shiftId = Number(
         await startShift({
@@ -449,16 +620,19 @@ export default function ShiftsPage() {
         file: photo,
         lat: coords.lat,
         lng: coords.lng,
+        accuracy: coords.accuracyMeters,
       })
 
       if (startObservation.trim()) {
         await createShiftIncident(String(shiftId), `[INGRESO] ${startObservation.trim()}`)
       }
 
-      showToast("success", "Shift started successfully.")
+      showToast("success", t("Turno iniciado correctamente.", "Shift started successfully."))
       resetEvidenceAndLocation()
       setStartObservation("")
       setStartFitForWork(null)
+      setStartPpeReady(null)
+      setStartNoSymptoms(null)
       setStartHealthDeclaration("")
       setHistoryPage(1)
       await loadEmployeeData(1)
@@ -468,10 +642,10 @@ export default function ShiftsPage() {
         await loadEmployeeData(1)
       }
       if (isConsentPendingError(error)) {
-        showToast("error", "Consent pending: accept data processing terms to operate shifts.")
+        showToast("error", t("Consentimiento pendiente: acepta terminos de tratamiento de datos para operar turnos.", "Consent pending: accept data processing terms to operate shifts."))
         return
       }
-      showToast("error", extractErrorMessage(error, "Could not start shift."))
+      showToast("error", extractErrorMessage(error, t("No se pudo iniciar el turno.", "Could not start shift.")))
     } finally {
       setProcessing(false)
     }
@@ -482,18 +656,19 @@ export default function ShiftsPage() {
     setProcessing(true)
 
     try {
-      if (endFitForWork === null) throw new Error("You must confirm your condition when ending shift.")
+      if (endFitForWork === null) throw new Error(t("Debes confirmar tu condicion al finalizar el turno.", "You must confirm your condition when ending shift."))
       if (!endFitForWork && !endHealthDeclaration.trim()) {
-        throw new Error("You must describe incidents if your end condition is not optimal.")
+        throw new Error(t("Debes describir incidentes si tu condicion de salida no es optima.", "You must describe incidents if your end condition is not optimal."))
       }
 
-      if (!photo) throw new Error("You must capture photo evidence.")
+      if (!photo) throw new Error(t("Debes capturar evidencia fotografica.", "You must capture photo evidence."))
       await uploadShiftEvidence({
         shiftId: Number(activeShift.id),
         type: "fin",
         file: photo,
         lat: coords.lat,
         lng: coords.lng,
+        accuracy: coords.accuracyMeters,
       })
       await endShift({
         shiftId: activeShift.id,
@@ -507,20 +682,22 @@ export default function ShiftsPage() {
         await createShiftIncident(activeShift.id, `[SALIDA] ${endObservation.trim()}`)
       }
 
-      showToast("success", "Shift ended successfully.")
+      showToast("success", t("Turno finalizado correctamente.", "Shift ended successfully."))
       resetEvidenceAndLocation()
       setEndObservation("")
       setEndFitForWork(null)
+      setEndIncidentsOccurred(null)
+      setEndAreaDelivered(null)
       setEndHealthDeclaration("")
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadSupervisorData()
     } catch (error: unknown) {
       if (isConsentPendingError(error)) {
-        showToast("error", "Consent pending: accept data processing terms to operate shifts.")
+        showToast("error", t("Consentimiento pendiente: acepta terminos de tratamiento de datos para operar turnos.", "Consent pending: accept data processing terms to operate shifts."))
         return
       }
-      showToast("error", extractErrorMessage(error, "Could not end shift."))
+      showToast("error", extractErrorMessage(error, t("No se pudo finalizar el turno.", "Could not end shift.")))
     } finally {
       setProcessing(false)
     }
@@ -529,17 +706,17 @@ export default function ShiftsPage() {
   const handleStatusChange = async (shiftId: string, status: string) => {
     try {
       await updateShiftStatus(shiftId, status)
-      showToast("success", `Shift updated to ${status}.`)
+      showToast("success", t(`Turno actualizado a ${status}.`, `Shift updated to ${status}.`))
       await loadSupervisorData()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not update shift status."))
+      showToast("error", extractErrorMessage(error, t("No se pudo actualizar el estado del turno.", "Could not update shift status.")))
     }
   }
 
   const handleCreateIncident = async (shiftId: string) => {
     const note = (incidentNotes[shiftId] ?? "").trim()
     if (!note) {
-      showToast("info", "Write an incident before saving.")
+      showToast("info", t("Escribe un incidente antes de guardar.", "Write an incident before saving."))
       return
     }
 
@@ -550,9 +727,9 @@ export default function ShiftsPage() {
         ...prev,
         [shiftId]: [incident, ...(prev[shiftId] ?? [])],
       }))
-      showToast("success", "Incident saved.")
+      showToast("success", t("Incidente guardado.", "Incident saved."))
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not save incident."))
+      showToast("error", extractErrorMessage(error, t("No se pudo guardar el incidente.", "Could not save incident.")))
     }
   }
 
@@ -569,7 +746,7 @@ export default function ShiftsPage() {
   const handleCreateEmployeeIncident = async () => {
     const note = employeeIncident.trim()
     if (!activeShift || !note) {
-      showToast("info", "Write a note before saving.")
+      showToast("info", t("Escribe una nota antes de guardar.", "Write a note before saving."))
       return
     }
 
@@ -577,10 +754,10 @@ export default function ShiftsPage() {
     try {
       await createShiftIncident(activeShift.id, `[EMPLEADO] ${note}`)
       setEmployeeIncident("")
-      showToast("success", "Note saved successfully.")
+      showToast("success", t("Nota guardada correctamente.", "Note saved successfully."))
       await loadSupervisorData()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not save note."))
+      showToast("error", extractErrorMessage(error, t("No se pudo guardar la nota.", "Could not save note.")))
     } finally {
       setCreatingEmployeeIncident(false)
     }
@@ -593,11 +770,11 @@ export default function ShiftsPage() {
     const dueAt = draft?.dueAt?.trim() ?? ""
 
     if (!title || !description) {
-      showToast("info", "Task title and description are required.")
+      showToast("info", t("El titulo y la descripcion de la tarea son obligatorios.", "Task title and description are required."))
       return
     }
     if (!row.restaurant_id || !row.employee_id) {
-      showToast("error", "Shift is missing restaurant/employee relation.")
+      showToast("error", t("El turno no tiene relacion de restaurante/empleado.", "Shift is missing restaurant/employee relation."))
       return
     }
 
@@ -616,10 +793,10 @@ export default function ShiftsPage() {
         ...prev,
         [row.id]: { title: "", description: "", priority: "normal", dueAt: "" },
       }))
-      showToast("success", "Operational task created.")
+      showToast("success", t("Tarea operativa creada.", "Operational task created."))
       await loadTasks()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not create task."))
+      showToast("error", extractErrorMessage(error, t("No se pudo crear la tarea.", "Could not create task.")))
     } finally {
       setCreatingTaskForShift(null)
     }
@@ -628,20 +805,20 @@ export default function ShiftsPage() {
   const handleSetTaskInProgress = async (taskId: number) => {
     try {
       await markTaskInProgress(taskId)
-      showToast("success", "Task marked as in progress.")
+      showToast("success", t("Tarea marcada en progreso.", "Task marked as in progress."))
       await loadTasks()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not update task status."))
+      showToast("error", extractErrorMessage(error, t("No se pudo actualizar el estado de la tarea.", "Could not update task status.")))
     }
   }
 
   const handleCompleteTask = async () => {
     if (!selectedTaskId) {
-      showToast("info", "Select a task to complete.")
+      showToast("info", t("Selecciona una tarea para completar.", "Select a task to complete."))
       return
     }
     if (!taskCoords || !taskPhotoClose || !taskPhotoMid || !taskPhotoWide) {
-      showToast("info", "Completing a task requires GPS and 3 evidences: close-up, mid-range, and wide overview.")
+      showToast("info", t("Completar una tarea requiere GPS y 3 evidencias: primer plano, plano medio y vista general.", "Completing a task requires GPS and 3 evidences: close-up, mid-range, and wide overview."))
       return
     }
 
@@ -685,10 +862,10 @@ export default function ShiftsPage() {
       })
       resetTaskEvidenceCapture()
       setSelectedTaskId(null)
-      showToast("success", "Task completed with triple evidence.")
+      showToast("success", t("Tarea completada con evidencia triple.", "Task completed with triple evidence."))
       await loadTasks()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not complete task."))
+      showToast("error", extractErrorMessage(error, t("No se pudo completar la tarea.", "Could not complete task.")))
     } finally {
       setProcessingTask(false)
     }
@@ -717,7 +894,7 @@ export default function ShiftsPage() {
         evidences: sortedEvidences,
       })
     } catch (error: unknown) {
-      setTaskDetailManifestError(extractErrorMessage(error, "Could not load task evidence details."))
+      setTaskDetailManifestError(extractErrorMessage(error, t("No se pudieron cargar los detalles de evidencia de la tarea.", "Could not load task evidence details.")))
     } finally {
       setLoadingTaskDetailManifest(false)
     }
@@ -725,11 +902,11 @@ export default function ShiftsPage() {
 
   const handleRegisterPresence = async () => {
     if (!presenceRestaurantId) {
-      showToast("info", "Select a restaurant to register supervisor entry/exit.")
+      showToast("info", t("Selecciona un restaurante para registrar entrada/salida de supervision.", "Select a restaurant to register supervisor entry/exit."))
       return
     }
     if (!presenceCoords || !presencePhoto) {
-      showToast("info", "Supervisor registration requires GPS and photo evidence.")
+      showToast("info", t("El registro de supervision requiere GPS y evidencia fotografica.", "Supervisor registration requires GPS and photo evidence."))
       return
     }
 
@@ -751,23 +928,72 @@ export default function ShiftsPage() {
       setPresenceNotes("")
       setPresenceCoords(null)
       setPresencePhoto(null)
-      showToast("success", "Supervisor presence registered.")
+      showToast("success", t("Presencia de supervision registrada.", "Supervisor presence registered."))
       await loadPresenceLogs()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, "Could not register supervisor presence."))
+      showToast("error", extractErrorMessage(error, t("No se pudo registrar la presencia de supervision.", "Could not register supervisor presence.")))
     } finally {
       setRegisteringPresence(false)
+    }
+  }
+
+  const handleCancelSupervisionScheduledShift = async (scheduledShift: ScheduledShift) => {
+    try {
+      await cancelScheduledShift(scheduledShift.id, scheduledShift.notes ?? undefined)
+      showToast("success", t("Turno programado cancelado.", "Scheduled shift cancelled."))
+      await loadSupervisionScheduledShifts()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo cancelar el turno programado.", "Could not cancel scheduled shift.")))
+    }
+  }
+
+  const handleStartEditSupervisionScheduled = (scheduledShift: ScheduledShift) => {
+    setEditingSupervisionScheduledId(scheduledShift.id)
+    setEditSupervisionScheduledStart(
+      scheduledShift.scheduled_start ? new Date(scheduledShift.scheduled_start).toISOString().slice(0, 16) : ""
+    )
+    setEditSupervisionScheduledEnd(
+      scheduledShift.scheduled_end ? new Date(scheduledShift.scheduled_end).toISOString().slice(0, 16) : ""
+    )
+  }
+
+  const handleSaveReprogramSupervisionScheduled = async () => {
+    if (!editingSupervisionScheduledId || !editSupervisionScheduledStart || !editSupervisionScheduledEnd) {
+      showToast("info", t("Inicio/fin son obligatorios para reprogramar.", "Start/end are required to reschedule."))
+      return
+    }
+
+    const startIso = new Date(editSupervisionScheduledStart).toISOString()
+    const endIso = new Date(editSupervisionScheduledEnd).toISOString()
+    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
+      showToast("info", t("La hora de fin debe ser mayor que la hora de inicio.", "End time must be greater than start time."))
+      return
+    }
+
+    try {
+      await reprogramScheduledShift({
+        scheduledShiftId: editingSupervisionScheduledId,
+        scheduledStartIso: startIso,
+        scheduledEndIso: endIso,
+      })
+      showToast("success", t("Turno programado reprogramado.", "Scheduled shift rescheduled."))
+      setEditingSupervisionScheduledId(null)
+      setEditSupervisionScheduledStart("")
+      setEditSupervisionScheduledEnd("")
+      await loadSupervisionScheduledShifts()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo reprogramar el turno.", "Could not reschedule shift.")))
     }
   }
 
   return (
     <ProtectedRoute>
       <div className="space-y-6">
-        <Card title="Shifts" subtitle="Employee operation and supervision in one module." />
+        <Card title={t("Turnos", "Shifts")} subtitle={t("Operacion de empleado y supervision en un solo modulo.", "Employee operation and supervision in one module.")} />
 
         {canOperateEmployee && (
           <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-900">Employee operations</h2>
+            <h2 className="text-lg font-semibold text-slate-900">{t("Operacion de empleado", "Employee operations")}</h2>
 
             {loadingData ? (
               <Skeleton className="h-24" />
@@ -775,24 +1001,24 @@ export default function ShiftsPage() {
               <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    Active shift since <b>{formatDateTime(activeShift.start_time)}</b>
+                    {t("Turno activo desde", "Active shift since")} <b>{formatDateTime(activeShift.start_time)}</b>
                   </span>
-                  <Badge variant="success">Active</Badge>
+                  <Badge variant="success">{t("Activo", "Active")}</Badge>
                 </div>
               </div>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                You do not have active shifts at this moment.
+                {t("No tienes turnos activos en este momento.", "You do not have active shifts at this moment.")}
               </div>
             )}
 
             {pendingEmployeeTasks.length > 0 && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                 <p className="font-semibold">
-                  Operational alert: you have {pendingEmployeeTasks.length} task(s) assigned by supervisor.
+                  {t("Alerta operativa: tienes", "Operational alert: you have")} {pendingEmployeeTasks.length} {t("tarea(s) asignadas por supervision.", "task(s) assigned by supervisor.")}
                 </p>
                 <p className="mt-1 text-amber-800">
-                  You must close each task with 3 specific evidence shots: close-up, mid-range shot, and wide overview.
+                  {t("Debes cerrar cada tarea con 3 evidencias especificas: primer plano, plano medio y vista general.", "You must close each task with 3 specific evidence shots: close-up, mid-range shot, and wide overview.")}
                 </p>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-900">
                   {pendingEmployeeTasks.slice(0, 3).map(task => (
@@ -805,13 +1031,69 @@ export default function ShiftsPage() {
             )}
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card title="GPS location" subtitle="You must have valid coordinates to execute actions.">
+              <Card
+                title={t("Restaurante y horario asignados", "Assigned restaurant and schedule")}
+                subtitle={t("Verifica tu ubicacion y horario asignado.", "Check your assigned location and schedule.")}
+              >
+                {nextScheduledShift ? (
+                  <div className="space-y-2 text-sm text-slate-700">
+                    <p>
+                      <span className="font-semibold">{t("ID restaurante:", "Restaurant ID:")}</span> #{nextScheduledShift.restaurant_id}
+                    </p>
+                    <p>
+                      <span className="font-semibold">{t("Inicio:", "Start:")}</span> {formatDateTime(nextScheduledShift.scheduled_start)}
+                    </p>
+                    <p>
+                      <span className="font-semibold">{t("Fin:", "End:")}</span> {formatDateTime(nextScheduledShift.scheduled_end)}
+                    </p>
+                    <p>
+                      <span className="font-semibold">{t("Estado:", "Status:")}</span> {nextScheduledShift.status}
+                    </p>
+                    {currentScheduledRestaurant && currentScheduledRestaurant.geofence_radius_m !== null && (
+                      <p>
+                        <span className="font-semibold">{t("Radio de geocerca permitido:", "Allowed geofence radius:")}</span>{" "}
+                        {Math.round(Number(currentScheduledRestaurant.geofence_radius_m))}m
+                      </p>
+                    )}
+                    {coords && (
+                      <p>
+                        <span className="font-semibold">{t("Precision GPS:", "GPS accuracy:")}</span>{" "}
+                        {typeof coords.accuracyMeters === "number"
+                          ? `${Math.round(coords.accuracyMeters)}m`
+                          : t("No reportada por el dispositivo", "Not reported by device")}
+                      </p>
+                    )}
+                    {geofenceValidation && (
+                      <p className={geofenceValidation.withinGeofence ? "text-emerald-700" : "text-rose-700"}>
+                        <span className="font-semibold">{t("Validacion de geocerca:", "Geofence check:")}</span>{" "}
+                        {geofenceValidation.withinGeofence
+                          ? t(
+                              `Dentro del area permitida (${Math.round(geofenceValidation.distanceMeters)}m del punto).`,
+                              `Within allowed area (${Math.round(geofenceValidation.distanceMeters)}m from site).`
+                            )
+                          : t(
+                              `Fuera del area permitida (${Math.round(geofenceValidation.distanceMeters)}m del punto, maximo ${Math.round(
+                                geofenceValidation.allowedMeters
+                              )}m).`,
+                              `Outside allowed area (${Math.round(geofenceValidation.distanceMeters)}m from site, max ${Math.round(
+                                geofenceValidation.allowedMeters
+                              )}m).`
+                            )}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">{t("No se encontro un horario asignado.", "No assigned schedule found.")}</p>
+                )}
+              </Card>
+
+              <Card title={t("Ubicacion GPS", "GPS location")} subtitle={t("Debes tener coordenadas validas para ejecutar acciones.", "You must have valid coordinates to execute actions.")}>
                 <div className="mt-3">
                   <GPSGuard onLocation={setCoords} />
                 </div>
               </Card>
 
-              <Card title="Photo evidence" subtitle="Photo is captured with camera and uploaded to Storage.">
+              <Card title={t("Evidencia fotografica", "Photo evidence")} subtitle={t("La foto se captura con camara y se carga a Storage.", "Photo is captured with camera and uploaded to Storage.")}>
                 <div className="mt-3">
                   <CameraCapture onCapture={setPhoto} overlayLines={shiftOverlayLines} />
                 </div>
@@ -819,14 +1101,56 @@ export default function ShiftsPage() {
             </div>
 
             <Card
-              title="Main action"
-              subtitle={activeShift ? "End active shift" : "Start new shift"}
+              title={t("Accion principal", "Main action")}
+              subtitle={activeShift ? t("Finalizar turno activo", "End active shift") : t("Iniciar nuevo turno", "Start new shift")}
             >
+              {!activeShift ? (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-800">{t("Checklist de validacion de inicio", "Start validation checklist")}</p>
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <p className="text-xs text-slate-600">{t("Tienes EPP completo para este turno?", "Do you have complete PPE for this shift?")}</p>
+                      <div className="mt-1 flex gap-4">
+                        <label className="flex items-center gap-2"><input type="radio" name="start-ppe" checked={startPpeReady === true} onChange={() => setStartPpeReady(true)} />{t("Si", "Yes")}</label>
+                        <label className="flex items-center gap-2"><input type="radio" name="start-ppe" checked={startPpeReady === false} onChange={() => setStartPpeReady(false)} />{t("No", "No")}</label>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-600">{t("Estas libre de sintomas que impidan trabajo seguro?", "Are you free of symptoms that prevent safe work?")}</p>
+                      <div className="mt-1 flex gap-4">
+                        <label className="flex items-center gap-2"><input type="radio" name="start-symptoms" checked={startNoSymptoms === true} onChange={() => setStartNoSymptoms(true)} />{t("Si", "Yes")}</label>
+                        <label className="flex items-center gap-2"><input type="radio" name="start-symptoms" checked={startNoSymptoms === false} onChange={() => setStartNoSymptoms(false)} />{t("No", "No")}</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-800">{t("Checklist de validacion de salida", "End validation checklist")}</p>
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <p className="text-xs text-slate-600">{t("Ocurrieron incidentes o eventos relevantes durante el turno?", "Did incidents or relevant events occur during the shift?")}</p>
+                      <div className="mt-1 flex gap-4">
+                        <label className="flex items-center gap-2"><input type="radio" name="end-incidents" checked={endIncidentsOccurred === true} onChange={() => setEndIncidentsOccurred(true)} />{t("Si", "Yes")}</label>
+                        <label className="flex items-center gap-2"><input type="radio" name="end-incidents" checked={endIncidentsOccurred === false} onChange={() => setEndIncidentsOccurred(false)} />{t("No", "No")}</label>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-600">{t("Entregaste el area y tareas pendientes a la operacion?", "Did you deliver the area and pending tasks to operation?")}</p>
+                      <div className="mt-1 flex gap-4">
+                        <label className="flex items-center gap-2"><input type="radio" name="end-delivery" checked={endAreaDelivered === true} onChange={() => setEndAreaDelivered(true)} />{t("Si", "Yes")}</label>
+                        <label className="flex items-center gap-2"><input type="radio" name="end-delivery" checked={endAreaDelivered === false} onChange={() => setEndAreaDelivered(false)} />{t("No", "No")}</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                 <p className="font-medium text-slate-800">
                   {activeShift
-                    ? "Did you finish the shift in good condition?"
-                    : "Are you starting in good condition?"}
+                    ? t("Finalizaste el turno en buenas condiciones?", "Did you finish the shift in good condition?")
+                    : t("Estas iniciando en buenas condiciones?", "Are you starting in good condition?")}
                 </p>
                 <div className="mt-2 flex gap-4">
                   <label className="flex items-center gap-2">
@@ -839,7 +1163,7 @@ export default function ShiftsPage() {
                         else setStartFitForWork(true)
                       }}
                     />
-                    <span>Yes</span>
+                    <span>{t("Si", "Yes")}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input
@@ -851,7 +1175,7 @@ export default function ShiftsPage() {
                         else setStartFitForWork(false)
                       }}
                     />
-                    <span>No</span>
+                    <span>{t("No", "No")}</span>
                   </label>
                 </div>
 
@@ -865,7 +1189,7 @@ export default function ShiftsPage() {
                         : setStartHealthDeclaration(event.target.value)
                     }
                     className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
-                    placeholder="Describe health condition or incident."
+                    placeholder={t("Describe condicion de salud o incidente.", "Describe health condition or incident.")}
                   />
                 )}
               </div>
@@ -880,20 +1204,27 @@ export default function ShiftsPage() {
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
                   placeholder={
                     activeShift
-                      ? "Final observation (optional)"
-                      : "Initial observation (optional)"
+                      ? t("Observacion final (opcional)", "Final observation (optional)")
+                      : t("Observacion inicial (opcional)", "Initial observation (optional)")
                   }
                 />
               </div>
 
+              <p className="mt-3 text-xs text-slate-500">
+                {t(
+                  "La marca de tiempo del registro la asigna el servidor al enviar la accion para garantizar la integridad de asistencia.",
+                  "Registration timestamp is assigned by the server at submission time for attendance audit integrity."
+                )}
+              </p>
+
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {!activeShift ? (
                   <Button onClick={handleStart} disabled={!canSubmit} variant="primary">
-                    {processing ? "Starting..." : "Start shift"}
+                    {processing ? t("Iniciando...", "Starting...") : t("Iniciar turno", "Start shift")}
                   </Button>
                 ) : (
                   <Button onClick={handleEnd} disabled={!canSubmit} variant="danger">
-                    {processing ? "Ending..." : "End shift"}
+                    {processing ? t("Finalizando...", "Ending...") : t("Finalizar turno", "End shift")}
                   </Button>
                 )}
               </div>
@@ -908,14 +1239,14 @@ export default function ShiftsPage() {
             </Card>
 
             {activeShift && (
-              <Card title="Register incident" subtitle="If anything happens during the shift, register it here.">
+              <Card title={t("Registrar incidente", "Register incident")} subtitle={t("Si ocurre algo durante el turno, registralo aqui.", "If anything happens during the shift, register it here.")}>
                 <div className="space-y-2">
                   <textarea
                     value={employeeIncident}
                     onChange={event => setEmployeeIncident(event.target.value)}
                     rows={3}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
-                    placeholder="Describe the note or incident..."
+                    placeholder={t("Describe la nota o incidente...", "Describe the note or incident...")}
                   />
                   <Button
                     size="sm"
@@ -923,17 +1254,17 @@ export default function ShiftsPage() {
                     disabled={creatingEmployeeIncident}
                     onClick={() => void handleCreateEmployeeIncident()}
                   >
-                    {creatingEmployeeIncident ? "Saving..." : "Save note"}
+                    {creatingEmployeeIncident ? t("Guardando...", "Saving...") : t("Guardar nota", "Save note")}
                   </Button>
                 </div>
               </Card>
             )}
 
-            <Card title="Assigned tasks" subtitle="Supervision operational tasks with mandatory evidence closure.">
+            <Card title={t("Tareas asignadas", "Assigned tasks")} subtitle={t("Tareas operativas de supervision con cierre obligatorio por evidencia.", "Supervision operational tasks with mandatory evidence closure.")}>
               {loadingTasks ? (
                 <Skeleton className="h-24" />
               ) : employeeTasks.length === 0 ? (
-                <p className="text-sm text-slate-500">There are no pending assigned tasks.</p>
+                <p className="text-sm text-slate-500">{t("No hay tareas asignadas pendientes.", "There are no pending assigned tasks.")}</p>
               ) : (
                 <div className="space-y-3">
                   <div className="space-y-2">
@@ -942,12 +1273,12 @@ export default function ShiftsPage() {
                         <p className="font-semibold text-slate-800">{task.title}</p>
                         <p className="mt-1 text-slate-600">{task.description}</p>
                         <p className="mt-1 text-xs text-slate-500">
-                          Priority: {task.priority} | Status: {task.status} | Created: {formatDateTime(task.created_at)}
+                          {t("Prioridad", "Priority")}: {task.priority} | {t("Estado", "Status")}: {task.status} | {t("Creada", "Created")}: {formatDateTime(task.created_at)}
                         </p>
                         <div className="mt-2 flex gap-2">
                           {task.status === "pending" && (
                             <Button size="sm" variant="secondary" onClick={() => void handleSetTaskInProgress(task.id)}>
-                              Start task
+                              {t("Iniciar tarea", "Start task")}
                             </Button>
                           )}
                           {task.status !== "completed" && (
@@ -959,7 +1290,7 @@ export default function ShiftsPage() {
                                 resetTaskEvidenceCapture()
                               }}
                             >
-                              {selectedTaskId === task.id ? "Selected" : "Select to complete"}
+                              {selectedTaskId === task.id ? t("Seleccionada", "Selected") : t("Seleccionar para completar", "Select to complete")}
                             </Button>
                           )}
                         </div>
@@ -970,10 +1301,10 @@ export default function ShiftsPage() {
                   {selectedTaskId && (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <p className="text-sm font-medium text-slate-700">
-                        Task closing evidence (Task #{selectedTaskId})
+                        {t("Evidencia de cierre de tarea", "Task closing evidence")} (#{selectedTaskId})
                       </p>
                       <p className="mt-1 text-xs text-slate-600">
-                        Required: GPS + 3 photos (close-up, mid-range, wide overview).
+                        {t("Requerido: GPS + 3 fotos (primer plano, plano medio, vista general).", "Required: GPS + 3 photos (close-up, mid-range, wide overview).")}
                       </p>
 
                       <div className="mt-3">
@@ -982,62 +1313,71 @@ export default function ShiftsPage() {
 
                       <div className="mt-3 grid gap-3 xl:grid-cols-3">
                         <div className="rounded-lg border border-slate-200 bg-white p-3">
-                          <p className="text-sm font-semibold text-slate-700">{TASK_EVIDENCE_SHOTS[0].label}</p>
-                          <p className="mb-2 text-xs text-slate-500">{TASK_EVIDENCE_SHOTS[0].helper}</p>
+                          <p className="text-sm font-semibold text-slate-700">{t("Primer plano", "Close-up")}</p>
+                          <p className="mb-2 text-xs text-slate-500">{t("Captura un detalle directo del area intervenida.", "Capture a direct detail of the intervened area.")}</p>
                           <CameraCapture
                             onCapture={setTaskPhotoClose}
                             overlayLines={[
-                              `User: ${currentUserId ?? "unknown"}`,
-                              `Task: ${selectedTaskId}`,
-                              "Shot: close_up",
+                              `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                              `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
+                              `${t("Restaurante", "Restaurant")}: ${selectedTask?.restaurant_id ?? "-"}`,
+                              `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
+                              `${t("Tarea", "Task")}: ${selectedTaskId}`,
+                              `${t("Toma", "Shot")}: close_up`,
                               taskCoords
                                 ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : "GPS: pending",
+                                : t("GPS: pendiente", "GPS: pending"),
                             ]}
                           />
                         </div>
                         <div className="rounded-lg border border-slate-200 bg-white p-3">
-                          <p className="text-sm font-semibold text-slate-700">{TASK_EVIDENCE_SHOTS[1].label}</p>
-                          <p className="mb-2 text-xs text-slate-500">{TASK_EVIDENCE_SHOTS[1].helper}</p>
+                          <p className="text-sm font-semibold text-slate-700">{t("Plano medio", "Mid-range shot")}</p>
+                          <p className="mb-2 text-xs text-slate-500">{t("Captura a distancia media mostrando contexto cercano.", "Capture from mid distance showing nearby context.")}</p>
                           <CameraCapture
                             onCapture={setTaskPhotoMid}
                             overlayLines={[
-                              `User: ${currentUserId ?? "unknown"}`,
-                              `Task: ${selectedTaskId}`,
-                              "Shot: mid_range",
+                              `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                              `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
+                              `${t("Restaurante", "Restaurant")}: ${selectedTask?.restaurant_id ?? "-"}`,
+                              `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
+                              `${t("Tarea", "Task")}: ${selectedTaskId}`,
+                              `${t("Toma", "Shot")}: mid_range`,
                               taskCoords
                                 ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : "GPS: pending",
+                                : t("GPS: pendiente", "GPS: pending"),
                             ]}
                           />
                         </div>
                         <div className="rounded-lg border border-slate-200 bg-white p-3">
-                          <p className="text-sm font-semibold text-slate-700">{TASK_EVIDENCE_SHOTS[2].label}</p>
-                          <p className="mb-2 text-xs text-slate-500">{TASK_EVIDENCE_SHOTS[2].helper}</p>
+                          <p className="text-sm font-semibold text-slate-700">{t("Vista general", "Wide overview")}</p>
+                          <p className="mb-2 text-xs text-slate-500">{t("Captura una vista panoramica final del espacio completo.", "Capture a final panoramic view of the full space.")}</p>
                           <CameraCapture
                             onCapture={setTaskPhotoWide}
                             overlayLines={[
-                              `User: ${currentUserId ?? "unknown"}`,
-                              `Task: ${selectedTaskId}`,
-                              "Shot: wide_general",
+                              `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                              `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
+                              `${t("Restaurante", "Restaurant")}: ${selectedTask?.restaurant_id ?? "-"}`,
+                              `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
+                              `${t("Tarea", "Task")}: ${selectedTaskId}`,
+                              `${t("Toma", "Shot")}: wide_general`,
                               taskCoords
                                 ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : "GPS: pending",
+                                : t("GPS: pendiente", "GPS: pending"),
                             ]}
                           />
                         </div>
                       </div>
 
                       <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                        <p>GPS: {taskCoords ? "OK" : "Pending"}</p>
-                        <p>Close-up: {taskPhotoClose ? "OK" : "Pending"}</p>
-                        <p>Mid-range shot: {taskPhotoMid ? "OK" : "Pending"}</p>
-                        <p>Wide overview: {taskPhotoWide ? "OK" : "Pending"}</p>
+                        <p>GPS: {taskCoords ? "OK" : t("Pendiente", "Pending")}</p>
+                        <p>{t("Primer plano", "Close-up")}: {taskPhotoClose ? "OK" : t("Pendiente", "Pending")}</p>
+                        <p>{t("Plano medio", "Mid-range shot")}: {taskPhotoMid ? "OK" : t("Pendiente", "Pending")}</p>
+                        <p>{t("Vista general", "Wide overview")}: {taskPhotoWide ? "OK" : t("Pendiente", "Pending")}</p>
                       </div>
 
                       <div className="mt-3">
                         <Button variant="primary" onClick={() => void handleCompleteTask()} disabled={processingTask}>
-                          {processingTask ? "Completing..." : "Complete task with triple evidence"}
+                          {processingTask ? t("Completando...", "Completing...") : t("Completar tarea con evidencia triple", "Complete task with triple evidence")}
                         </Button>
                       </div>
                     </div>
@@ -1046,7 +1386,7 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card title="Shift history" subtitle="Paginated view with status and duration.">
+            <Card title={t("Historial de turnos", "Shift history")} subtitle={t("Vista paginada con estado y duracion.", "Paginated view with status and duration.")}>
               {loadingData ? (
                 <div className="space-y-2">
                   {Array.from({ length: 4 }).map((_, index) => (
@@ -1055,9 +1395,9 @@ export default function ShiftsPage() {
                 </div>
               ) : history.length === 0 ? (
                 <EmptyState
-                  title="No history"
-                  description="When you register shifts, they will appear here."
-                  actionLabel="Reload"
+                  title={t("Sin historial", "No history")}
+                  description={t("Cuando registres turnos apareceran aqui.", "When you register shifts, they will appear here.")}
+                  actionLabel={t("Recargar", "Reload")}
                   onAction={() => void loadEmployeeData(historyPage)}
                 />
               ) : (
@@ -1066,10 +1406,10 @@ export default function ShiftsPage() {
                     <table className="min-w-full border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                          <th className="pb-2 pr-3">Start</th>
-                          <th className="pb-2 pr-3">End</th>
-                          <th className="pb-2 pr-3">Status</th>
-                          <th className="pb-2 pr-3">Duration</th>
+                          <th className="pb-2 pr-3">{t("Inicio", "Start")}</th>
+                          <th className="pb-2 pr-3">{t("Fin", "End")}</th>
+                          <th className="pb-2 pr-3">{t("Estado", "Status")}</th>
+                          <th className="pb-2 pr-3">{t("Duracion", "Duration")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1079,7 +1419,7 @@ export default function ShiftsPage() {
                             <td className="py-2 pr-3">{formatDateTime(shift.end_time)}</td>
                             <td className="py-2 pr-3">
                               <Badge variant={shift.end_time ? "neutral" : "success"}>
-                                {shift.end_time ? "Completed" : "Active"}
+                                {shift.end_time ? t("Completado", "Completed") : t("Activo", "Active")}
                               </Badge>
                             </td>
                             <td className="py-2 pr-3">{formatDuration(shift.start_time, shift.end_time)}</td>
@@ -1090,9 +1430,10 @@ export default function ShiftsPage() {
                   </div>
 
                   <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-slate-500">
-                      Page {historyPage} of {historyTotalPages}
-                    </p>
+                    <div className="text-xs text-slate-500">
+                      <p>{t("Pagina", "Page")} {historyPage} {t("de", "of")} {historyTotalPages}</p>
+                      <p>{t("Total trabajado (pagina actual)", "Total worked (current page)")}: {(totalWorkedMinutes / 60).toFixed(1)}h</p>
+                    </div>
                     <div className="flex gap-2">
                       <Button
                         variant="secondary"
@@ -1100,7 +1441,7 @@ export default function ShiftsPage() {
                         disabled={historyPage <= 1 || loadingData}
                         onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
                       >
-                        Previous
+                        {t("Anterior", "Previous")}
                       </Button>
                       <Button
                         variant="secondary"
@@ -1108,7 +1449,7 @@ export default function ShiftsPage() {
                         disabled={historyPage >= historyTotalPages || loadingData}
                         onClick={() => setHistoryPage(prev => prev + 1)}
                       >
-                        Next
+                        {t("Siguiente", "Next")}
                       </Button>
                     </div>
                   </div>
@@ -1116,15 +1457,15 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card title="Scheduled shifts" subtitle="Agenda assigned for your upcoming work periods.">
+            <Card title={t("Turnos programados", "Scheduled shifts")} subtitle={t("Agenda asignada para tus proximos periodos de trabajo.", "Agenda assigned for your upcoming work periods.")}>
               {scheduledShifts.length === 0 ? (
-                <p className="text-sm text-slate-500">You do not have scheduled shifts.</p>
+                <p className="text-sm text-slate-500">{t("No tienes turnos programados.", "You do not have scheduled shifts.")}</p>
               ) : (
                 <div className="space-y-2">
                   {scheduledShifts.map(item => (
                     <div key={item.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
                       {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)} |{" "}
-                      Status: {item.status}
+                      {t("Estado", "Status")}: {item.status}
                     </div>
                   ))}
                 </div>
@@ -1135,24 +1476,24 @@ export default function ShiftsPage() {
 
         {canOperateSupervisor && (
           <section className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-900">Supervision panel</h2>
+            <h2 className="text-lg font-semibold text-slate-900">{t("Panel de supervision", "Supervision panel")}</h2>
 
             {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                 {overdueSupervisorTasks.length > 0 && (
                   <p className="font-medium">
-                    There are {overdueSupervisorTasks.length} overdue task(s) pending closure.
+                    {t("Hay", "There are")} {overdueSupervisorTasks.length} {t("tarea(s) vencidas pendientes de cierre.", "overdue task(s) pending closure.")}
                   </p>
                 )}
                 {pendingPresenceClosures.length > 0 && (
                   <p className="mt-1">
-                    You have {pendingPresenceClosures.length} restaurant(s) with entry registered but no exit today.
+                    {t("Tienes", "You have")} {pendingPresenceClosures.length} {t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")}
                   </p>
                 )}
               </div>
             )}
 
-            <Card title="Supervisor entry/exit" subtitle="Mandatory record by restaurant with GPS + evidence.">
+            <Card title={t("Entrada/salida de supervision", "Supervisor entry/exit")} subtitle={t("Registro obligatorio por restaurante con GPS + evidencia.", "Mandatory record by restaurant with GPS + evidence.")}>
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="space-y-2">
                   <select
@@ -1160,7 +1501,7 @@ export default function ShiftsPage() {
                     onChange={event => setPresenceRestaurantId(Number(event.target.value) || null)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   >
-                    <option value="">Select restaurant</option>
+                    <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
                     {presenceRestaurants.map(restaurant => (
                       <option key={restaurant.id} value={restaurant.id}>
                         {restaurant.name}
@@ -1170,7 +1511,7 @@ export default function ShiftsPage() {
 
                   {presenceRestaurants.length === 0 && (
                     <p className="text-xs text-amber-700">
-                      No assigned restaurants to register presence.
+                      {t("No hay restaurantes asignados para registrar presencia.", "No assigned restaurants to register presence.")}
                     </p>
                   )}
 
@@ -1182,7 +1523,7 @@ export default function ShiftsPage() {
                         checked={presencePhase === "start"}
                         onChange={() => setPresencePhase("start")}
                       />
-                      Entry
+                      {t("Entrada", "Entry")}
                     </label>
                     <label className="flex items-center gap-2">
                       <input
@@ -1191,7 +1532,7 @@ export default function ShiftsPage() {
                         checked={presencePhase === "end"}
                         onChange={() => setPresencePhase("end")}
                       />
-                      Exit
+                      {t("Salida", "Exit")}
                     </label>
                   </div>
 
@@ -1200,7 +1541,7 @@ export default function ShiftsPage() {
                     value={presenceNotes}
                     onChange={event => setPresenceNotes(event.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Presence notes (optional)"
+                    placeholder={t("Notas de presencia (opcional)", "Presence notes (optional)")}
                   />
                 </div>
 
@@ -1209,11 +1550,14 @@ export default function ShiftsPage() {
                   <CameraCapture
                     onCapture={setPresencePhoto}
                     overlayLines={[
-                      `User: ${currentUserId ?? "unknown"}`,
-                      `Supervisor phase: ${presencePhase}`,
+                      `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                      `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                      `${t("Restaurante", "Restaurant")}: ${presenceRestaurantId ?? "-"}`,
+                      `${t("Turno", "Shift")}: ${t("supervision", "supervision")}-${presencePhase}`,
+                      `${t("Fase de supervision", "Supervisor phase")}: ${presencePhase}`,
                       presenceCoords
                         ? `GPS: ${presenceCoords.lat.toFixed(6)}, ${presenceCoords.lng.toFixed(6)}`
-                        : "GPS: pending",
+                        : t("GPS: pendiente", "GPS: pending"),
                     ]}
                   />
                 </div>
@@ -1221,20 +1565,20 @@ export default function ShiftsPage() {
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Button variant="primary" onClick={() => void handleRegisterPresence()} disabled={registeringPresence}>
-                  {registeringPresence ? "Saving..." : "Register supervisor presence"}
+                  {registeringPresence ? t("Guardando...", "Saving...") : t("Registrar presencia de supervision", "Register supervisor presence")}
                 </Button>
                 <span className="text-xs text-slate-500">
-                  Latest records: {supervisorPresence.length}
+                  {t("Registros recientes", "Latest records")}: {supervisorPresence.length}
                 </span>
               </div>
 
               {supervisorPresence.length > 0 && (
                 <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <p className="mb-2 font-medium text-slate-700">Recent presence history</p>
+                  <p className="mb-2 font-medium text-slate-700">{t("Historial reciente de presencia", "Recent presence history")}</p>
                   <ul className="space-y-1 text-slate-600">
                     {supervisorPresence.slice(0, 6).map(item => (
                       <li key={item.id}>
-                        {formatDateTime(item.recorded_at)} | Restaurant #{item.restaurant_id} | Phase: {item.phase}
+                        {formatDateTime(item.recorded_at)} | {t("Restaurante", "Restaurant")} #{item.restaurant_id} | {t("Fase", "Phase")}: {item.phase}
                       </li>
                     ))}
                   </ul>
@@ -1242,11 +1586,11 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card title="Task monitoring" subtitle="Recent tasks created or assigned in supervised restaurants.">
+            <Card title={t("Monitoreo de tareas", "Task monitoring")} subtitle={t("Tareas recientes creadas o asignadas en restaurantes supervisados.", "Recent tasks created or assigned in supervised restaurants.")}>
               {loadingTasks ? (
                 <Skeleton className="h-20" />
               ) : supervisorTasks.length === 0 ? (
-                <p className="text-sm text-slate-500">There are no operational tasks recorded yet.</p>
+                <p className="text-sm text-slate-500">{t("Aun no hay tareas operativas registradas.", "There are no operational tasks recorded yet.")}</p>
               ) : (
                 <div className="space-y-2">
                   {supervisorTasks.slice(0, 8).map(task => (
@@ -1254,12 +1598,12 @@ export default function ShiftsPage() {
                       <p className="font-medium text-slate-800">
                         #{task.id} {task.title}
                       </p>
-                      <p className="text-slate-600">Status: {task.status} | Priority: {task.priority}</p>
+                      <p className="text-slate-600">{t("Estado", "Status")}: {task.status} | {t("Prioridad", "Priority")}: {task.priority}</p>
                       <p className="text-xs text-slate-500">
-                        Employee: {task.assigned_employee_id.slice(0, 8)} | Shift: {task.shift_id}
+                        {t("Empleado", "Employee")}: {task.assigned_employee_id.slice(0, 8)} | {t("Turno", "Shift")}: {task.shift_id}
                       </p>
                       {task.due_at && (
-                        <p className="text-xs text-slate-500">Due: {formatDateTime(task.due_at)}</p>
+                        <p className="text-xs text-slate-500">{t("Vence", "Due")}: {formatDateTime(task.due_at)}</p>
                       )}
                       {task.status === "completed" && task.evidence_path && (
                         <div className="mt-2">
@@ -1268,7 +1612,7 @@ export default function ShiftsPage() {
                             variant="secondary"
                             onClick={() => void handleOpenTaskDetail(task)}
                           >
-                            View evidence details
+                            {t("Ver detalle de evidencias", "View evidence details")}
                           </Button>
                         </div>
                       )}
@@ -1278,13 +1622,81 @@ export default function ShiftsPage() {
               )}
             </Card>
 
+            <Card title={t("Control de turnos programados", "Scheduled shift control")} subtitle={t("Cancelar o reprogramar turnos proximos.", "Cancel or reschedule upcoming shifts.")}>
+              {supervisionScheduledShifts.length === 0 ? (
+                <p className="text-sm text-slate-500">{t("No se encontraron turnos programados.", "No scheduled shifts found.")}</p>
+              ) : (
+                <div className="space-y-2">
+                  {supervisionScheduledShifts.slice(0, 20).map(item => {
+                    const editing = editingSupervisionScheduledId === item.id
+                    return (
+                      <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                        <p className="font-medium text-slate-800">#{item.id} | {t("Empleado", "Employee")}: {item.employee_id.slice(0, 8)} | {t("Restaurante", "Restaurant")}: {item.restaurant_id}</p>
+                        {!editing ? (
+                          <>
+                            <p className="text-slate-600">
+                              {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)}
+                            </p>
+                            <p className="text-xs text-slate-500">{t("Estado", "Status")}: {item.status}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {item.status !== "cancelled" && (
+                                <Button size="sm" variant="ghost" onClick={() => handleStartEditSupervisionScheduled(item)}>
+                                  {t("Reprogramar", "Reschedule")}
+                                </Button>
+                              )}
+                              {item.status !== "cancelled" && (
+                                <Button size="sm" variant="danger" onClick={() => void handleCancelSupervisionScheduledShift(item)}>
+                                  {t("Cancelar", "Cancel")}
+                                </Button>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            <input
+                              type="datetime-local"
+                              value={editSupervisionScheduledStart}
+                              onChange={event => setEditSupervisionScheduledStart(event.target.value)}
+                              className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                            />
+                            <input
+                              type="datetime-local"
+                              value={editSupervisionScheduledEnd}
+                              onChange={event => setEditSupervisionScheduledEnd(event.target.value)}
+                              className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                            />
+                            <div className="sm:col-span-2 flex flex-wrap gap-2">
+                              <Button size="sm" onClick={() => void handleSaveReprogramSupervisionScheduled()}>
+                                {t("Guardar", "Save")}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingSupervisionScheduledId(null)
+                                  setEditSupervisionScheduledStart("")
+                                  setEditSupervisionScheduledEnd("")
+                                }}
+                              >
+                                {t("Cerrar", "Close")}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </Card>
+
             {loadingSupervisor ? (
               <Skeleton className="h-40" />
             ) : supervisorRows.length === 0 ? (
               <EmptyState
-                title="No active shifts"
-                description="When there is activity in progress, you will see it here."
-                actionLabel="Refresh"
+                title={t("Sin turnos activos", "No active shifts")}
+                description={t("Cuando haya actividad en curso la veras aqui.", "When there is activity in progress, you will see it here.")}
+                actionLabel={t("Actualizar", "Refresh")}
                 onAction={() => void loadSupervisorData()}
               />
             ) : (
@@ -1293,12 +1705,12 @@ export default function ShiftsPage() {
                   return (
                     <Card
                       key={row.id}
-                      title={`Shift ${String(row.id).slice(0, 8)}`}
-                      subtitle={`Start: ${formatDateTime(row.start_time)} | Status: ${row.status}`}
+                      title={`${t("Turno", "Shift")} ${String(row.id).slice(0, 8)}`}
+                      subtitle={`${t("Inicio", "Start")}: ${formatDateTime(row.start_time)} | ${t("Estado", "Status")}: ${row.status}`}
                     >
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="font-medium text-slate-700">Start evidence</p>
+                          <p className="font-medium text-slate-700">{t("Evidencia de inicio", "Start evidence")}</p>
                           {row.start_evidence_path ? (
                             <Button
                               size="sm"
@@ -1308,24 +1720,24 @@ export default function ShiftsPage() {
                                   try {
                                     const signedUrl = await resolveEvidenceUrl(row.start_evidence_path)
                                     if (!signedUrl) {
-                                      showToast("info", "Could not generate evidence URL.")
+                                      showToast("info", t("No se pudo generar URL de evidencia.", "Could not generate evidence URL."))
                                       return
                                     }
                                     window.open(signedUrl, "_blank", "noopener,noreferrer")
                                   } catch (error: unknown) {
-                                    showToast("error", extractErrorMessage(error, "Could not open evidence."))
+                                    showToast("error", extractErrorMessage(error, t("No se pudo abrir la evidencia.", "Could not open evidence.")))
                                   }
                                 })()
                               }}
                             >
-                              View start evidence
+                              {t("Ver evidencia de inicio", "View start evidence")}
                             </Button>
                           ) : (
-                            <p className="text-slate-500">No evidence registered.</p>
+                            <p className="text-slate-500">{t("No hay evidencia registrada.", "No evidence registered.")}</p>
                           )}
                         </div>
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="font-medium text-slate-700">End evidence</p>
+                          <p className="font-medium text-slate-700">{t("Evidencia de cierre", "End evidence")}</p>
                           {row.end_evidence_path ? (
                             <Button
                               size="sm"
@@ -1335,35 +1747,35 @@ export default function ShiftsPage() {
                                   try {
                                     const signedUrl = await resolveEvidenceUrl(row.end_evidence_path)
                                     if (!signedUrl) {
-                                      showToast("info", "Could not generate evidence URL.")
+                                      showToast("info", t("No se pudo generar URL de evidencia.", "Could not generate evidence URL."))
                                       return
                                     }
                                     window.open(signedUrl, "_blank", "noopener,noreferrer")
                                   } catch (error: unknown) {
-                                    showToast("error", extractErrorMessage(error, "Could not open evidence."))
+                                    showToast("error", extractErrorMessage(error, t("No se pudo abrir la evidencia.", "Could not open evidence.")))
                                   }
                                 })()
                               }}
                             >
-                              View end evidence
+                              {t("Ver evidencia de cierre", "View end evidence")}
                             </Button>
                           ) : (
-                            <p className="text-slate-500">Closure pending.</p>
+                            <p className="text-slate-500">{t("Cierre pendiente.", "Closure pending.")}</p>
                           )}
                         </div>
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button size="sm" variant="secondary" onClick={() => void handleStatusChange(row.id, "approved")}>
-                          Approve
+                          {t("Aprobar", "Approve")}
                         </Button>
                         <Button size="sm" variant="danger" onClick={() => void handleStatusChange(row.id, "rejected")}>
-                          Reject
+                          {t("Rechazar", "Reject")}
                         </Button>
                       </div>
 
                       <div className="mt-4 space-y-2 rounded-lg border border-slate-200 p-3">
-                        <p className="text-sm font-medium text-slate-700">Create task for this shift</p>
+                        <p className="text-sm font-medium text-slate-700">{t("Crear tarea para este turno", "Create task for this shift")}</p>
                         <input
                           value={newTaskByShift[row.id]?.title ?? ""}
                           onChange={event =>
@@ -1378,7 +1790,7 @@ export default function ShiftsPage() {
                             }))
                           }
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                          placeholder="Task title"
+                          placeholder={t("Titulo de tarea", "Task title")}
                         />
                         <textarea
                           value={newTaskByShift[row.id]?.description ?? ""}
@@ -1395,7 +1807,7 @@ export default function ShiftsPage() {
                           }
                           rows={2}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                          placeholder="Instructions. Include closing criteria: close-up + mid-range + wide overview."
+                          placeholder={t("Instrucciones. Incluye criterio de cierre: primer plano + plano medio + vista general.", "Instructions. Include closing criteria: close-up + mid-range + wide overview.")}
                         />
                         <div className="flex flex-wrap items-center gap-2">
                           <input
@@ -1429,10 +1841,10 @@ export default function ShiftsPage() {
                             }
                             className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                           >
-                            <option value="low">Low</option>
-                            <option value="normal">Normal</option>
-                            <option value="high">High</option>
-                            <option value="critical">Critical</option>
+                            <option value="low">{t("Baja", "Low")}</option>
+                            <option value="normal">{t("Normal", "Normal")}</option>
+                            <option value="high">{t("Alta", "High")}</option>
+                            <option value="critical">{t("Critica", "Critical")}</option>
                           </select>
                           <Button
                             size="sm"
@@ -1440,13 +1852,13 @@ export default function ShiftsPage() {
                             onClick={() => void handleCreateTaskForShift(row)}
                             disabled={creatingTaskForShift === row.id}
                           >
-                            {creatingTaskForShift === row.id ? "Saving..." : "Create task"}
+                            {creatingTaskForShift === row.id ? t("Guardando...", "Saving...") : t("Crear tarea", "Create task")}
                           </Button>
                         </div>
                       </div>
 
                       <div className="mt-4 space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Register incident</label>
+                        <label className="text-sm font-medium text-slate-700">{t("Registrar incidente", "Register incident")}</label>
                         <textarea
                           value={incidentNotes[row.id] ?? ""}
                           onFocus={() => void loadIncidentsForShift(row.id)}
@@ -1458,20 +1870,20 @@ export default function ShiftsPage() {
                           }
                           rows={3}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
-                          placeholder="Describe the observed incident..."
+                          placeholder={t("Describe el incidente observado...", "Describe the observed incident...")}
                         />
                         <Button
                           size="sm"
                           variant="primary"
                           onClick={() => void handleCreateIncident(row.id)}
                         >
-                          Save incident
+                          {t("Guardar incidente", "Save incident")}
                         </Button>
                       </div>
 
                       {(incidentHistory[row.id] ?? []).length > 0 && (
                         <div className="mt-3 rounded-lg border border-slate-200 p-3 text-sm">
-                          <p className="mb-2 font-medium text-slate-700">Recent incidents</p>
+                          <p className="mb-2 font-medium text-slate-700">{t("Incidentes recientes", "Recent incidents")}</p>
                           <ul className="space-y-1 text-slate-600">
                             {incidentHistory[row.id].map(incident => (
                               <li key={incident.id}>
@@ -1492,7 +1904,7 @@ export default function ShiftsPage() {
         <Modal open={!!taskDetailModalTask} onClose={closeTaskDetailModal}>
           <div className="space-y-3">
             <h3 className="text-lg font-semibold text-slate-900">
-              Task evidence detail{" "}
+              {t("Detalle de evidencia de tarea", "Task evidence detail")}{" "}
               {taskDetailModalTask ? `#${taskDetailModalTask.id}` : ""}
             </h3>
 
@@ -1513,34 +1925,34 @@ export default function ShiftsPage() {
                         try {
                           const signedUrl = await resolveEvidenceUrl(taskDetailModalTask.evidence_path)
                           if (!signedUrl) {
-                            showToast("info", "Could not open evidence file.")
+                            showToast("info", t("No se pudo abrir el archivo de evidencia.", "Could not open evidence file."))
                             return
                           }
                           window.open(signedUrl, "_blank", "noopener,noreferrer")
                         } catch (error: unknown) {
-                          showToast("error", extractErrorMessage(error, "Could not open evidence file."))
+                          showToast("error", extractErrorMessage(error, t("No se pudo abrir el archivo de evidencia.", "Could not open evidence file.")))
                         }
                       })()
                     }}
                   >
-                    Open evidence file
+                    {t("Abrir archivo de evidencia", "Open evidence file")}
                   </Button>
                 )}
               </div>
             ) : !taskDetailManifest ? (
-              <p className="text-sm text-slate-600">No evidence detail available.</p>
+              <p className="text-sm text-slate-600">{t("No hay detalle de evidencia disponible.", "No evidence detail available.")}</p>
             ) : (
               <div className="space-y-3">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                  <p>Captured: {formatDateTime(taskDetailManifest.capturedAt)}</p>
-                  <p>User: {taskDetailManifest.capturedBy ?? "-"}</p>
+                  <p>{t("Capturada", "Captured")}: {formatDateTime(taskDetailManifest.capturedAt)}</p>
+                  <p>{t("Usuario", "User")}: {taskDetailManifest.capturedBy ?? "-"}</p>
                   <p>
                     GPS:{" "}
                     {taskDetailManifest.gps
                       ? `${taskDetailManifest.gps.lat.toFixed(6)}, ${taskDetailManifest.gps.lng.toFixed(6)}`
                       : "-"}
                   </p>
-                  <p>Evidences: {taskDetailManifest.evidences.length}</p>
+                  <p>{t("Evidencias", "Evidences")}: {taskDetailManifest.evidences.length}</p>
                 </div>
 
                 <div className="grid gap-3">
@@ -1552,11 +1964,11 @@ export default function ShiftsPage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={item.signedUrl}
-                          alt={`Evidence ${item.label}`}
+                          alt={`${t("Evidencia", "Evidence")} ${item.label}`}
                           className="mt-2 h-48 w-full rounded-lg border border-slate-200 object-cover"
                         />
                       ) : (
-                        <p className="mt-2 text-xs text-slate-500">Could not resolve URL for this evidence.</p>
+                        <p className="mt-2 text-xs text-slate-500">{t("No se pudo resolver la URL para esta evidencia.", "Could not resolve URL for this evidence.")}</p>
                       )}
                     </div>
                   ))}
@@ -1568,13 +1980,13 @@ export default function ShiftsPage() {
                     variant="secondary"
                     onClick={() => {
                       if (!taskDetailManifest.manifestSignedUrl) {
-                        showToast("info", "No manifest URL available.")
+                        showToast("info", t("No hay URL de manifiesto disponible.", "No manifest URL available."))
                         return
                       }
                       window.open(taskDetailManifest.manifestSignedUrl, "_blank", "noopener,noreferrer")
                     }}
                   >
-                    View JSON manifest
+                    {t("Ver manifiesto JSON", "View JSON manifest")}
                   </Button>
                 </div>
               </div>
