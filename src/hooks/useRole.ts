@@ -6,6 +6,30 @@ import { useAuth } from "@/hooks/useAuth"
 import { supabase } from "@/services/supabaseClient"
 import { ROLES, Role } from "@/utils/permissions"
 
+function normalizeRole(value: unknown): Role | undefined {
+  if (typeof value !== "string") return undefined
+  const normalized = value.trim().toLowerCase()
+
+  if (normalized === ROLES.SUPER_ADMIN || normalized === "superadmin" || normalized === "admin") {
+    return ROLES.SUPER_ADMIN
+  }
+
+  if (
+    normalized === ROLES.SUPERVISORA ||
+    normalized === "supervisor" ||
+    normalized === "coordinadora" ||
+    normalized === "coordinator"
+  ) {
+    return ROLES.SUPERVISORA
+  }
+
+  if (normalized === ROLES.EMPLEADO || normalized === "employee" || normalized === "empleado_aseo") {
+    return ROLES.EMPLEADO
+  }
+
+  return undefined
+}
+
 export function useRole() {
   const { user, loading } = useAuth()
   const [profileRole, setProfileRole] = useState<Role | null>(null)
@@ -30,7 +54,7 @@ export function useRole() {
         .maybeSingle()
 
       if (!mounted) return
-      setProfileRole((data?.role as Role | undefined) ?? null)
+      setProfileRole(normalizeRole(data?.role) ?? null)
       setLoadingRole(false)
     }
 
@@ -41,7 +65,7 @@ export function useRole() {
     }
   }, [user?.id])
 
-  const metadataRole = user?.user_metadata?.role as Role | undefined
+  const metadataRole = normalizeRole(user?.user_metadata?.role)
   // Source of truth is profiles.role (updated by admin flows). Metadata is fallback only.
   const role = profileRole ?? metadataRole ?? undefined
 
