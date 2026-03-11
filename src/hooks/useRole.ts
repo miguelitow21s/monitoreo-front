@@ -42,7 +42,8 @@ export function useRole() {
   }, [user?.id])
 
   const metadataRole = user?.user_metadata?.role as Role | undefined
-  const role = metadataRole ?? profileRole ?? undefined
+  // Source of truth is profiles.role (updated by admin flows). Metadata is fallback only.
+  const role = profileRole ?? metadataRole ?? undefined
 
   return {
     role,
