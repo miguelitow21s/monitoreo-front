@@ -1,6 +1,8 @@
 import { supabase } from "@/services/supabaseClient"
 import { Role } from "@/utils/permissions"
 
+let bootstrapRpcUnavailable = false
+
 export interface UserProfile {
   id: string
   full_name: string | null
@@ -43,6 +45,15 @@ export async function updateUserProfileStatus(id: string, isActive: boolean) {
 }
 
 export async function bootstrapMyUserProfile() {
+  if (bootstrapRpcUnavailable) return
+
   const { error } = await supabase.rpc("bootstrap_my_user")
-  if (error) throw error
+  if (error) {
+    const message = typeof error.message === "string" ? error.message.toLowerCase() : ""
+    if (message.includes("could not find") || message.includes("does not exist") || message.includes("404")) {
+      bootstrapRpcUnavailable = true
+      return
+    }
+    throw error
+  }
 }

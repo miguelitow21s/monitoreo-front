@@ -39,21 +39,57 @@ export async function assignScheduledShift(payload: {
 }
 
 export async function listMyScheduledShifts(limit = 10) {
-  const { data, error } = await supabase.rpc("list_my_scheduled_shifts", {
+  const rpcResult = await supabase.rpc("list_my_scheduled_shifts", {
     p_limit: limit,
   })
 
-  if (error) throw error
-  return (data ?? []) as ScheduledShift[]
+  if (rpcResult.error) {
+    const retryWithoutArgs = await supabase.rpc("list_my_scheduled_shifts")
+    if (!retryWithoutArgs.error) {
+      return ((retryWithoutArgs.data ?? []) as ScheduledShift[]).slice(0, limit)
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) throw rpcResult.error
+
+    const fallback = await supabase
+      .from("scheduled_shifts")
+      .select("id,employee_id,restaurant_id,scheduled_start,scheduled_end,status,notes")
+      .eq("employee_id", user.id)
+      .order("scheduled_start", { ascending: true })
+      .limit(limit)
+
+    if (fallback.error) throw rpcResult.error
+    return (fallback.data ?? []) as ScheduledShift[]
+  }
+
+  return (rpcResult.data ?? []) as ScheduledShift[]
 }
 
 export async function listScheduledShifts(limit = 50) {
-  const { data, error } = await supabase.rpc("list_scheduled_shifts", {
+  const rpcResult = await supabase.rpc("list_scheduled_shifts", {
     p_limit: limit,
   })
 
-  if (error) throw error
-  return (data ?? []) as ScheduledShift[]
+  if (rpcResult.error) {
+    const retryWithoutArgs = await supabase.rpc("list_scheduled_shifts")
+    if (!retryWithoutArgs.error) {
+      return ((retryWithoutArgs.data ?? []) as ScheduledShift[]).slice(0, limit)
+    }
+
+    const fallback = await supabase
+      .from("scheduled_shifts")
+      .select("id,employee_id,restaurant_id,scheduled_start,scheduled_end,status,notes")
+      .order("scheduled_start", { ascending: true })
+      .limit(limit)
+
+    if (fallback.error) throw rpcResult.error
+    return (fallback.data ?? []) as ScheduledShift[]
+  }
+
+  return (rpcResult.data ?? []) as ScheduledShift[]
 }
 
 export async function cancelScheduledShift(scheduledShiftId: number, notes?: string) {

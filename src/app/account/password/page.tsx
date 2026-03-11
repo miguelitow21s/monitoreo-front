@@ -20,6 +20,9 @@ export default function AccountPasswordPage() {
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -72,35 +75,62 @@ export default function AccountPasswordPage() {
       <div className="mx-auto w-full max-w-xl">
         <Card title={t("Cambiar contrasena", "Change password")} subtitle={t("Actualiza las credenciales de tu cuenta actual.", "Update your current account credentials.")}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              placeholder={t("Contrasena actual", "Current password")}
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-            />
-            <input
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              placeholder={t("Nueva contrasena (min 8)", "New password (min 8)")}
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-            />
-            <input
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              placeholder={t("Confirmar nueva contrasena", "Confirm new password")}
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-            />
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                placeholder={t("Contrasena actual", "Current password")}
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(prev => !prev)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                {showCurrentPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type={showNewPassword ? "text" : "password"}
+                required
+                minLength={8}
+                autoComplete="new-password"
+                placeholder={t("Nueva contrasena (min 8)", "New password (min 8)")}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(prev => !prev)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                {showNewPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                required
+                minLength={8}
+                autoComplete="new-password"
+                placeholder={t("Confirmar nueva contrasena", "Confirm new password")}
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(prev => !prev)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                {showConfirmPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
+              </button>
+            </div>
 
             {error && <p className="text-sm text-red-600">{error}</p>}
             {message && <p className="text-sm text-emerald-700">{message}</p>}

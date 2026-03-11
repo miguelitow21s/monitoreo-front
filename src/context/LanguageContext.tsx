@@ -47,7 +47,7 @@ function resolveLanguageByRole(role: string | null | undefined): AppLanguage {
 
 function readStoredLanguageConfig() {
   if (typeof window === "undefined") {
-    return { language: "en" as AppLanguage, isManual: false }
+    return { language: "es" as AppLanguage, isManual: false }
   }
 
   const savedLanguage = window.localStorage.getItem(STORAGE_LANGUAGE_KEY)
@@ -61,10 +61,19 @@ function readStoredLanguageConfig() {
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const { role } = useRole()
-  const [manualLanguage, setManualLanguage] = useState<AppLanguage>(() => readStoredLanguageConfig().language)
-  const [isManual, setIsManual] = useState(() => readStoredLanguageConfig().isManual)
+  // Keep first paint deterministic to avoid server/client text mismatch during hydration.
+  const [manualLanguage, setManualLanguage] = useState<AppLanguage>("es")
+  const [isManual, setIsManual] = useState(false)
   const roleLanguage = resolveLanguageByRole(typeof role === "string" ? role : null)
   const language = isManual ? manualLanguage : roleLanguage
+
+  useEffect(() => {
+    const stored = readStoredLanguageConfig()
+    queueMicrotask(() => {
+      setManualLanguage(stored.language)
+      setIsManual(stored.isManual)
+    })
+  }, [])
 
   useEffect(() => {
     if (typeof window === "undefined") return

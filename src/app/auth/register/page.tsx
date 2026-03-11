@@ -32,6 +32,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -176,16 +177,25 @@ export default function RegisterPage() {
             onChange={e => setEmail(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
           />
-          <input
-            type="password"
-            required
-            minLength={8}
-            autoComplete="new-password"
-            placeholder={t("Contrasena (min 8)", "Password (min 8)")}
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              required
+              minLength={8}
+              autoComplete="new-password"
+              placeholder={t("Contrasena (min 8)", "Password (min 8)")}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(prev => !prev)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              {showPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
+            </button>
+          </div>
         </div>
 
         {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
