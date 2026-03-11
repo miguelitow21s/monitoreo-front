@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const [loadingData, setLoadingData] = useState(true)
   const [runningChecks, setRunningChecks] = useState(false)
   const [checkResults, setCheckResults] = useState<IntegrationCheckResult[]>([])
+  const [lastChecksAt, setLastChecksAt] = useState<string | null>(null)
 
   const roleSummary = isSuperAdmin
     ? t("Vista completa del sistema para administracion global.", "Full system view for global administration.")
@@ -80,6 +81,7 @@ export default function DashboardPage() {
     try {
       const results = await runBackendIntegrationChecks()
       setCheckResults(results)
+      setLastChecksAt(new Date().toISOString())
       const failures = results.filter(item => item.status === "fail").length
       if (failures > 0) {
         showToast("error", t(`${failures} validaciones de backend fallaron.`, `${failures} backend validations failed.`))
@@ -193,9 +195,9 @@ export default function DashboardPage() {
                   <Button onClick={() => void runChecks()} disabled={runningChecks} variant="secondary">
                     {runningChecks ? t("Ejecutando...", "Running...") : t("Ejecutar validaciones", "Run validations")}
                   </Button>
-                  {checkResults.length > 0 && (
+                  {checkResults.length > 0 && lastChecksAt && (
                     <span className="text-xs text-slate-500">
-                      {t("Ultima ejecucion", "Last run")}: {formatDateTime(new Date())}
+                      {t("Ultima ejecucion", "Last run")}: {formatDateTime(lastChecksAt)}
                     </span>
                   )}
                 </div>

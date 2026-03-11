@@ -1,5 +1,65 @@
 import { invokeEdge } from "@/services/edgeClient"
 
+let scheduledManageUnavailable = false
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return ""
+}
+
+function getErrorStatus(error: unknown) {
+  if (!error || typeof error !== "object") return undefined
+  const value = (error as { status?: unknown }).status
+  return typeof value === "number" ? value : undefined
+}
+
+function isScheduledManageUnavailableError(error: unknown) {
+  const message = toErrorMessage(error).toLowerCase()
+  const status = getErrorStatus(error)
+
+  if (status === 404) return true
+
+  return (
+    message.includes("scheduled_shifts_manage") &&
+    (message.includes("failed to fetch") ||
+      message.includes("cors") ||
+      message.includes("preflight") ||
+      message.includes("404") ||
+      message.includes("not found"))
+  )
+}
+
+function unavailableScheduledManageError() {
+  return new Error(
+    "El servicio de turnos programados no esta disponible (scheduled_shifts_manage). Verifica despliegue y CORS en Supabase Edge Functions."
+  )
+}
+
+async function invokeScheduledManage<T>(
+  body: Record<string, unknown>,
+  options: { allowUnavailable: boolean; fallback: T }
+) {
+  if (scheduledManageUnavailable) {
+    if (options.allowUnavailable) return options.fallback
+    throw unavailableScheduledManageError()
+  }
+
+  try {
+    return await invokeEdge<T>("scheduled_shifts_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body,
+    })
+  } catch (error: unknown) {
+    if (isScheduledManageUnavailableError(error)) {
+      scheduledManageUnavailable = true
+      if (options.allowUnavailable) return options.fallback
+      throw unavailableScheduledManageError()
+    }
+    throw error
+  }
+}
+
 export interface ScheduledShift {
   id: number
   employee_id: string
@@ -91,9 +151,8 @@ export async function assignScheduledShift(payload: {
 }) {
   const { employeeId, restaurantId, scheduledStartIso, scheduledEndIso, notes } = payload
 
-  return invokeEdge("scheduled_shifts_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
+  return invokeScheduledManage(
+    {
       action: "assign",
       employee_id: employeeId,
       restaurant_id: Number(restaurantId),
@@ -101,42 +160,43 @@ export async function assignScheduledShift(payload: {
       scheduled_end: scheduledEndIso,
       notes: notes ?? null,
     },
-  })
+    { allowUnavailable: false, fallback: null }
+  )
 }
 
 export async function listMyScheduledShifts(limit = 10) {
-  const data = await invokeEdge<unknown>("scheduled_shifts_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
+  const data = await invokeScheduledManage<unknown>(
+    {
       action: "list",
       status: "scheduled",
       limit,
     },
-  })
+    { allowUnavailable: true, fallback: [] }
+  )
   return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
 }
 
 export async function listScheduledShifts(limit = 50) {
-  const data = await invokeEdge<unknown>("scheduled_shifts_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
+  const data = await invokeScheduledManage<unknown>(
+    {
       action: "list",
       status: "scheduled",
       limit,
     },
-  })
+    { allowUnavailable: true, fallback: [] }
+  )
   return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
 }
 
 export async function cancelScheduledShift(scheduledShiftId: number, notes?: string) {
-  await invokeEdge("scheduled_shifts_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
+  await invokeScheduledManage(
+    {
       action: "cancel",
       scheduled_shift_id: scheduledShiftId,
       reason: notes?.trim() || null,
     },
-  })
+    { allowUnavailable: false, fallback: null }
+  )
 
   return {
     id: scheduledShiftId,
@@ -152,16 +212,16 @@ export async function cancelScheduledShift(scheduledShiftId: number, notes?: str
 export async function reprogramScheduledShift(payload: ReprogramScheduledShiftPayload) {
   const { scheduledShiftId, scheduledStartIso, scheduledEndIso, notes } = payload
 
-  await invokeEdge("scheduled_shifts_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
+  await invokeScheduledManage(
+    {
       action: "reschedule",
       scheduled_shift_id: scheduledShiftId,
       scheduled_start: scheduledStartIso,
       scheduled_end: scheduledEndIso,
       notes: notes?.trim() || null,
     },
-  })
+    { allowUnavailable: false, fallback: null }
+  )
 
   return {
     id: scheduledShiftId,
@@ -183,9 +243,8 @@ export async function assignScheduledShiftsBulk(payload: {
   const blocks = payload.blocks.filter(item => item.scheduledStartIso && item.scheduledEndIso)
   if (blocks.length === 0) return [] as unknown[]
 
-  return invokeEdge("scheduled_shifts_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
+  return invokeScheduledManage(
+    {
       action: "bulk_assign",
       entries: blocks.map(block => ({
         employee_id: payload.employeeId,
@@ -195,5 +254,6 @@ export async function assignScheduledShiftsBulk(payload: {
         notes: payload.notes ?? null,
       })),
     },
-  })
+    { allowUnavailable: false, fallback: [] as unknown[] }
+  )
 }
