@@ -9,21 +9,34 @@ import { ROLES, Role } from "@/utils/permissions"
 function normalizeRole(value: unknown): Role | undefined {
   if (typeof value !== "string") return undefined
   const normalized = value.trim().toLowerCase()
+  const compact = normalized.replace(/\s+/g, "_")
 
-  if (normalized === ROLES.SUPER_ADMIN || normalized === "superadmin" || normalized === "admin") {
+  if (
+    compact === ROLES.SUPER_ADMIN ||
+    compact === "superadmin" ||
+    compact === "admin" ||
+    compact.includes("super_admin") ||
+    compact.includes("superadmin")
+  ) {
     return ROLES.SUPER_ADMIN
   }
 
   if (
-    normalized === ROLES.SUPERVISORA ||
-    normalized === "supervisor" ||
-    normalized === "coordinadora" ||
-    normalized === "coordinator"
+    normalized.includes(ROLES.SUPERVISORA) ||
+    normalized.includes("supervisor") ||
+    normalized.includes("supervisors") ||
+    normalized.includes("coordinadora") ||
+    normalized.includes("coordinador") ||
+    normalized.includes("coordinator")
   ) {
     return ROLES.SUPERVISORA
   }
 
-  if (normalized === ROLES.EMPLEADO || normalized === "employee" || normalized === "empleado_aseo") {
+  if (
+    normalized.includes(ROLES.EMPLEADO) ||
+    normalized.includes("employee") ||
+    normalized.includes("empleado_aseo")
+  ) {
     return ROLES.EMPLEADO
   }
 

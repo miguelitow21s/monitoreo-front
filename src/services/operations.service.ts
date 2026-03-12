@@ -33,6 +33,21 @@ export async function getActiveShiftsForSupervision(limit = 20) {
 }
 
 export async function updateShiftStatus(shiftId: string, status: string) {
+  if (status === "approved" || status === "rejected") {
+    try {
+      const endpoint = status === "approved" ? "shifts_approve" : "shifts_reject"
+      await invokeEdge(endpoint, {
+        idempotencyKey: crypto.randomUUID(),
+        body: {
+          shift_id: Number(shiftId),
+        },
+      })
+      return
+    } catch {
+      // Fall back to direct update while backend rollout converges.
+    }
+  }
+
   const { error } = await supabase.from("shifts").update({ status }).eq("id", shiftId)
   if (error) throw error
 }

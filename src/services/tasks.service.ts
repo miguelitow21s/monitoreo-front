@@ -252,13 +252,19 @@ export async function listMyOperationalTasks(limit = 30) {
   return normalizeTaskRowsFromEnvelope(payload)
 }
 
-export async function listSupervisorOperationalTasks(limit = 50) {
+export async function listSupervisorOperationalTasks(limit = 50, restaurantId?: number | null) {
+  const body: Record<string, unknown> = {
+    action: "list_supervision",
+    limit,
+  }
+
+  if (typeof restaurantId === "number" && Number.isFinite(restaurantId)) {
+    body.restaurant_id = restaurantId
+  }
+
   const payload = await invokeEdge<unknown>("operational_tasks_manage", {
     idempotencyKey: crypto.randomUUID(),
-    body: {
-      action: "list_supervision",
-      limit,
-    },
+    body,
   })
 
   return normalizeTaskRowsFromEnvelope(payload)
@@ -287,7 +293,7 @@ export async function createOperationalTask(payload: CreateOperationalTaskPayloa
     throw new Error("Could not parse task id from create response.")
   }
 
-  const refreshed = await listSupervisorOperationalTasks(200)
+  const refreshed = await listSupervisorOperationalTasks(200, payload.restaurantId)
   const found = refreshed.find(item => item.id === taskId)
   if (found) return found
 

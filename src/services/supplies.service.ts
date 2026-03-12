@@ -1,3 +1,4 @@
+import { invokeEdge } from "@/services/edgeClient"
 import { supabase } from "@/services/supabaseClient"
 
 export interface Supply {
@@ -48,6 +49,25 @@ export async function registerSupplyDelivery(payload: {
   quantity: number
   delivered_at?: string
 }) {
+  try {
+    const deliveredAt = payload.delivered_at ?? new Date().toISOString()
+    const created = await invokeEdge<unknown>("supplies_deliver", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        supply_id: payload.supply_id,
+        restaurant_id: payload.restaurant_id,
+        quantity: payload.quantity,
+        delivered_at: deliveredAt,
+      },
+    })
+
+    if (created && typeof created === "object") {
+      return created as SupplyDelivery
+    }
+  } catch {
+    // Fall back to direct DB insert while backend rollout converges.
+  }
+
   const { data, error } = await supabase
     .from("supply_deliveries")
     .insert(payload)
