@@ -14,7 +14,7 @@ type SidebarProps = {
   onCloseMobile: () => void
 }
 
-type NavKey = "dashboard" | "shifts" | "supplies" | "restaurants" | "users" | "reports"
+type NavKey = "dashboard" | "shifts" | "supplies" | "restaurants" | "users" | "reports" | "hours" | "admin"
 
 type NavItem = {
   href: string
@@ -75,6 +75,25 @@ function Icon({ name }: { name: NavKey }) {
     )
   }
 
+  if (name === "hours") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
+        <path d="M4 6h16" />
+        <path d="M4 12h16" />
+        <path d="M4 18h10" />
+      </svg>
+    )
+  }
+
+  if (name === "admin") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
+        <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+    )
+  }
+
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={base}>
       <path d="M4 5h16v14H4z" />
@@ -107,6 +126,7 @@ export default function Sidebar({
 
   if (isEmpleado) {
     items.push({ href: "/shifts", label: t("Mi turno", "My shift"), key: "shifts" })
+    items.push({ href: "/account/hours", label: t("Mis horas", "My hours"), key: "hours" })
   }
 
   if (isSupervisora) {
@@ -115,6 +135,7 @@ export default function Sidebar({
   }
 
   if (isSuperAdmin) {
+    items.push({ href: "/admin", label: t("Admin", "Admin"), key: "admin" })
     items.push({ href: "/restaurants", label: t("Restaurantes", "Restaurants"), key: "restaurants" })
     items.push({ href: "/users", label: t("Usuarios", "Users"), key: "users" })
     items.push({ href: "/reports", label: t("Reportes", "Reports"), key: "reports" })

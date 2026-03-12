@@ -60,8 +60,23 @@ import {
   requestTaskManifestUpload,
   uploadTaskManifestViaSignedToken,
 } from "@/services/tasks.service"
-import { listMySupervisorRestaurants, listRestaurants, Restaurant, SupervisorRestaurantOption } from "@/services/restaurants.service"
+import {
+  assignEmployeeToRestaurant,
+  listMySupervisorRestaurants,
+  listRestaurantEmployees,
+  listRestaurants,
+  Restaurant,
+  RestaurantEmployee,
+  SupervisorRestaurantOption,
+  unassignEmployeeFromRestaurant,
+} from "@/services/restaurants.service"
 import { uploadEvidenceObject } from "@/services/storageEvidence.service"
+import {
+  createEmployeeObservation,
+  EmployeeDashboardData,
+  getEmployeeSelfDashboard,
+} from "@/services/employeeSelfService.service"
+import { listUserProfiles, UserProfile } from "@/services/users.service"
 
 const HISTORY_PAGE_SIZE = 8
 const MAX_GPS_ACCURACY_METERS = 80
@@ -227,6 +242,14 @@ export default function ShiftsPage() {
   const [editSupervisionScheduledStart, setEditSupervisionScheduledStart] = useState("")
   const [editSupervisionScheduledEnd, setEditSupervisionScheduledEnd] = useState("")
   const [knownRestaurants, setKnownRestaurants] = useState<Restaurant[]>([])
+  const [employeeDashboard, setEmployeeDashboard] = useState<EmployeeDashboardData | null>(null)
+  const [employeeObservationType, setEmployeeObservationType] = useState<"observation" | "alert">("observation")
+  const [staffRestaurants, setStaffRestaurants] = useState<SupervisorRestaurantOption[]>([])
+  const [staffRestaurantId, setStaffRestaurantId] = useState<number | null>(null)
+  const [staffUsers, setStaffUsers] = useState<UserProfile[]>([])
+  const [staffUserId, setStaffUserId] = useState("")
+  const [staffAssignments, setStaffAssignments] = useState<RestaurantEmployee[]>([])
+  const [assigningStaff, setAssigningStaff] = useState(false)
 
   const healthAnswered = activeShift ? endFitForWork !== null : startFitForWork !== null
   const healthDeclarationRequired =
@@ -247,8 +270,19 @@ export default function ShiftsPage() {
     (!healthDeclarationRequired || healthDeclarationProvided) &&
     (activeShift ? endChecklistComplete : startChecklistComplete)
 
-  const canOperateEmployee = isEmpleado || isSuperAdmin
+  const canOperateEmployee = isEmpleado
   const canOperateSupervisor = isSupervisora || isSuperAdmin
+
+  const activeShiftUploadedEvidenceTypes = useMemo(() => {
+    const raw = employeeDashboard?.active_shift?.uploaded_evidence_types ?? employeeDashboard?.uploaded_evidence_types
+    if (!Array.isArray(raw)) return [] as string[]
+    return raw
+      .filter((item): item is string => typeof item === "string")
+      .map(item => item.trim().toLowerCase())
+      .filter(Boolean)
+  }, [employeeDashboard])
+
+  const hasStartEvidence = activeShiftUploadedEvidenceTypes.includes("inicio")
   const pendingEmployeeTasks = useMemo(
     () => employeeTasks.filter(task => task.status === "pending" || task.status === "in_progress"),
     [employeeTasks]
@@ -371,6 +405,14 @@ export default function ShiftsPage() {
     if (activeShift && !endChecklistComplete) {
       blockers.push(t("Completa todas las preguntas del checklist de salida.", "Complete all end checklist questions."))
     }
+    if (activeShift && !hasStartEvidence) {
+      blockers.push(
+        t(
+          "No puedes finalizar turno hasta cargar evidencia obligatoria de inicio.",
+          "You cannot end shift until mandatory start evidence is uploaded."
+        )
+      )
+    }
     if (!activeShift && geofenceValidation && !geofenceValidation.withinGeofence) {
       blockers.push(
         t(
@@ -394,6 +436,7 @@ export default function ShiftsPage() {
     processing,
     shiftOtpReady,
     activeShift,
+    hasStartEvidence,
     startChecklistComplete,
     endChecklistComplete,
     geofenceValidation,
@@ -545,6 +588,16 @@ export default function ShiftsPage() {
     }
   }, [canOperateEmployee, canOperateSupervisor, showToast, t])
 
+  const loadEmployeeSelfServiceDashboard = useCallback(async () => {
+    if (!canOperateEmployee) return
+    try {
+      const payload = await getEmployeeSelfDashboard()
+      setEmployeeDashboard(payload)
+    } catch {
+      // Keep UX resilient while backend rollout converges.
+    }
+  }, [canOperateEmployee])
+
   const loadPresenceLogs = useCallback(async () => {
     if (!canOperateSupervisor) return
     try {
@@ -554,6 +607,46 @@ export default function ShiftsPage() {
       showToast("error", extractErrorMessage(error, t("No se pudieron cargar los registros de presencia de supervision.", "Could not load supervisor presence records.")))
     }
   }, [canOperateSupervisor, showToast, t])
+
+  const loadStaffAssignmentContext = useCallback(async () => {
+    if (!canOperateSupervisor) return
+    try {
+      const [profiles, restaurants] = await Promise.all([
+        listUserProfiles(),
+        isSuperAdmin
+          ? (async () => {
+              const rows = await listRestaurants({ includeInactive: false })
+              return rows
+                .map(item => ({ id: Number(item.id), name: item.name ?? `Restaurant #${item.id}` }))
+                .filter(item => Number.isFinite(item.id))
+            })()
+          : listMySupervisorRestaurants(),
+      ])
+
+      const employees = profiles.filter(item => item.role === "empleado" && item.is_active !== false)
+      setStaffUsers(employees)
+      setStaffRestaurants(restaurants)
+
+      const nextRestaurantId = restaurants[0]?.id ?? null
+      setStaffRestaurantId(prev => (prev && restaurants.some(item => item.id === prev) ? prev : nextRestaurantId))
+      setStaffUserId(prev => (prev && employees.some(item => item.id === prev) ? prev : employees[0]?.id ?? ""))
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo cargar asignacion de personal.", "Could not load staff assignment context.")))
+    }
+  }, [canOperateSupervisor, isSuperAdmin, showToast, t])
+
+  const loadStaffAssignments = useCallback(async () => {
+    if (!canOperateSupervisor || !staffRestaurantId) {
+      setStaffAssignments([])
+      return
+    }
+    try {
+      const rows = await listRestaurantEmployees(String(staffRestaurantId), "employee")
+      setStaffAssignments(rows)
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo cargar el personal asignado.", "Could not load assigned staff.")))
+    }
+  }, [canOperateSupervisor, showToast, staffRestaurantId, t])
 
   useEffect(() => {
     void loadTasks()
@@ -573,6 +666,18 @@ export default function ShiftsPage() {
   useEffect(() => {
     void loadPresenceLogs()
   }, [loadPresenceLogs])
+
+  useEffect(() => {
+    void loadStaffAssignmentContext()
+  }, [loadStaffAssignmentContext])
+
+  useEffect(() => {
+    void loadStaffAssignments()
+  }, [loadStaffAssignments])
+
+  useEffect(() => {
+    void loadEmployeeSelfServiceDashboard()
+  }, [loadEmployeeSelfServiceDashboard])
 
   const uploadEvidence = async (
     prefix: string,
@@ -703,6 +808,8 @@ export default function ShiftsPage() {
       setStartHealthDeclaration("")
       setHistoryPage(1)
       await loadEmployeeData(1)
+      await loadEmployeeSelfServiceDashboard()
+      await loadTasks()
       await loadSupervisorData()
     } catch (error: unknown) {
       if (startedShiftId) {
@@ -723,6 +830,15 @@ export default function ShiftsPage() {
     setProcessing(true)
 
     try {
+      if (!hasStartEvidence) {
+        throw new Error(
+          t(
+            "No puedes finalizar turno: falta evidencia obligatoria de inicio.",
+            "You cannot end shift: mandatory start evidence is missing."
+          )
+        )
+      }
+
       if (endFitForWork === null) throw new Error(t("Debes confirmar tu condicion al finalizar el turno.", "You must confirm your condition when ending shift."))
       if (!endFitForWork && !endHealthDeclaration.trim()) {
         throw new Error(t("Debes describir incidentes si tu condicion de salida no es optima.", "You must describe incidents if your end condition is not optimal."))
@@ -758,6 +874,8 @@ export default function ShiftsPage() {
       setEndHealthDeclaration("")
       setHistoryPage(1)
       await loadEmployeeData(1)
+      await loadEmployeeSelfServiceDashboard()
+      await loadTasks()
       await loadSupervisorData()
     } catch (error: unknown) {
       if (isConsentPendingError(error)) {
@@ -819,9 +937,18 @@ export default function ShiftsPage() {
 
     setCreatingEmployeeIncident(true)
     try {
-      await createShiftIncident(activeShift.id, `[EMPLEADO] ${note}`)
+      try {
+        await createEmployeeObservation({
+          shiftId: activeShift.id,
+          observationType: employeeObservationType,
+          message: note,
+        })
+      } catch {
+        await createShiftIncident(activeShift.id, `[EMPLEADO/${employeeObservationType.toUpperCase()}] ${note}`)
+      }
       setEmployeeIncident("")
       showToast("success", t("Nota guardada correctamente.", "Note saved successfully."))
+      await loadEmployeeSelfServiceDashboard()
       await loadSupervisorData()
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo guardar la nota.", "Could not save note.")))
@@ -1008,6 +1135,38 @@ export default function ShiftsPage() {
     }
   }
 
+  const handleAssignStaff = async () => {
+    if (!staffRestaurantId || !staffUserId) {
+      showToast("info", t("Selecciona restaurante y empleado.", "Select restaurant and employee."))
+      return
+    }
+
+    setAssigningStaff(true)
+    try {
+      await assignEmployeeToRestaurant(String(staffRestaurantId), staffUserId, "employee")
+      showToast("success", t("Empleado asignado al restaurante.", "Employee assigned to restaurant."))
+      await loadStaffAssignments()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo asignar personal.", "Could not assign staff.")))
+    } finally {
+      setAssigningStaff(false)
+    }
+  }
+
+  const handleUnassignStaff = async (userId: string) => {
+    if (!staffRestaurantId) return
+    setAssigningStaff(true)
+    try {
+      await unassignEmployeeFromRestaurant(String(staffRestaurantId), userId, "employee")
+      showToast("success", t("Empleado desasignado.", "Employee unassigned."))
+      await loadStaffAssignments()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo desasignar personal.", "Could not unassign staff.")))
+    } finally {
+      setAssigningStaff(false)
+    }
+  }
+
   const handleCancelSupervisionScheduledShift = async (scheduledShift: ScheduledShift) => {
     try {
       await cancelScheduledShift(scheduledShift.id, scheduledShift.notes ?? undefined)
@@ -1066,6 +1225,30 @@ export default function ShiftsPage() {
           <section className="space-y-5">
             <h2 className="text-lg font-semibold text-slate-900">{t("Operacion de empleado", "Employee operations")}</h2>
 
+            <Card
+              title={t("Mi panel", "My dashboard")}
+              subtitle={t("Asignacion, agenda, tareas y turno activo desde self-service.", "Assignment, schedule, tasks and active shift from self-service.")}
+            >
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <p className="text-xs text-slate-500">{t("Restaurantes", "Restaurants")}</p>
+                  <p className="font-semibold text-slate-800">{employeeDashboard?.assigned_restaurants?.length ?? 0}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <p className="text-xs text-slate-500">{t("Agenda", "Schedule")}</p>
+                  <p className="font-semibold text-slate-800">{employeeDashboard?.scheduled_shifts?.length ?? 0}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <p className="text-xs text-slate-500">{t("Tareas abiertas", "Open tasks")}</p>
+                  <p className="font-semibold text-slate-800">{employeeDashboard?.pending_tasks_count ?? employeeDashboard?.pending_tasks_preview?.length ?? 0}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <p className="text-xs text-slate-500">{t("Turno activo", "Active shift")}</p>
+                  <p className="font-semibold text-slate-800">#{employeeDashboard?.active_shift?.id ?? "-"}</p>
+                </div>
+              </div>
+            </Card>
+
             {loadingData ? (
               <Skeleton className="h-24" />
             ) : activeShift ? (
@@ -1076,6 +1259,9 @@ export default function ShiftsPage() {
                   </span>
                   <Badge variant="success">{t("Activo", "Active")}</Badge>
                 </div>
+                <p className="mt-2 text-xs text-emerald-900">
+                  {t("Evidencia inicio", "Start evidence")}: {hasStartEvidence ? "OK" : t("Pendiente", "Pending")}
+                </p>
               </div>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
@@ -1353,6 +1539,27 @@ export default function ShiftsPage() {
             {activeShift && (
               <Card title={t("Registrar incidente", "Register incident")} subtitle={t("Si ocurre algo durante el turno, registralo aqui.", "If anything happens during the shift, register it here.")}>
                 <div className="space-y-2">
+                  <div className="flex gap-4 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="employee-observation-type"
+                        checked={employeeObservationType === "observation"}
+                        onChange={() => setEmployeeObservationType("observation")}
+                      />
+                      {t("Observacion", "Observation")}
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="employee-observation-type"
+                        checked={employeeObservationType === "alert"}
+                        onChange={() => setEmployeeObservationType("alert")}
+                      />
+                      {t("Alerta", "Alert")}
+                    </label>
+                  </div>
+
                   <textarea
                     value={employeeIncident}
                     onChange={event => setEmployeeIncident(event.target.value)}
@@ -1604,6 +1811,61 @@ export default function ShiftsPage() {
                 )}
               </div>
             )}
+
+            <Card
+              title={t("Asignacion de personal", "Staff assignment")}
+              subtitle={t("Asigna y desasigna empleados por restaurante autorizado.", "Assign and unassign employees by authorized restaurant.")}
+            >
+              <div className="grid gap-2 lg:grid-cols-3">
+                <select
+                  value={staffRestaurantId ?? ""}
+                  onChange={event => setStaffRestaurantId(Number(event.target.value) || null)}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
+                  {staffRestaurants.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={staffUserId}
+                  onChange={event => setStaffUserId(event.target.value)}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">{t("Seleccionar empleado", "Select employee")}</option>
+                  {staffUsers.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.full_name ?? item.email ?? item.id}
+                    </option>
+                  ))}
+                </select>
+                <Button variant="secondary" disabled={assigningStaff} onClick={() => void handleAssignStaff()}>
+                  {assigningStaff ? t("Guardando...", "Saving...") : t("Asignar empleado", "Assign employee")}
+                </Button>
+              </div>
+
+              {staffRestaurantId && (
+                <div className="mt-3 space-y-2">
+                  {staffAssignments.length === 0 ? (
+                    <p className="text-sm text-slate-500">{t("Sin personal asignado para este restaurante.", "No staff assigned for this restaurant.")}</p>
+                  ) : (
+                    staffAssignments.map(item => {
+                      const profile = staffUsers.find(user => user.id === item.user_id)
+                      return (
+                        <div key={`${item.restaurant_id}-${item.user_id}`} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                          <span>{profile?.full_name ?? profile?.email ?? item.user_id}</span>
+                          <Button size="sm" variant="ghost" onClick={() => void handleUnassignStaff(item.user_id)}>
+                            {t("Desasignar", "Unassign")}
+                          </Button>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              )}
+            </Card>
 
             <Card title={t("Entrada/salida de supervision", "Supervisor entry/exit")} subtitle={t("Registro obligatorio por restaurante con GPS + evidencia.", "Mandatory record by restaurant with GPS + evidence.")}>
               <div className="grid gap-3 lg:grid-cols-2">

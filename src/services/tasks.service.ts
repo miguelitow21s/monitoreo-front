@@ -328,13 +328,29 @@ export async function completeOperationalTask(payload: CompleteOperationalTaskPa
 }
 
 export async function requestTaskManifestUpload(taskId: number) {
-  const payload = await invokeEdge<TaskManageUploadResponse>("operational_tasks_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
-      action: "request_manifest_upload",
-      task_id: taskId,
-    },
-  })
+  let payload: TaskManageUploadResponse | null = null
+
+  try {
+    payload = await invokeEdge<TaskManageUploadResponse>("operational_tasks_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "request_manifest_upload",
+        task_id: taskId,
+      },
+    })
+  } catch {
+    payload = await invokeEdge<TaskManageUploadResponse>("operational_tasks_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "request_evidence_upload",
+        task_id: taskId,
+      },
+    })
+  }
+
+  if (!payload) {
+    throw new Error("Invalid evidence upload payload from backend.")
+  }
 
   const token = payload.upload?.token
   const path = payload.upload?.path ?? payload.path

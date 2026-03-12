@@ -18,6 +18,7 @@ import {
   listRestaurants,
   Restaurant,
   RestaurantEmployee,
+  unassignEmployeeFromRestaurant,
   updateRestaurant,
   updateRestaurantStatus,
 } from "@/services/restaurants.service"
@@ -473,7 +474,10 @@ export default function RestaurantsPage() {
       setAssignUser(prev => prev || assignable[0]?.id || "")
 
       const assignmentEntries = await Promise.all(
-        restaurantRows.slice(0, 8).map(async item => [item.id, await listRestaurantEmployees(item.id)] as const)
+        restaurantRows.slice(0, 8).map(async item => [
+          item.id,
+          await listRestaurantEmployees(item.id, assignRoleFilter),
+        ] as const)
       )
       setAssignments(Object.fromEntries(assignmentEntries))
     } catch (error: unknown) {
@@ -908,14 +912,37 @@ export default function RestaurantsPage() {
     }
 
     try {
-      const created = await assignEmployeeToRestaurant(assignRestaurant, assignUser)
+      const created = await assignEmployeeToRestaurant(assignRestaurant, assignUser, assignRoleFilter)
       setAssignments(prev => ({
         ...prev,
         [assignRestaurant]: [created, ...(prev[assignRestaurant] ?? [])],
       }))
-      showToast("success", t("Empleado asignado al restaurante.", "Employee assigned to restaurant."))
+      showToast(
+        "success",
+        assignRoleFilter === "supervisor"
+          ? t("Supervisora asignada al restaurante.", "Supervisor assigned to restaurant.")
+          : t("Empleado asignado al restaurante.", "Employee assigned to restaurant.")
+      )
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudo asignar el empleado.", "Could not assign employee."))
+    }
+  }
+
+  const handleUnassign = async (restaurantId: string, userId: string) => {
+    try {
+      await unassignEmployeeFromRestaurant(restaurantId, userId, assignRoleFilter)
+      setAssignments(prev => ({
+        ...prev,
+        [restaurantId]: (prev[restaurantId] ?? []).filter(item => item.user_id !== userId),
+      }))
+      showToast(
+        "success",
+        assignRoleFilter === "supervisor"
+          ? t("Supervisora desasignada.", "Supervisor unassigned.")
+          : t("Empleado desasignado.", "Employee unassigned.")
+      )
+    } catch (error: unknown) {
+      showToast("error", error instanceof Error ? error.message : t("No se pudo desasignar.", "Could not unassign."))
     }
   }
 
@@ -1135,6 +1162,33 @@ export default function RestaurantsPage() {
                     {t("Asignar", "Assign")}
                   </Button>
                 </div>
+
+                {(assignments[assignRestaurant] ?? []).length > 0 && (
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-sm font-medium text-slate-700">
+                      {assignRoleFilter === "supervisor"
+                        ? t("Supervisoras asignadas", "Assigned supervisors")
+                        : t("Empleados asignados", "Assigned employees")}
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {(assignments[assignRestaurant] ?? []).map(item => {
+                        const profile = profiles.find(profileItem => profileItem.id === item.user_id)
+                        return (
+                          <div key={`${item.restaurant_id}-${item.user_id}`} className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+                            <span>{profile?.full_name ?? profile?.email ?? item.user_id}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void handleUnassign(assignRestaurant, item.user_id)}
+                            >
+                              {t("Desasignar", "Unassign")}
+                            </Button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </Card>
 
               <Card title={t("Restaurantes", "Restaurants")} subtitle={t("Configuracion operativa.", "Operational setup.")}>

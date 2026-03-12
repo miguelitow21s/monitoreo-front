@@ -7,9 +7,9 @@ export const ROLES = {
 export type Role = (typeof ROLES)[keyof typeof ROLES]
 
 const permissions: Record<Role, string[]> = {
-  super_admin: ["/dashboard", "/restaurants", "/users", "/shifts", "/supplies", "/reports"],
+  super_admin: ["/dashboard", "/admin", "/restaurants", "/users", "/shifts", "/supplies", "/reports"],
   supervisora: ["/dashboard", "/shifts", "/supplies", "/reports"],
-  empleado: ["/dashboard", "/shifts"],
+  empleado: ["/dashboard", "/shifts", "/account"],
 }
 
 export function isRole(value: string): value is Role {

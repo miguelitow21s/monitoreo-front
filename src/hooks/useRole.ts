@@ -50,12 +50,18 @@ export function useRole() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role,is_active")
         .eq("id", user.id)
         .maybeSingle()
 
       if (!mounted) return
       if (!error) {
+        if (data?.is_active === false) {
+          setProfileRole(null)
+          await supabase.auth.signOut()
+          setLoadingRole(false)
+          return
+        }
         setProfileRole(normalizeRole(data?.role) ?? null)
       } else {
         setProfileRole(null)
@@ -74,6 +80,11 @@ export function useRole() {
           },
           payload => {
             if (!mounted) return
+            if ((payload.new as { is_active?: unknown } | null)?.is_active === false) {
+              setProfileRole(null)
+              void supabase.auth.signOut()
+              return
+            }
             const nextRole = normalizeRole((payload.new as { role?: unknown } | null)?.role)
             setProfileRole(nextRole ?? null)
           }

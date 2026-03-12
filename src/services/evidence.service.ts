@@ -1,5 +1,6 @@
 import { invokeEdge } from "@/services/edgeClient"
 import { supabase } from "@/services/supabaseClient"
+import { createEvidenceSignedUrl, uploadEvidenceObject } from "@/services/storageEvidence.service"
 
 type EvidenceType = "inicio" | "fin"
 
@@ -78,52 +79,89 @@ export async function uploadShiftEvidence(payload: {
   accuracy?: number
   capturedAt?: string
 }) {
-  const requested = await requestUpload(payload.shiftId, payload.type)
-  const uploadUrl = resolveUploadUrl(requested)
-  const uploadPath = resolveUploadPath(requested)
-  const uploadToken = resolveUploadToken(requested)
-  const uploadBucket = resolveUploadBucket(requested)
+  try {
+    const requested = await requestUpload(payload.shiftId, payload.type)
+    const uploadUrl = resolveUploadUrl(requested)
+    const uploadPath = resolveUploadPath(requested)
+    const uploadToken = resolveUploadToken(requested)
+    const uploadBucket = resolveUploadBucket(requested)
 
-  if (!uploadPath) {
-    throw new Error("Invalid upload payload from backend (missing upload path).")
-  }
-
-  if (uploadBucket && uploadToken) {
-    const { error } = await supabase.storage
-      .from(uploadBucket)
-      .uploadToSignedUrl(uploadPath, uploadToken, payload.file)
-
-    if (error) {
-      throw new Error(`Could not upload evidence binary via signed token: ${error.message}`)
-    }
-  } else {
-    if (!uploadUrl) {
-      throw new Error("Invalid upload payload from backend (missing upload URL).")
+    if (!uploadPath) {
+      throw new Error("Invalid upload payload from backend (missing upload path).")
     }
 
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": payload.file.type || "application/octet-stream",
-        ...(requested.headers ?? {}),
-      },
-      body: payload.file,
+    if (uploadBucket && uploadToken) {
+      const { error } = await supabase.storage
+        .from(uploadBucket)
+        .uploadToSignedUrl(uploadPath, uploadToken, payload.file)
+
+      if (error) {
+        throw new Error(`Could not upload evidence binary via signed token: ${error.message}`)
+      }
+    } else {
+      if (!uploadUrl) {
+        throw new Error("Invalid upload payload from backend (missing upload URL).")
+      }
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": payload.file.type || "application/octet-stream",
+          ...(requested.headers ?? {}),
+        },
+        body: payload.file,
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Could not upload evidence binary (HTTP ${uploadResponse.status}).`)
+      }
+    }
+
+    await finalizeUpload({
+      shiftId: payload.shiftId,
+      type: payload.type,
+      path: uploadPath,
+      lat: payload.lat,
+      lng: payload.lng,
+      accuracy: payload.accuracy,
+      capturedAt: payload.capturedAt ?? new Date().toISOString(),
     })
 
-    if (!uploadResponse.ok) {
-      throw new Error(`Could not upload evidence binary (HTTP ${uploadResponse.status}).`)
+    return uploadPath
+  } catch {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError) throw userError
+    if (!user?.id) throw new Error("Authenticated user not found for evidence upload.")
+
+    const extensionFromMime = payload.file.type.split("/")[1]?.toLowerCase() || "jpg"
+    const timestamp = new Date().toISOString().replaceAll(":", "-")
+    const filePath = `users/${user.id}/shift-evidence-direct/${payload.shiftId}/${payload.type}-${timestamp}.${extensionFromMime}`
+
+    await uploadEvidenceObject(filePath, payload.file, {
+      contentType: payload.file.type || "application/octet-stream",
+      upsert: false,
+    })
+
+    const signedUrl = await createEvidenceSignedUrl(filePath, 1800)
+    if (!signedUrl) {
+      throw new Error("Could not resolve signed URL for direct evidence flow.")
     }
+
+    await invokeEdge("evidence_upload", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        shift_id: payload.shiftId,
+        url: signedUrl,
+        type: payload.type,
+        lat: payload.lat,
+        lng: payload.lng,
+      },
+    })
+
+    return filePath
   }
-
-  await finalizeUpload({
-    shiftId: payload.shiftId,
-    type: payload.type,
-    path: uploadPath,
-    lat: payload.lat,
-    lng: payload.lng,
-    accuracy: payload.accuracy,
-    capturedAt: payload.capturedAt ?? new Date().toISOString(),
-  })
-
-  return uploadPath
 }

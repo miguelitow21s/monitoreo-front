@@ -19,7 +19,13 @@ import {
   reprogramScheduledShift,
   ScheduledShift,
 } from "@/services/scheduling.service"
-import { listUserProfiles, updateUserProfileRole, updateUserProfileStatus, UserProfile } from "@/services/users.service"
+import {
+  createAdminUser,
+  listUserProfiles,
+  updateUserProfileRole,
+  updateUserProfileStatus,
+  UserProfile,
+} from "@/services/users.service"
 import { useI18n } from "@/hooks/useI18n"
 import { ROLES, Role } from "@/utils/permissions"
 
@@ -51,6 +57,11 @@ export default function UsersPage() {
   const [editScheduledStart, setEditScheduledStart] = useState("")
   const [editScheduledEnd, setEditScheduledEnd] = useState("")
   const [editScheduledNotes, setEditScheduledNotes] = useState("")
+  const [newUserFullName, setNewUserFullName] = useState("")
+  const [newUserEmail, setNewUserEmail] = useState("")
+  const [newUserRole, setNewUserRole] = useState<Role>(ROLES.EMPLEADO)
+  const [newUserPhone, setNewUserPhone] = useState("")
+  const [creatingUser, setCreatingUser] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -87,6 +98,37 @@ export default function UsersPage() {
       showToast("success", t("Rol actualizado.", "Role updated."))
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudo actualizar el rol.", "Could not update role."))
+    }
+  }
+
+  const handleCreateUser = async () => {
+    const email = newUserEmail.trim()
+    const fullName = newUserFullName.trim()
+
+    if (!email || !fullName) {
+      showToast("info", t("Completa nombre completo y correo para crear usuario.", "Fill full name and email to create user."))
+      return
+    }
+
+    setCreatingUser(true)
+    try {
+      const created = await createAdminUser({
+        email,
+        fullName,
+        role: newUserRole,
+        phoneNumber: newUserPhone.trim() || null,
+      })
+
+      setRows(prev => [created, ...prev])
+      setNewUserFullName("")
+      setNewUserEmail("")
+      setNewUserPhone("")
+      setNewUserRole(ROLES.EMPLEADO)
+      showToast("success", t("Usuario creado correctamente.", "User created successfully."))
+    } catch (error: unknown) {
+      showToast("error", error instanceof Error ? error.message : t("No se pudo crear el usuario.", "Could not create user."))
+    } finally {
+      setCreatingUser(false)
     }
   }
 
@@ -247,6 +289,50 @@ export default function UsersPage() {
             <Skeleton className="h-28" />
           ) : (
             <div className="space-y-4">
+              <Card
+                title={t("Alta de usuario", "Create user")}
+                subtitle={t("Crea usuarios operativos sin salir del panel.", "Create operational users directly from this panel.")}
+              >
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <input
+                    value={newUserFullName}
+                    onChange={event => setNewUserFullName(event.target.value)}
+                    placeholder={t("Nombre completo", "Full name")}
+                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  />
+                  <input
+                    value={newUserEmail}
+                    onChange={event => setNewUserEmail(event.target.value)}
+                    type="email"
+                    placeholder={t("Correo", "Email")}
+                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  />
+                  <input
+                    value={newUserPhone}
+                    onChange={event => setNewUserPhone(event.target.value)}
+                    placeholder={t("Telefono (opcional)", "Phone (optional)")}
+                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  />
+                  <select
+                    value={newUserRole}
+                    onChange={event => setNewUserRole(event.target.value as Role)}
+                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  >
+                    {roleOptions.map(role => (
+                      <option key={role} value={role}>
+                        {roleLabels[role][language]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="mt-3">
+                  <Button variant="primary" onClick={() => void handleCreateUser()} disabled={creatingUser}>
+                    {creatingUser ? t("Creando...", "Creating...") : t("Crear usuario", "Create user")}
+                  </Button>
+                </div>
+              </Card>
+
               <Card title={t("Gestion de usuarios", "User management")} subtitle={t("Roles y estado.", "Roles and status.")}>
                 {rows.length === 0 ? (
                   <EmptyState

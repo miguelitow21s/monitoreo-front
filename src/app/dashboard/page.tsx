@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
 import { AuditEvent, DashboardMetric, fetchAuditEvents, fetchDashboardMetrics } from "@/services/dashboard.service"
+import { EmployeeDashboardData, getEmployeeSelfDashboard } from "@/services/employeeSelfService.service"
 import {
   IntegrationCheckResult,
   runBackendIntegrationChecks,
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const [runningChecks, setRunningChecks] = useState(false)
   const [checkResults, setCheckResults] = useState<IntegrationCheckResult[]>([])
   const [lastChecksAt, setLastChecksAt] = useState<string | null>(null)
+  const [employeeHome, setEmployeeHome] = useState<EmployeeDashboardData | null>(null)
 
   const roleSummary = isSuperAdmin
     ? t("Vista completa del sistema para administracion global.", "Full system view for global administration.")
@@ -63,12 +65,19 @@ export default function DashboardPage() {
       ])
       setMetrics(metricRows)
       setAuditEvents(auditRows)
+
+      if (isEmpleado) {
+        const home = await getEmployeeSelfDashboard()
+        setEmployeeHome(home)
+      } else {
+        setEmployeeHome(null)
+      }
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudo cargar el panel.", "Could not load dashboard."))
     } finally {
       setLoadingData(false)
     }
-  }, [showToast, isSuperAdmin, isSupervisora, t])
+  }, [showToast, isEmpleado, isSuperAdmin, isSupervisora, t])
 
   useEffect(() => {
     if (loading || authLoading) return
@@ -185,6 +194,32 @@ export default function DashboardPage() {
                 </p>
               </Card>
             </div>
+
+            {isEmpleado && employeeHome && (
+              <Card
+                title={t("Mi inicio", "My home")}
+                subtitle={t("Resumen de self-service: restaurante, agenda, tareas y turno.", "Self-service summary: restaurant, schedule, tasks and shift.")}
+              >
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <p className="text-xs text-slate-500">{t("Restaurantes", "Restaurants")}</p>
+                    <p className="font-semibold text-slate-800">{employeeHome.assigned_restaurants?.length ?? 0}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <p className="text-xs text-slate-500">{t("Agenda", "Schedule")}</p>
+                    <p className="font-semibold text-slate-800">{employeeHome.scheduled_shifts?.length ?? 0}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <p className="text-xs text-slate-500">{t("Tareas abiertas", "Open tasks")}</p>
+                    <p className="font-semibold text-slate-800">{employeeHome.pending_tasks_count ?? employeeHome.pending_tasks_preview?.length ?? 0}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <p className="text-xs text-slate-500">{t("Turno activo", "Active shift")}</p>
+                    <p className="font-semibold text-slate-800">#{employeeHome.active_shift?.id ?? "-"}</p>
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {(isSuperAdmin || isSupervisora) && (
               <Card
