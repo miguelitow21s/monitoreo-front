@@ -83,21 +83,23 @@ function normalizeUserProfiles(payload: unknown) {
   return source.map(normalizeUserProfile).filter((item): item is UserProfile => item !== null)
 }
 
-export async function listUserProfiles() {
-  try {
-    const payload = await invokeEdge<unknown>("admin_users_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "list",
-      },
-    })
+export async function listUserProfiles(options?: { useAdminApi?: boolean }) {
+  if (options?.useAdminApi) {
+    try {
+      const payload = await invokeEdge<unknown>("admin_users_manage", {
+        idempotencyKey: crypto.randomUUID(),
+        body: {
+          action: "list",
+        },
+      })
 
-    const rows = normalizeUserProfiles(payload)
-    if (Array.isArray(rows)) {
-      return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
+      const rows = normalizeUserProfiles(payload)
+      if (Array.isArray(rows)) {
+        return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
+      }
+    } catch {
+      // Fall through to direct query for backward compatibility while backend rollout converges.
     }
-  } catch {
-    // Fall through to direct query for backward compatibility while backend rollout converges.
   }
 
   const { data, error } = await supabase.from("profiles").select("*").order("full_name")

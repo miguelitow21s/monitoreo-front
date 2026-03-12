@@ -51,60 +51,70 @@ export interface AuditEvent {
   actor_id: string | null
 }
 
-export async function fetchDashboardMetrics() {
-  try {
-    const payload = await invokeEdge<unknown>("admin_dashboard_metrics", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "summary",
-      },
-    })
+export async function fetchDashboardMetrics(options?: {
+  useAdminApi?: boolean
+  periodStart?: string
+  periodEnd?: string
+  restaurantId?: number
+}) {
+  if (options?.useAdminApi) {
+    try {
+      const payload = await invokeEdge<unknown>("admin_dashboard_metrics", {
+        idempotencyKey: crypto.randomUUID(),
+        body: {
+          action: "summary",
+          ...(options.periodStart ? { period_start: options.periodStart } : {}),
+          ...(options.periodEnd ? { period_end: options.periodEnd } : {}),
+          ...(typeof options.restaurantId === "number" ? { restaurant_id: options.restaurantId } : {}),
+        },
+      })
 
-    if (Array.isArray(payload)) {
-      const rows = payload as unknown[]
-      return rows
-        .map(item => {
-          const metric = item as AdminMetricRow
-          const label = metric.label ?? metric.key ?? "Metric"
-          const value = metric.value === null || metric.value === undefined ? "-" : String(metric.value)
-          return {
-            label,
-            value,
-            trend: metric.trend ?? "Executive metric",
-          } satisfies DashboardMetric
-        })
-        .filter(item => item.label.trim().length > 0)
+      if (Array.isArray(payload)) {
+        const rows = payload as unknown[]
+        return rows
+          .map(item => {
+            const metric = item as AdminMetricRow
+            const label = metric.label ?? metric.key ?? "Metric"
+            const value = metric.value === null || metric.value === undefined ? "-" : String(metric.value)
+            return {
+              label,
+              value,
+              trend: metric.trend ?? "Executive metric",
+            } satisfies DashboardMetric
+          })
+          .filter(item => item.label.trim().length > 0)
+      }
+
+      if (payload && typeof payload === "object") {
+        const summary = payload as AdminSummaryPayload
+        const activeShifts = toNumber(summary.shifts?.active)
+        const totalShifts = toNumber(summary.shifts?.total)
+        const completion = totalShifts > 0 ? Math.round(((totalShifts - activeShifts) / totalShifts) * 100) : 0
+
+        return [
+          { label: "Active shifts", value: String(activeShifts), trend: "Executive summary" },
+          { label: "Compliance", value: `${completion}%`, trend: "Finished over total shifts" },
+          { label: "Incidents", value: String(toNumber(summary.incidents?.total)), trend: "Incident volume" },
+          {
+            label: "Avg shift duration",
+            value: `${toNumber(summary.productivity?.average_hours_per_shift).toFixed(1)}h`,
+            trend: "Average hours per shift",
+          },
+          {
+            label: "Estimated supply cost",
+            value: `$${toNumber(summary.productivity?.operational_tasks_completed)}`,
+            trend: "Tasks completed",
+          },
+          {
+            label: "Monitored sites",
+            value: String(toNumber(summary.restaurants?.active || summary.restaurants?.total)),
+            trend: "Active restaurants",
+          },
+        ]
+      }
+    } catch {
+      // Fall through to existing query path while backend rollout converges.
     }
-
-    if (payload && typeof payload === "object") {
-      const summary = payload as AdminSummaryPayload
-      const activeShifts = toNumber(summary.shifts?.active)
-      const totalShifts = toNumber(summary.shifts?.total)
-      const completion = totalShifts > 0 ? Math.round(((totalShifts - activeShifts) / totalShifts) * 100) : 0
-
-      return [
-        { label: "Active shifts", value: String(activeShifts), trend: "Executive summary" },
-        { label: "Compliance", value: `${completion}%`, trend: "Finished over total shifts" },
-        { label: "Incidents", value: String(toNumber(summary.incidents?.total)), trend: "Incident volume" },
-        {
-          label: "Avg shift duration",
-          value: `${toNumber(summary.productivity?.average_hours_per_shift).toFixed(1)}h`,
-          trend: "Average hours per shift",
-        },
-        {
-          label: "Estimated supply cost",
-          value: `$${toNumber(summary.productivity?.operational_tasks_completed)}`,
-          trend: "Tasks completed",
-        },
-        {
-          label: "Monitored sites",
-          value: String(toNumber(summary.restaurants?.active || summary.restaurants?.total)),
-          trend: "Active restaurants",
-        },
-      ]
-    }
-  } catch {
-    // Fall through to existing query path while backend rollout converges.
   }
 
   const [{ count: activeCount, error: activeError }, { count: totalCount, error: totalError }, { count: incidentsCount, error: incidentsError }, { count: restaurantsCount, error: restaurantsError }, completedShifts] =

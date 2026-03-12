@@ -75,29 +75,31 @@ function normalizeStaffItems(payload: unknown, role: "employee" | "supervisor") 
   return normalized
 }
 
-export async function listRestaurants(options?: { includeInactive?: boolean }) {
+export async function listRestaurants(options?: { includeInactive?: boolean; useAdminApi?: boolean }) {
   const includeInactive = options?.includeInactive === true
 
-  try {
-    const payload = await invokeEdge<unknown>("admin_restaurants_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "list",
-        ...(includeInactive ? {} : { is_active: true }),
-      },
-    })
+  if (options?.useAdminApi) {
+    try {
+      const payload = await invokeEdge<unknown>("admin_restaurants_manage", {
+        idempotencyKey: crypto.randomUUID(),
+        body: {
+          action: "list",
+          ...(includeInactive ? {} : { is_active: true }),
+        },
+      })
 
-    const rows = Array.isArray(payload)
-      ? payload
-      : payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown }).items)
-        ? ((payload as { items?: unknown }).items as unknown[])
-        : []
+      const rows = Array.isArray(payload)
+        ? payload
+        : payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown }).items)
+          ? ((payload as { items?: unknown }).items as unknown[])
+          : []
 
-    if (Array.isArray(rows)) {
-      return rows as Restaurant[]
+      if (Array.isArray(rows)) {
+        return rows as Restaurant[]
+      }
+    } catch {
+      // Fall through to direct DB access while backend rollout converges.
     }
-  } catch {
-    // Fall through to direct DB access while backend rollout converges.
   }
 
   let query = supabase.from("restaurants").select("*").order("name")
