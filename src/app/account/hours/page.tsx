@@ -10,6 +10,7 @@ import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 import { useToast } from "@/components/toast/ToastProvider"
 import { useI18n } from "@/hooks/useI18n"
+import { useRole } from "@/hooks/useRole"
 import { EmployeeHoursHistoryRow, getEmployeeHoursHistory } from "@/services/employeeSelfService.service"
 import { ROLES } from "@/utils/permissions"
 
@@ -26,6 +27,7 @@ function daysAgoIsoDate(days: number) {
 export default function AccountHoursPage() {
   const { t, formatDateTime } = useI18n()
   const { showToast } = useToast()
+  const { isEmpleado, loading: roleLoading } = useRole()
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
   const [rows, setRows] = useState<EmployeeHoursHistoryRow[]>([])
@@ -33,6 +35,11 @@ export default function AccountHoursPage() {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
+    if (roleLoading || !isEmpleado) {
+      setLoading(false)
+      return
+    }
+
     if (!from || !to) {
       setLoading(false)
       return
@@ -56,7 +63,7 @@ export default function AccountHoursPage() {
     } finally {
       setLoading(false)
     }
-  }, [from, showToast, t, to])
+  }, [from, isEmpleado, roleLoading, showToast, t, to])
 
   useEffect(() => {
     if (!from && !to) {
@@ -66,8 +73,9 @@ export default function AccountHoursPage() {
   }, [from, to])
 
   useEffect(() => {
+    if (roleLoading || !isEmpleado) return
     void load()
-  }, [load])
+  }, [isEmpleado, load, roleLoading])
 
   const fallbackTotalHours = useMemo(() => {
     if (totalHours > 0) return totalHours

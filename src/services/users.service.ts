@@ -3,6 +3,7 @@ import { invokeEdge } from "@/services/edgeClient"
 import { Role } from "@/utils/permissions"
 
 let bootstrapRpcUnavailable = false
+let bootstrapRpcAttempted = false
 
 function isRpcUnavailableError(error: unknown) {
   if (!error || typeof error !== "object") return false
@@ -24,6 +25,28 @@ function isRpcUnavailableError(error: unknown) {
     details.includes("does not exist") ||
     hint.includes("could not find") ||
     hint.includes("does not exist")
+  )
+}
+
+function isBootstrapSkippableError(error: unknown) {
+  if (!error || typeof error !== "object") return false
+
+  const candidate = error as { message?: unknown; status?: unknown; details?: unknown; hint?: unknown }
+  const status = typeof candidate.status === "number" ? candidate.status : undefined
+  const message = typeof candidate.message === "string" ? candidate.message.toLowerCase() : ""
+  const details = typeof candidate.details === "string" ? candidate.details.toLowerCase() : ""
+  const hint = typeof candidate.hint === "string" ? candidate.hint.toLowerCase() : ""
+
+  return (
+    status === 400 ||
+    status === 404 ||
+    status === 405 ||
+    message.includes("method not allowed") ||
+    message.includes("metodo no permitido") ||
+    details.includes("method not allowed") ||
+    details.includes("metodo no permitido") ||
+    hint.includes("method not allowed") ||
+    hint.includes("metodo no permitido")
   )
 }
 
@@ -195,11 +218,29 @@ export async function createAdminUser(payload: {
 }
 
 export async function bootstrapMyUserProfile() {
-  if (bootstrapRpcUnavailable) return
+  if (bootstrapRpcUnavailable || bootstrapRpcAttempted) return
+  bootstrapRpcAttempted = true
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user?.id) return
+
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  if (existingProfile?.id) {
+    bootstrapRpcUnavailable = true
+    return
+  }
 
   const { error } = await supabase.rpc("bootstrap_my_user", {})
   if (error) {
-    if (isRpcUnavailableError(error)) {
+    if (isRpcUnavailableError(error) || isBootstrapSkippableError(error)) {
       bootstrapRpcUnavailable = true
       return
     }
