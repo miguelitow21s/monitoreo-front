@@ -63,6 +63,11 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
     "Content-Type": "application/json",
   }
 
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+  if (anonKey) {
+    headers.apikey = anonKey
+  }
+
   if (options.idempotencyKey) {
     headers["Idempotency-Key"] = options.idempotencyKey
   }
