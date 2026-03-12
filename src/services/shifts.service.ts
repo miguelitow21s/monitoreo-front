@@ -167,7 +167,7 @@ export async function endShift(payload: EndShiftPayload) {
 }
 
 export async function getMyActiveShift() {
-  const { data, error } = await supabase.rpc("get_my_active_shift")
+  const { data, error } = await supabase.rpc("get_my_active_shift", {})
   if (error) throw error
   return normalizeActiveShift(data)
 }

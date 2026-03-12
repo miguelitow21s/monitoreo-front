@@ -38,12 +38,15 @@ async function callEdge(endpoint: string, method: "GET" | "POST", body?: unknown
     throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured.")
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${session.access_token}`,
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!anonKey) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not configured.")
   }
 
-  if (method === "POST") {
-    headers["Content-Type"] = "application/json"
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${session.access_token}`,
+    apikey: anonKey,
+    "Content-Type": "application/json",
   }
 
   if (idempotencyKey) {

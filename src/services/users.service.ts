@@ -197,7 +197,7 @@ export async function createAdminUser(payload: {
 export async function bootstrapMyUserProfile() {
   if (bootstrapRpcUnavailable) return
 
-  const { error } = await supabase.rpc("bootstrap_my_user")
+  const { error } = await supabase.rpc("bootstrap_my_user", {})
   if (error) {
     if (isRpcUnavailableError(error)) {
       bootstrapRpcUnavailable = true
