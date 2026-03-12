@@ -479,7 +479,16 @@ export default function RestaurantsPage() {
           await listRestaurantEmployees(item.id, assignRoleFilter),
         ] as const)
       )
-      setAssignments(Object.fromEntries(assignmentEntries))
+
+      const assignmentMap: Record<string, RestaurantEmployee[]> = assignmentEntries.reduce(
+        (acc, [restaurantId, employees]) => {
+          acc[restaurantId] = employees.filter((employee): employee is RestaurantEmployee => employee !== null)
+          return acc
+        },
+        {} as Record<string, RestaurantEmployee[]>
+      )
+
+      setAssignments(assignmentMap)
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudieron cargar los restaurantes.", "Could not load restaurants."))
     } finally {

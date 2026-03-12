@@ -642,7 +642,7 @@ export default function ShiftsPage() {
     }
     try {
       const rows = await listRestaurantEmployees(String(staffRestaurantId), "employee")
-      setStaffAssignments(rows)
+      setStaffAssignments(rows.filter((row): row is RestaurantEmployee => row !== null))
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo cargar el personal asignado.", "Could not load assigned staff.")))
     }

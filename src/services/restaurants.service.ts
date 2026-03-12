@@ -41,34 +41,38 @@ function normalizeStaffItems(payload: unknown, role: "employee" | "supervisor") 
     ? ((payload as { items?: unknown }).items as unknown[])
     : []
 
-  return rawItems
-    .map(item => {
-      if (!item || typeof item !== "object") return null
-      const row = item as Record<string, unknown>
+  const normalized: RestaurantEmployee[] = []
+  for (const item of rawItems) {
+    if (!item || typeof item !== "object") continue
+    const row = item as Record<string, unknown>
 
-      if (role === "employee") {
-        const employeeId = typeof row.employee_id === "string" ? row.employee_id : null
-        const restaurantId = typeof row.restaurant_id === "number" ? String(row.restaurant_id) : null
-        if (!employeeId || !restaurantId) return null
-        return {
-          id: `${restaurantId}:${employeeId}`,
-          restaurant_id: restaurantId,
-          user_id: employeeId,
-          role: "empleado",
-        } satisfies RestaurantEmployee
-      }
-
-      const supervisorId = typeof row.supervisor_id === "string" ? row.supervisor_id : null
+    if (role === "employee") {
+      const employeeId = typeof row.employee_id === "string" ? row.employee_id : null
       const restaurantId = typeof row.restaurant_id === "number" ? String(row.restaurant_id) : null
-      if (!supervisorId || !restaurantId) return null
-      return {
-        id: `${restaurantId}:${supervisorId}`,
+      if (!employeeId || !restaurantId) continue
+
+      normalized.push({
+        id: `${restaurantId}:${employeeId}`,
         restaurant_id: restaurantId,
-        user_id: supervisorId,
-        role: "supervisora",
-      } satisfies RestaurantEmployee
+        user_id: employeeId,
+        role: "empleado",
+      })
+      continue
+    }
+
+    const supervisorId = typeof row.supervisor_id === "string" ? row.supervisor_id : null
+    const restaurantId = typeof row.restaurant_id === "number" ? String(row.restaurant_id) : null
+    if (!supervisorId || !restaurantId) continue
+
+    normalized.push({
+      id: `${restaurantId}:${supervisorId}`,
+      restaurant_id: restaurantId,
+      user_id: supervisorId,
+      role: "supervisora",
     })
-    .filter((item): item is RestaurantEmployee => item !== null)
+  }
+
+  return normalized
 }
 
 export async function listRestaurants(options?: { includeInactive?: boolean }) {
