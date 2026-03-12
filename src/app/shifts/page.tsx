@@ -40,6 +40,7 @@ import {
   SupervisorPresenceLog,
 } from "@/services/supervisorPresence.service"
 import {
+  assignScheduledShift,
   cancelScheduledShift,
   listMyScheduledShifts,
   listScheduledShifts,
