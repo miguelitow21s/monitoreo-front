@@ -26,13 +26,18 @@ function daysAgoIsoDate(days: number) {
 export default function AccountHoursPage() {
   const { t, formatDateTime } = useI18n()
   const { showToast } = useToast()
-  const [from, setFrom] = useState(daysAgoIsoDate(30))
-  const [to, setTo] = useState(todayIsoDate())
+  const [from, setFrom] = useState("")
+  const [to, setTo] = useState("")
   const [rows, setRows] = useState<EmployeeHoursHistoryRow[]>([])
   const [totalHours, setTotalHours] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
+    if (!from || !to) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
       const result = await getEmployeeHoursHistory({
@@ -52,6 +57,13 @@ export default function AccountHoursPage() {
       setLoading(false)
     }
   }, [from, showToast, t, to])
+
+  useEffect(() => {
+    if (!from && !to) {
+      setFrom(daysAgoIsoDate(30))
+      setTo(todayIsoDate())
+    }
+  }, [from, to])
 
   useEffect(() => {
     void load()

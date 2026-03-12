@@ -19,6 +19,28 @@ type EdgeInvokeOptions = {
   extraHeaders?: Record<string, string>
 }
 
+let edgeUnavailableUntilMs = 0
+const EDGE_UNAVAILABLE_COOLDOWN_MS = 2 * 60 * 1000
+
+function isEdgeTemporarilyUnavailable() {
+  return Date.now() < edgeUnavailableUntilMs
+}
+
+function markEdgeTemporarilyUnavailable() {
+  edgeUnavailableUntilMs = Date.now() + EDGE_UNAVAILABLE_COOLDOWN_MS
+}
+
+function isNetworkOrCorsFailure(message: string, status?: unknown) {
+  if (typeof status === "number") return false
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes("failed to fetch") ||
+    normalized.includes("failed to send a request") ||
+    normalized.includes("network") ||
+    normalized.includes("cors")
+  )
+}
+
 function toError(message: string, status?: number, code?: string, requestId?: string) {
   const decoratedMessage = requestId ? `${message} (request_id: ${requestId})` : message
   const err = new Error(decoratedMessage) as Error & { status?: number; code?: string; request_id?: string }
@@ -29,6 +51,14 @@ function toError(message: string, status?: number, code?: string, requestId?: st
 }
 
 export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {}) {
+  if (isEdgeTemporarilyUnavailable()) {
+    throw toError(
+      "Edge Function temporarily unavailable. Retrying with fallback path.",
+      503,
+      "EDGE_TEMP_UNAVAILABLE"
+    )
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   }
@@ -62,6 +92,9 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
 
   if (error) {
     const status = (error as { status?: unknown }).status
+    if (isNetworkOrCorsFailure(error.message ?? "", status)) {
+      markEdgeTemporarilyUnavailable()
+    }
     throw toError(error.message ?? "Edge Function request failed.", typeof status === "number" ? status : undefined)
   }
 
