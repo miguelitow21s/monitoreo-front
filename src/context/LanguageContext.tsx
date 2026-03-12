@@ -42,7 +42,8 @@ function resolveLanguageByRole(role: string | null | undefined): AppLanguage {
   if (normalizedRole && ROLE_LANGUAGE_MAP[normalizedRole]) {
     return ROLE_LANGUAGE_MAP[normalizedRole]
   }
-  return detectBrowserLanguage()
+  // Keep SSR and first client render deterministic to avoid hydration mismatch.
+  return "es"
 }
 
 function readStoredLanguageConfig() {
@@ -64,14 +65,16 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   // Keep first paint deterministic to avoid server/client text mismatch during hydration.
   const [manualLanguage, setManualLanguage] = useState<AppLanguage>("es")
   const [isManual, setIsManual] = useState(false)
+  const [browserLanguage, setBrowserLanguage] = useState<AppLanguage>("es")
   const roleLanguage = resolveLanguageByRole(typeof role === "string" ? role : null)
-  const language = isManual ? manualLanguage : roleLanguage
+  const language = isManual ? manualLanguage : roleLanguage === "es" && !role ? browserLanguage : roleLanguage
 
   useEffect(() => {
     const stored = readStoredLanguageConfig()
     queueMicrotask(() => {
       setManualLanguage(stored.language)
       setIsManual(stored.isManual)
+      setBrowserLanguage(detectBrowserLanguage())
     })
   }, [])
 
