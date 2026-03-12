@@ -27,6 +27,7 @@ export interface EmployeeHoursHistoryRow {
 	shift_id?: string | number
 	start_time?: string
 	end_time?: string | null
+	worked_minutes?: number
 	hours_worked?: number
 	worked_hours?: number
 	restaurant_id?: number | null
