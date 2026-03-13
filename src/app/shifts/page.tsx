@@ -289,6 +289,7 @@ export default function ShiftsPage() {
   const [history, setHistory] = useState<ShiftRecord[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [processing, setProcessing] = useState(false)
+  const [uploadingStartEvidence, setUploadingStartEvidence] = useState(false)
   const [sendingOtp, setSendingOtp] = useState(false)
   const [verifyingOtp, setVerifyingOtp] = useState(false)
   const [otpCode, setOtpCode] = useState("")
@@ -732,12 +733,18 @@ export default function ShiftsPage() {
     t,
   ])
 
+  const shiftEvidencePhase = activeShift
+    ? hasStartEvidence
+      ? t("fin-turno", "shift-end")
+      : t("inicio-turno", "shift-start")
+    : t("inicio-turno", "shift-start")
+
   const shiftOverlayLines = [
     `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
     `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
     `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(expectedRestaurantId)}`,
     `${t("Turno", "Shift")}: ${activeShift ? `#${activeShift.id}` : t("inicio", "start")}`,
-    `${t("Fase", "Phase")}: ${activeShift ? t("fin-turno", "shift-end") : t("inicio-turno", "shift-start")}`,
+    `${t("Fase", "Phase")}: ${shiftEvidencePhase}`,
     coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : t("GPS: pendiente", "GPS: pending"),
   ]
 
@@ -1327,6 +1334,45 @@ export default function ShiftsPage() {
       showToast("error", extractErrorMessage(error, t("No se pudo finalizar el turno.", "Could not end shift.")))
     } finally {
       setProcessing(false)
+    }
+  }
+
+  const handleUploadMissingStartEvidence = async () => {
+    if (!activeShift) return
+    if (!coords || !photo) {
+      showToast(
+        "info",
+        t("Debes capturar GPS y evidencia fotografica de inicio.", "You must capture GPS and start photo evidence.")
+      )
+      return
+    }
+    if (!shiftOtpReady) {
+      showToast(
+        "info",
+        t("Debes validar OTP antes de subir evidencia de inicio.", "You must verify OTP before uploading start evidence.")
+      )
+      return
+    }
+
+    setUploadingStartEvidence(true)
+    try {
+      await uploadShiftEvidence({
+        shiftId: Number(activeShift.id),
+        type: "inicio",
+        file: photo,
+        lat: coords.lat,
+        lng: coords.lng,
+        accuracy: coords.accuracyMeters,
+      })
+      showToast("success", t("Evidencia de inicio cargada.", "Start evidence uploaded."))
+      resetEvidenceAndLocation()
+      setHistoryPage(1)
+      await loadEmployeeData(1)
+      await loadEmployeeSelfServiceDashboard()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence.")))
+    } finally {
+      setUploadingStartEvidence(false)
     }
   }
 
@@ -1946,10 +1992,7 @@ export default function ShiftsPage() {
 
             {isEmpleado && (
               <>
-                <Card
-                  title={t("Mi panel", "My dashboard")}
-                  subtitle={t("Asignacion, agenda, tareas y turno activo desde self-service.", "Assignment, schedule, tasks and active shift from self-service.")}
-                >
+                <Card title={t("Mi panel", "My dashboard")}>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                   <p className="text-xs text-slate-500">{t("Restaurantes", "Restaurants")}</p>
@@ -1996,7 +2039,10 @@ export default function ShiftsPage() {
                   {t("Alerta operativa: tienes", "Operational alert: you have")} {pendingEmployeeTasks.length} {t("tarea(s) asignadas por supervision.", "task(s) assigned by supervisor.")}
                 </p>
                 <p className="mt-1 text-amber-800">
-                  {t("Debes cerrar cada tarea con 3 evidencias especificas: primer plano, plano medio y vista general.", "You must close each task with 3 specific evidence shots: close-up, mid-range shot, and wide overview.")}
+                  {t(
+                    "Cierra cada tarea con la evidencia requerida.",
+                    "Close each task with the required evidence."
+                  )}
                 </p>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-900">
                   {pendingEmployeeTasks.slice(0, 3).map(task => (
@@ -2009,10 +2055,7 @@ export default function ShiftsPage() {
             )}
 
                 <div className="grid gap-4 xl:grid-cols-2">
-              <Card
-                title={t("Restaurante y horario asignados", "Assigned restaurant and schedule")}
-                subtitle={t("Verifica tu ubicacion y horario asignado.", "Check your assigned location and schedule.")}
-              >
+              <Card title={t("Restaurante y horario asignados", "Assigned restaurant and schedule")}>
                 {nextScheduledShift ? (
                   <div className="space-y-2 text-sm text-slate-700">
                     <p>
@@ -2190,7 +2233,11 @@ export default function ShiftsPage() {
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-slate-700">{t("Evidencia fotografica de salida", "End photo evidence")}</p>
+                      <p className="text-xs font-semibold text-slate-700">
+                        {hasStartEvidence
+                          ? t("Evidencia fotografica de salida", "End photo evidence")
+                          : t("Evidencia fotografica de inicio (pendiente)", "Start photo evidence (pending)")}
+                      </p>
                       <div className="mt-2">
                         <CameraCapture onCapture={setPhoto} overlayLines={shiftOverlayLines} />
                       </div>
@@ -2198,9 +2245,30 @@ export default function ShiftsPage() {
                   </div>
                   <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
                     <span>{t("GPS", "GPS")}: {coords ? t("Listo", "Ready") : t("Pendiente", "Pending")}</span>
-                    <span>{t("Foto de salida", "End photo")}: {photo ? t("Lista", "Ready") : t("Pendiente", "Pending")}</span>
+                    <span>
+                      {hasStartEvidence ? t("Foto de salida", "End photo") : t("Foto de inicio", "Start photo")}:{" "}
+                      {photo ? t("Lista", "Ready") : t("Pendiente", "Pending")}
+                    </span>
                     <span>{t("Evidencia inicio", "Start evidence")}: {hasStartEvidence ? "OK" : t("Pendiente", "Pending")}</span>
                   </div>
+                  {!hasStartEvidence && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void handleUploadMissingStartEvidence()}
+                        disabled={uploadingStartEvidence || !coords || !photo}
+                      >
+                        {uploadingStartEvidence ? t("Subiendo...", "Uploading...") : t("Subir evidencia de inicio", "Upload start evidence")}
+                      </Button>
+                      <span className="text-xs text-slate-500">
+                        {t(
+                          "Debes subir la evidencia de inicio antes de finalizar el turno.",
+                          "You must upload start evidence before ending the shift."
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2358,7 +2426,7 @@ export default function ShiftsPage() {
             </Card>
 
             {isEmpleado && activeShift && (
-              <Card title={t("Registrar incidente", "Register incident")} subtitle={t("Si ocurre algo durante el turno, registralo aqui.", "If anything happens during the shift, register it here.")}>
+              <Card title={t("Registrar incidente", "Register incident")}>
                 <div className="space-y-2">
                   <div className="flex gap-4 text-sm">
                     <label className="flex items-center gap-2">
@@ -2401,7 +2469,7 @@ export default function ShiftsPage() {
             )}
 
             {isEmpleado && (
-              <Card title={t("Tareas asignadas", "Assigned tasks")} subtitle={t("Tareas operativas de supervision con cierre obligatorio por evidencia.", "Supervision operational tasks with mandatory evidence closure.")}>
+              <Card title={t("Tareas asignadas", "Assigned tasks")}>
               {loadingTasks ? (
                 <Skeleton className="h-24" />
               ) : employeeTasksForShift.length === 0 ? (
@@ -2573,7 +2641,7 @@ export default function ShiftsPage() {
             )}
 
             {isEmpleado && (
-              <Card title={t("Historial de turnos", "Shift history")} subtitle={t("Vista paginada con estado y duracion.", "Paginated view with status and duration.")}>
+              <Card title={t("Historial de turnos", "Shift history")}>
               {loadingData ? (
                 <div className="space-y-2">
                   {Array.from({ length: 4 }).map((_, index) => (
@@ -2646,7 +2714,7 @@ export default function ShiftsPage() {
             )}
 
             {isEmpleado && (
-              <Card title={t("Turnos programados", "Scheduled shifts")} subtitle={t("Agenda asignada para tus proximos periodos de trabajo.", "Agenda assigned for your upcoming work periods.")}>
+              <Card title={t("Turnos programados", "Scheduled shifts")}>
               {scheduledShiftsWithUiState.length === 0 ? (
                 <p className="text-sm text-slate-500">{t("No tienes turnos programados.", "You do not have scheduled shifts.")}</p>
               ) : (
@@ -2689,10 +2757,7 @@ export default function ShiftsPage() {
             <h2 className="text-lg font-semibold text-slate-900">{t("Panel de supervision", "Supervision panel")}</h2>
 
             {!canOperateShift && (
-              <Card
-                title={t("OTP para aprobaciones e incidentes", "OTP for approvals and incidents")}
-                subtitle={t("Este token se usa para aprobar/rechazar turnos y registrar incidencias.", "This token is required to approve/reject shifts and register incidents.")}
-              >
+              <Card title={t("OTP para aprobaciones e incidentes", "OTP for approvals and incidents")}>
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={shiftOtpReady ? "success" : "warning"}>
@@ -2707,8 +2772,8 @@ export default function ShiftsPage() {
 
                   <p className="mt-2 text-xs text-slate-700">
                     {t(
-                      "Debes completar OTP de telefono en este dispositivo para aprobar/rechazar turnos y registrar incidencias.",
-                      "Phone OTP must be completed on this device to approve/reject shifts and register incidents."
+                      "Completa OTP para aprobar/rechazar turnos y registrar incidencias.",
+                      "Complete OTP to approve/reject shifts and register incidents."
                     )}
                   </p>
 
@@ -2751,10 +2816,7 @@ export default function ShiftsPage() {
               </div>
             )}
 
-            <Card
-              title={t("Asignacion de personal", "Staff assignment")}
-              subtitle={t("Asigna y desasigna empleados por restaurante autorizado.", "Assign and unassign employees by authorized restaurant.")}
-            >
+            <Card title={t("Asignacion de personal", "Staff assignment")}>
               <div className="grid gap-2 lg:grid-cols-3">
                 <select
                   value={staffRestaurantId ?? ""}
@@ -2806,14 +2868,14 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card
-              title={t("Programar turno", "Schedule shift")}
-              subtitle={t("Usa programacion multiple para crear uno o varios turnos bajo supervision.", "Use bulk scheduling to create one or multiple supervised shifts.")}
-            >
+            <Card title={t("Programar turno", "Schedule shift")}>
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
                 <p className="text-xs text-slate-500">
-                  {t("Genera turnos por rango y dias de semana, o agrega bloques manuales.", "Generate shifts by date range and weekdays, or add manual blocks.")}
+                  {t(
+                    "Define rangos, dias o bloques manuales.",
+                    "Define ranges, weekdays, or manual blocks."
+                  )}
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <select
@@ -3159,7 +3221,7 @@ export default function ShiftsPage() {
               </Card>
             )}
 
-            <Card title={t("Monitoreo de tareas", "Task monitoring")} subtitle={t("Tareas recientes creadas o asignadas en restaurantes supervisados.", "Recent tasks created or assigned in supervised restaurants.")}>
+            <Card title={t("Monitoreo de tareas", "Task monitoring")}>
               {loadingTasks ? (
                 <Skeleton className="h-20" />
               ) : supervisorTasks.length === 0 ? (
@@ -3195,7 +3257,7 @@ export default function ShiftsPage() {
               )}
             </Card>
 
-            <Card title={t("Control de turnos programados", "Scheduled shift control")} subtitle={t("Cancelar o reprogramar turnos proximos.", "Cancel or reschedule upcoming shifts.")}>
+            <Card title={t("Control de turnos programados", "Scheduled shift control")}>
               {supervisionScheduledShifts.length === 0 ? (
                 <p className="text-sm text-slate-500">{t("No se encontraron turnos programados.", "No scheduled shifts found.")}</p>
               ) : (
