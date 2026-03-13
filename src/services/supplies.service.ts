@@ -114,7 +114,8 @@ function normalizeDeliveryFromEdge(raw: unknown): SupplyDelivery | null {
 }
 
 export async function listSupplies(options?: { restaurantId?: string; limit?: number; search?: string }) {
-  const edgeLimit = Math.max(1, Math.min(options?.limit ?? 200, 500))
+  // Backend contract caps list limits at 200 for supplies.
+  const edgeLimit = Math.max(1, Math.min(options?.limit ?? 200, 200))
   try {
     const payload = await invokeEdge<unknown>("supplies_deliver", {
       idempotencyKey: crypto.randomUUID(),
@@ -192,7 +193,8 @@ export async function registerSupplyDelivery(payload: {
 }
 
 export async function listSupplyDeliveries(limit = 30, options?: { restaurantId?: string; deliveredBy?: string }) {
-  const edgeLimit = Math.max(1, Math.min(limit, 1000))
+  // Backend contract caps list limits at 200 for deliveries.
+  const edgeLimit = Math.max(1, Math.min(limit, 200))
   try {
     const payload = await invokeEdge<unknown>("supplies_deliver", {
       idempotencyKey: crypto.randomUUID(),
