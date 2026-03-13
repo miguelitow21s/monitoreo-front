@@ -407,9 +407,17 @@ export default function ShiftsPage() {
   }, [employeeDashboard])
 
   const hasStartEvidence = activeShiftUploadedEvidenceTypes.includes("inicio")
+  const activeShiftId = useMemo(
+    () => activeShift?.id ?? employeeDashboard?.active_shift?.id ?? null,
+    [activeShift?.id, employeeDashboard?.active_shift?.id]
+  )
+  const employeeTasksForShift = useMemo(() => {
+    if (!activeShiftId) return [] as OperationalTask[]
+    return employeeTasks.filter(task => String(task.shift_id ?? "") === String(activeShiftId))
+  }, [activeShiftId, employeeTasks])
   const pendingEmployeeTasks = useMemo(
-    () => employeeTasks.filter(task => task.status === "pending" || task.status === "in_progress"),
-    [employeeTasks]
+    () => employeeTasksForShift.filter(task => task.status === "pending" || task.status === "in_progress"),
+    [employeeTasksForShift]
   )
   const overdueSupervisorTasks = useMemo(
     () =>
@@ -616,8 +624,8 @@ export default function ShiftsPage() {
   }, [coords, geofenceTarget])
 
   const selectedTask = useMemo(
-    () => employeeTasks.find(task => task.id === selectedTaskId) ?? null,
-    [employeeTasks, selectedTaskId]
+    () => employeeTasksForShift.find(task => task.id === selectedTaskId) ?? null,
+    [employeeTasksForShift, selectedTaskId]
   )
 
   const submitBlockers = useMemo(() => {
@@ -1014,14 +1022,14 @@ export default function ShiftsPage() {
 
   useEffect(() => {
     if (!selectedTaskId) return
-    if (!employeeTasks.some(task => task.id === selectedTaskId)) {
+    if (!employeeTasksForShift.some(task => task.id === selectedTaskId)) {
       setSelectedTaskId(null)
       setTaskCoords(null)
       setTaskPhotoClose(null)
       setTaskPhotoMid(null)
       setTaskPhotoWide(null)
     }
-  }, [employeeTasks, selectedTaskId])
+  }, [employeeTasksForShift, selectedTaskId])
 
   useEffect(() => {
     if (roleLoading) return
@@ -1982,7 +1990,7 @@ export default function ShiftsPage() {
               </div>
             )}
 
-            {pendingEmployeeTasks.length > 0 && (
+            {activeShift && pendingEmployeeTasks.length > 0 && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                 <p className="font-semibold">
                   {t("Alerta operativa: tienes", "Operational alert: you have")} {pendingEmployeeTasks.length} {t("tarea(s) asignadas por supervision.", "task(s) assigned by supervisor.")}
@@ -2061,98 +2069,140 @@ export default function ShiftsPage() {
           </>
         )}
 
-            <Card title={t("Ubicacion GPS", "GPS location")} subtitle={t("Debes tener coordenadas validas para ejecutar acciones.", "You must have valid coordinates to execute actions.")}>
-              <div className="mt-3">
-                <GPSGuard onLocation={setCoords} />
-              </div>
-            </Card>
-
-            <Card title={t("Evidencia fotografica", "Photo evidence")} subtitle={t("La foto se captura con camara y se carga a Storage.", "Photo is captured with camera and uploaded to Storage.")}>
-              <div className="mt-3">
-                <CameraCapture onCapture={setPhoto} overlayLines={shiftOverlayLines} />
-              </div>
-            </Card>
-
             <Card
               title={t("Accion principal", "Main action")}
               subtitle={activeShift ? t("Finalizar turno activo", "End active shift") : t("Iniciar nuevo turno", "Start new shift")}
             >
-              <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={shiftOtpReady ? "success" : "warning"}>
-                    {shiftOtpReady ? t("OTP verificado", "OTP verified") : t("OTP pendiente", "OTP pending")}
-                  </Badge>
-                  {otpVerifiedAt && (
-                    <span className="text-xs text-slate-600">
-                      {t("Validado", "Verified")}: {formatDateTime(otpVerifiedAt)}
-                    </span>
-                  )}
-                </div>
-
-                <p className="mt-2 text-xs text-slate-700">
-                  {t(
-                    "Debes completar OTP de telefono para iniciar/finalizar turno en este dispositivo.",
-                    "Phone OTP must be completed to start/end shift on this device."
-                  )}
-                </p>
-                {otpDebugEnabled && otpPhoneMissingDemo && (
-                  <p className="mt-2 text-xs text-amber-700">
-                    {t(
-                      "Telefono no configurado (demo).",
-                      "Phone not configured (demo)."
-                    )}
-                  </p>
-                )}
-                {otpDebugEnabled && otpDebugCode && (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold">{t("Codigo OTP (demo)", "OTP code (demo)")}</span>
-                      <span className="rounded bg-white px-2 py-1 font-mono text-sm text-amber-900">
-                        {otpDebugCode}
+              {(!activeShift || !shiftOtpReady) && (
+                <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={shiftOtpReady ? "success" : "warning"}>
+                      {shiftOtpReady ? t("OTP verificado", "OTP verified") : t("OTP pendiente", "OTP pending")}
+                    </Badge>
+                    {otpVerifiedAt && (
+                      <span className="text-xs text-slate-600">
+                        {t("Validado", "Verified")}: {formatDateTime(otpVerifiedAt)}
                       </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-                            void navigator.clipboard.writeText(otpDebugCode)
-                          }
-                          showToast("success", t("Codigo copiado.", "Code copied."))
-                        }}
-                      >
-                        {t("Copiar", "Copy")}
-                      </Button>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-xs text-slate-700">
+                    {activeShift
+                      ? t(
+                          "Completa OTP para finalizar turno en este dispositivo.",
+                          "Complete OTP to end shift on this device."
+                        )
+                      : t(
+                          "Debes completar OTP de telefono para iniciar turno en este dispositivo.",
+                          "Phone OTP must be completed to start shift on this device."
+                        )}
+                  </p>
+                  {otpDebugEnabled && otpPhoneMissingDemo && (
+                    <p className="mt-2 text-xs text-amber-700">
+                      {t(
+                        "Telefono no configurado (demo).",
+                        "Phone not configured (demo)."
+                      )}
+                    </p>
+                  )}
+                  {otpDebugEnabled && otpDebugCode && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{t("Codigo OTP (demo)", "OTP code (demo)")}</span>
+                        <span className="rounded bg-white px-2 py-1 font-mono text-sm text-amber-900">
+                          {otpDebugCode}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                              void navigator.clipboard.writeText(otpDebugCode)
+                            }
+                            showToast("success", t("Codigo copiado.", "Code copied."))
+                          }}
+                        >
+                          {t("Copiar", "Copy")}
+                        </Button>
+                      </div>
+                      <div className="mt-1 text-[11px] text-amber-800">
+                        {otpDebugMaskedPhone ? `${t("Enviado a", "Sent to")}: ${otpDebugMaskedPhone}. ` : ""}
+                        {otpDebugExpiresAt
+                          ? `${t("Expira", "Expires")}: ${formatDateTime(otpDebugExpiresAt)}`
+                          : ""}
+                      </div>
                     </div>
-                    <div className="mt-1 text-[11px] text-amber-800">
-                      {otpDebugMaskedPhone ? `${t("Enviado a", "Sent to")}: ${otpDebugMaskedPhone}. ` : ""}
-                      {otpDebugExpiresAt
-                        ? `${t("Expira", "Expires")}: ${formatDateTime(otpDebugExpiresAt)}`
-                        : ""}
+                  )}
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
+                      {sendingOtp ? t("Enviando OTP...", "Sending OTP...") : t("Enviar OTP", "Send OTP")}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
+                      {t("Reiniciar OTP", "Reset OTP")}
+                    </Button>
+                  </div>
+
+                  <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">
+                    <input
+                      value={otpCode}
+                      onChange={event => setOtpCode(event.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      placeholder={t("Codigo OTP", "OTP code")}
+                    />
+                    <Button size="sm" variant="primary" onClick={() => void handleVerifyShiftOtp()} disabled={verifyingOtp}>
+                      {verifyingOtp ? t("Verificando...", "Verifying...") : t("Verificar OTP", "Verify OTP")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {!activeShift ? (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <p className="font-semibold text-slate-800">
+                    {t("Requisitos de inicio", "Start requirements")}
+                  </p>
+                  <div className="mt-2 grid gap-3 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">{t("Ubicacion de inicio", "Start location")}</p>
+                      <div className="mt-2">
+                        <GPSGuard onLocation={setCoords} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">{t("Evidencia fotografica de inicio", "Start photo evidence")}</p>
+                      <div className="mt-2">
+                        <CameraCapture onCapture={setPhoto} overlayLines={shiftOverlayLines} />
+                      </div>
                     </div>
                   </div>
-                )}
-
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
-                    {sendingOtp ? t("Enviando OTP...", "Sending OTP...") : t("Enviar OTP", "Send OTP")}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
-                    {t("Reiniciar OTP", "Reset OTP")}
-                  </Button>
                 </div>
-
-                <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">
-                  <input
-                    value={otpCode}
-                    onChange={event => setOtpCode(event.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder={t("Codigo OTP", "OTP code")}
-                  />
-                  <Button size="sm" variant="primary" onClick={() => void handleVerifyShiftOtp()} disabled={verifyingOtp}>
-                    {verifyingOtp ? t("Verificando...", "Verifying...") : t("Verificar OTP", "Verify OTP")}
-                  </Button>
+              ) : (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <p className="font-semibold text-slate-800">
+                    {t("Requisitos para finalizar", "End requirements")}
+                  </p>
+                  <div className="mt-2 grid gap-3 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">{t("Ubicacion de salida", "End location")}</p>
+                      <div className="mt-2">
+                        <GPSGuard onLocation={setCoords} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">{t("Evidencia fotografica de salida", "End photo evidence")}</p>
+                      <div className="mt-2">
+                        <CameraCapture onCapture={setPhoto} overlayLines={shiftOverlayLines} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
+                    <span>{t("GPS", "GPS")}: {coords ? t("Listo", "Ready") : t("Pendiente", "Pending")}</span>
+                    <span>{t("Foto de salida", "End photo")}: {photo ? t("Lista", "Ready") : t("Pendiente", "Pending")}</span>
+                    <span>{t("Evidencia inicio", "Start evidence")}: {hasStartEvidence ? "OK" : t("Pendiente", "Pending")}</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {!activeShift ? (
                 <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
@@ -2354,12 +2404,22 @@ export default function ShiftsPage() {
               <Card title={t("Tareas asignadas", "Assigned tasks")} subtitle={t("Tareas operativas de supervision con cierre obligatorio por evidencia.", "Supervision operational tasks with mandatory evidence closure.")}>
               {loadingTasks ? (
                 <Skeleton className="h-24" />
-              ) : employeeTasks.length === 0 ? (
-                <p className="text-sm text-slate-500">{t("No hay tareas asignadas pendientes.", "There are no pending assigned tasks.")}</p>
+              ) : employeeTasksForShift.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  {activeShift
+                    ? t(
+                        "No hay tareas asignadas para este turno.",
+                        "There are no assigned tasks for this shift."
+                      )
+                    : t(
+                        "Inicia turno para ver las tareas asignadas.",
+                        "Start your shift to view assigned tasks."
+                      )}
+                </p>
               ) : (
                 <div className="space-y-3">
                   <div className="space-y-2">
-                    {employeeTasks.map(task => (
+                    {employeeTasksForShift.map(task => (
                       <div key={task.id} className="rounded-lg border border-slate-200 p-3 text-sm">
                         <p className="font-semibold text-slate-800">{task.title}</p>
                         <p className="mt-1 text-slate-600">{task.description}</p>
