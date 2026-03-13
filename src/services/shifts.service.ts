@@ -6,6 +6,7 @@ import {
 } from "@/services/securityContext.service"
 import { ensureTrustedDeviceReady } from "@/services/trustedDevice.service"
 import { debugLog } from "@/services/debug"
+import { supabase } from "@/services/supabaseClient"
 
 export type ShiftStatus = "active" | "completed" | "cancelled" | string
 
@@ -63,12 +64,44 @@ function sanitizePhoneForLogs(value: unknown) {
   return "[redacted]"
 }
 
+function normalizeOtpPhone(value: unknown) {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed
+}
+
+function isValidE164(value: string) {
+  return /^\+\d{7,15}$/.test(value)
+}
+
+async function getOtpPhoneE164() {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
+
+  if (error) throw error
+  const phone =
+    normalizeOtpPhone(user?.phone) ??
+    normalizeOtpPhone((user?.user_metadata as { phone_e164?: unknown })?.phone_e164) ??
+    normalizeOtpPhone((user?.user_metadata as { phone?: unknown })?.phone)
+
+  if (!phone || !isValidE164(phone)) {
+    throw new Error("Phone number for OTP is missing or invalid. Please set users.phone_e164 in E.164 format.")
+  }
+
+  return phone
+}
+
 function extractOtpSendMeta(payload: unknown) {
   if (!payload || typeof payload !== "object") return null
   const candidate = payload as {
     otp_id?: unknown
     expires_at?: unknown
     masked_phone?: unknown
+    debug_code?: unknown
+    debugCode?: unknown
     phone?: unknown
     delivery_status?: unknown
   }
@@ -78,6 +111,11 @@ function extractOtpSendMeta(payload: unknown) {
     expiresAt: typeof candidate.expires_at === "string" ? candidate.expires_at : null,
     maskedPhone: sanitizePhoneForLogs(candidate.masked_phone ?? candidate.phone),
     deliveryStatus: typeof candidate.delivery_status === "string" ? candidate.delivery_status : null,
+    debugCode: typeof candidate.debug_code === "string"
+      ? candidate.debug_code
+      : typeof candidate.debugCode === "string"
+        ? candidate.debugCode
+        : null,
   }
 }
 
@@ -94,6 +132,7 @@ function toErrorSnapshot(error: unknown) {
 }
 
 export async function sendShiftPhoneOtp() {
+  await getOtpPhoneE164()
   const { fingerprint } = await ensureTrustedDeviceReady()
   debugLog("otp.send.request", { fingerprint: fingerprint ? "set" : null })
 
@@ -119,6 +158,7 @@ export async function sendShiftPhoneOtp() {
       otpId: meta?.otpId ?? null,
       expiresAt: meta?.expiresAt ?? null,
       deliveryStatus: meta?.deliveryStatus ?? null,
+      debugCode: meta?.debugCode ?? null,
     }
   } catch (error: unknown) {
     debugLog("otp.send.error", { error: toErrorSnapshot(error) })

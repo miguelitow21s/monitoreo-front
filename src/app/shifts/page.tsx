@@ -268,6 +268,7 @@ export default function ShiftsPage() {
   const { loading: roleLoading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
   const { formatDateTime: formatDateTimeI18n, t } = useI18n()
   const { showToast } = useToast()
+  const otpDebugEnabled = process.env.NEXT_PUBLIC_OTP_DEBUG === "true"
 
   const formatDateTime = useCallback(
     (value: string | null) =>
@@ -1075,16 +1076,26 @@ export default function ShiftsPage() {
       const result = await sendShiftPhoneOtp()
       const maskedPhone = result?.maskedPhone
       const deliveryStatus = result?.deliveryStatus
+      const debugCode = otpDebugEnabled ? result?.debugCode : null
       const debugSuffix =
         deliveryStatus === "debug"
           ? t(" (modo debug: SMS no enviado)", " (debug mode: SMS not sent)")
           : ""
       const phoneLabel = maskedPhone ? ` ${maskedPhone}` : ""
+      const debugCodeLabel = debugCode
+        ? t(` Codigo demo: ${debugCode}`, ` Demo code: ${debugCode}`)
+        : ""
       showToast(
         "success",
         maskedPhone
-          ? t(`Codigo OTP enviado a${phoneLabel}.${debugSuffix}`, `OTP sent to${phoneLabel}.${debugSuffix}`)
-          : t(`Codigo OTP enviado. Revisa tu telefono.${debugSuffix}`, `OTP code sent. Check your phone.${debugSuffix}`)
+          ? t(
+              `Codigo OTP enviado a${phoneLabel}.${debugSuffix}${debugCodeLabel}`,
+              `OTP sent to${phoneLabel}.${debugSuffix}${debugCodeLabel}`
+            )
+          : t(
+              `Codigo OTP enviado. Revisa tu telefono.${debugSuffix}${debugCodeLabel}`,
+              `OTP code sent. Check your phone.${debugSuffix}${debugCodeLabel}`
+            )
       )
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo enviar OTP.", "Could not send OTP.")))
