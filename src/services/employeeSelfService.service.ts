@@ -64,11 +64,16 @@ function normalizeHoursItems(payload: unknown) {
 	return rows as EmployeeHoursHistoryRow[]
 }
 
-export async function getEmployeeSelfDashboard() {
+export async function getEmployeeSelfDashboard(options?: {
+	scheduleLimit?: number
+	pendingTasksLimit?: number
+}) {
 	const payload = await invokeEdge<unknown>("employee_self_service", {
 		idempotencyKey: crypto.randomUUID(),
 		body: {
 			action: "my_dashboard",
+			schedule_limit: options?.scheduleLimit ?? 10,
+			pending_tasks_limit: options?.pendingTasksLimit ?? 10,
 		},
 	})
 
@@ -117,6 +122,7 @@ export async function getEmployeeSelfDashboard() {
 export async function getEmployeeHoursHistory(payload: {
 	from: string
 	to: string
+	limit?: number
 }) {
 	const response = await invokeEdge<unknown>("employee_self_service", {
 		idempotencyKey: crypto.randomUUID(),
@@ -124,6 +130,7 @@ export async function getEmployeeHoursHistory(payload: {
 			action: "my_hours_history",
 			period_start: payload.from.slice(0, 10),
 			period_end: payload.to.slice(0, 10),
+			limit: payload.limit ?? 120,
 		},
 	})
 

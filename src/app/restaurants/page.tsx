@@ -457,8 +457,8 @@ export default function RestaurantsPage() {
     setLoading(true)
     try {
       const [restaurantRows, profileRows] = await Promise.all([
-        listRestaurants({ includeInactive: true }),
-        listUserProfiles(),
+        listRestaurants({ includeInactive: true, useAdminApi: true }),
+        listUserProfiles({ useAdminApi: true }),
       ])
       setRows(restaurantRows)
       setProfiles(profileRows)

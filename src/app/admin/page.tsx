@@ -23,7 +23,7 @@ export default function AdminPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const rows = await fetchDashboardMetrics()
+      const rows = await fetchDashboardMetrics({ useAdminApi: true })
       setMetrics(rows)
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudieron cargar metricas.", "Could not load metrics."))

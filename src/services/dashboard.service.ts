@@ -44,6 +44,28 @@ function toNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
 }
 
+function shouldFallbackToDirectDb(error: unknown) {
+  if (typeof error !== "object" || error === null) return true
+
+  const status = (error as { status?: unknown }).status
+  if (typeof status === "number") {
+    if (status === 404 || status === 503) return true
+    return false
+  }
+
+  const message =
+    typeof (error as { message?: unknown }).message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : ""
+
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("cors") ||
+    message.includes("temporarily unavailable")
+  )
+}
+
 export interface AuditEvent {
   id: string
   action: string
@@ -112,8 +134,8 @@ export async function fetchDashboardMetrics(options?: {
           },
         ]
       }
-    } catch {
-      // Fall through to existing query path while backend rollout converges.
+    } catch (error: unknown) {
+      if (!shouldFallbackToDirectDb(error)) throw error
     }
   }
 

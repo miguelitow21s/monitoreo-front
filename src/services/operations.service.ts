@@ -1,6 +1,8 @@
 import { supabase } from "@/services/supabaseClient"
 import { createEvidenceSignedUrl } from "@/services/storageEvidence.service"
 import { invokeEdge } from "@/services/edgeClient"
+import { getShiftOtpToken } from "@/services/securityContext.service"
+import { ensureTrustedDeviceReady } from "@/services/trustedDevice.service"
 
 export interface SupervisorShiftRow {
   id: string
@@ -20,6 +22,27 @@ export interface ShiftIncident {
   created_at: string
 }
 
+function parseShiftId(shiftId: string) {
+  const parsed = Number(shiftId)
+  if (!Number.isFinite(parsed)) {
+    throw new Error("Invalid shift id.")
+  }
+  return parsed
+}
+
+async function getShiftSecureHeaders() {
+  const otpToken = getShiftOtpToken()
+  if (!otpToken) {
+    throw new Error("OTP token is required. Verify your phone before approving/rejecting shifts or creating incidents.")
+  }
+
+  const { fingerprint } = await ensureTrustedDeviceReady()
+  return {
+    "x-device-fingerprint": fingerprint,
+    "x-shift-otp-token": otpToken,
+  }
+}
+
 export async function getActiveShiftsForSupervision(limit = 20) {
   const { data, error } = await supabase
     .from("shifts")
@@ -34,18 +57,15 @@ export async function getActiveShiftsForSupervision(limit = 20) {
 
 export async function updateShiftStatus(shiftId: string, status: string) {
   if (status === "approved" || status === "rejected") {
-    try {
-      const endpoint = status === "approved" ? "shifts_approve" : "shifts_reject"
-      await invokeEdge(endpoint, {
-        idempotencyKey: crypto.randomUUID(),
-        body: {
-          shift_id: Number(shiftId),
-        },
-      })
-      return
-    } catch {
-      // Fall back to direct update while backend rollout converges.
-    }
+    const endpoint = status === "approved" ? "shifts_approve" : "shifts_reject"
+    await invokeEdge(endpoint, {
+      idempotencyKey: crypto.randomUUID(),
+      extraHeaders: await getShiftSecureHeaders(),
+      body: {
+        shift_id: parseShiftId(shiftId),
+      },
+    })
+    return
   }
 
   const { error } = await supabase.from("shifts").update({ status }).eq("id", shiftId)
@@ -55,8 +75,9 @@ export async function updateShiftStatus(shiftId: string, status: string) {
 export async function createShiftIncident(shiftId: string, note: string) {
   const payload = await invokeEdge<unknown>("incidents_create", {
     idempotencyKey: crypto.randomUUID(),
+    extraHeaders: await getShiftSecureHeaders(),
     body: {
-      shift_id: Number(shiftId),
+      shift_id: parseShiftId(shiftId),
       description: note,
     },
   })

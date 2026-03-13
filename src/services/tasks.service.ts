@@ -326,11 +326,15 @@ export async function completeOperationalTask(payload: CompleteOperationalTaskPa
   const mineTask = mine.find(item => item.id === payload.taskId)
   if (mineTask) return mineTask
 
-  const supervised = await listSupervisorOperationalTasks(200)
-  const supervisedTask = supervised.find(item => item.id === payload.taskId)
-  if (supervisedTask) return supervisedTask
+  try {
+    const supervised = await listSupervisorOperationalTasks(200)
+    const supervisedTask = supervised.find(item => item.id === payload.taskId)
+    if (supervisedTask) return supervisedTask
+  } catch {
+    // Expected for employee token (no supervision scope).
+  }
 
-  throw new Error("Task completed but could not be refreshed from API.")
+  return { id: payload.taskId } as OperationalTask
 }
 
 export async function requestTaskManifestUpload(taskId: number) {

@@ -28,6 +28,28 @@ export interface SupervisorRestaurantOption {
   name: string
 }
 
+function shouldFallbackToDirectDb(error: unknown) {
+  if (typeof error !== "object" || error === null) return true
+
+  const status = (error as { status?: unknown }).status
+  if (typeof status === "number") {
+    if (status === 404 || status === 503) return true
+    return false
+  }
+
+  const message =
+    typeof (error as { message?: unknown }).message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : ""
+
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("cors") ||
+    message.includes("temporarily unavailable")
+  )
+}
+
 function unwrapRestaurant(payload: unknown) {
   if (payload && typeof payload === "object" && "restaurant" in payload) {
     return (payload as { restaurant?: unknown }).restaurant ?? null
@@ -97,8 +119,8 @@ export async function listRestaurants(options?: { includeInactive?: boolean; use
       if (Array.isArray(rows)) {
         return rows as Restaurant[]
       }
-    } catch {
-      // Fall through to direct DB access while backend rollout converges.
+    } catch (error: unknown) {
+      if (!shouldFallbackToDirectDb(error)) throw error
     }
   }
 

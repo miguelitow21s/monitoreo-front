@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
+import { useRole } from "@/hooks/useRole"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -24,7 +25,7 @@ import {
   ReportRow,
   resolveReportReadonlyUrl,
 } from "@/services/reports.service"
-import { listRestaurants, Restaurant } from "@/services/restaurants.service"
+import { listMySupervisorRestaurants, listRestaurants, Restaurant } from "@/services/restaurants.service"
 import { listUserProfiles, UserProfile } from "@/services/users.service"
 import { ROLES } from "@/utils/permissions"
 
@@ -45,6 +46,17 @@ function formatHistoryFilters(filters: Record<string, unknown> | null) {
   return entries
     .map(([key, value]) => `${key}: ${String(value)}`)
     .join(" | ")
+}
+
+function toRestaurantShape(id: number, name: string): Restaurant {
+  return {
+    id: String(id),
+    name,
+    is_active: true,
+    lat: null,
+    lng: null,
+    geofence_radius_m: null,
+  }
 }
 
 const STATUS_OPTIONS = [
@@ -71,6 +83,7 @@ const COLUMN_LABELS: Record<ReportColumnKey, { es: string; en: string }> = {
 
 export default function ReportsPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
+  const { isSuperAdmin, isSupervisora } = useRole()
   const { formatDateTime, language, t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -126,15 +139,29 @@ export default function ReportsPage() {
 
   const loadCatalogs = useCallback(async () => {
     try {
-      const [restaurantRows, profileRows] = await Promise.all([listRestaurants(), listUserProfiles()])
+      const [restaurantRows, profileRows] = await Promise.all([
+        isSupervisora
+          ? listMySupervisorRestaurants().then(items => items.map(item => toRestaurantShape(item.id, item.name)))
+          : listRestaurants(isSuperAdmin ? { useAdminApi: true } : undefined),
+        listUserProfiles(isSuperAdmin ? { useAdminApi: true } : undefined),
+      ])
       setRestaurants(restaurantRows)
       setEmployees(profileRows)
+      if (isSupervisora) {
+        setRestaurantId(prev => (prev && restaurantRows.some(item => item.id === prev) ? prev : restaurantRows[0]?.id ?? ""))
+      }
     } catch {
       // Catalogos opcionales para filtros.
     }
-  }, [])
+  }, [isSuperAdmin, isSupervisora])
 
   const loadReport = useCallback(async () => {
+    if (isSupervisora && !restaurantId) {
+      setRows([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
       const reportRows = await fetchShiftsReport({
@@ -152,7 +179,7 @@ export default function ReportsPage() {
     } finally {
       setLoading(false)
     }
-  }, [employeeId, fromDate, reportLimit, restaurantId, showToast, status, supervisorId, t, toDate])
+  }, [employeeId, fromDate, isSupervisora, reportLimit, restaurantId, showToast, status, supervisorId, t, toDate])
 
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true)
@@ -171,6 +198,15 @@ export default function ReportsPage() {
     if (!isAuthenticated || !session?.access_token) return
     void loadCatalogs()
   }, [authLoading, isAuthenticated, loadCatalogs, session?.access_token])
+
+  useEffect(() => {
+    if (!isSupervisora) return
+    if (restaurants.length === 0) {
+      setRestaurantId("")
+      return
+    }
+    setRestaurantId(prev => (prev && restaurants.some(item => item.id === prev) ? prev : restaurants[0]?.id ?? ""))
+  }, [isSupervisora, restaurants])
 
   useEffect(() => {
     if (authLoading) return
@@ -201,7 +237,7 @@ export default function ReportsPage() {
   const resetFilters = () => {
     setFromDate("")
     setToDate("")
-    setRestaurantId("")
+    setRestaurantId(isSupervisora ? restaurants[0]?.id ?? "" : "")
     setEmployeeId("")
     setSupervisorId("")
     setStatus("")
@@ -339,7 +375,9 @@ export default function ReportsPage() {
                 onChange={event => setRestaurantId(event.target.value)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
-                <option value="">{t("Todos los clientes/restaurantes", "All clients/restaurants")}</option>
+                {!isSupervisora && (
+                  <option value="">{t("Todos los clientes/restaurantes", "All clients/restaurants")}</option>
+                )}
                 {restaurants.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}

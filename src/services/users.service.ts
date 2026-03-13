@@ -1,9 +1,32 @@
 import { supabase } from "@/services/supabaseClient"
 import { invokeEdge } from "@/services/edgeClient"
-import { Role } from "@/utils/permissions"
+import { ROLES, Role } from "@/utils/permissions"
+import { normalizePhoneForOtp } from "@/utils/phone"
 
 let bootstrapRpcUnavailable = false
 let bootstrapRpcAttempted = false
+
+function shouldFallbackToDirectDb(error: unknown) {
+  if (typeof error !== "object" || error === null) return true
+
+  const status = (error as { status?: unknown }).status
+  if (typeof status === "number") {
+    if (status === 404 || status === 503) return true
+    return false
+  }
+
+  const message =
+    typeof (error as { message?: unknown }).message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : ""
+
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("cors") ||
+    message.includes("temporarily unavailable")
+  )
+}
 
 function isRpcUnavailableError(error: unknown) {
   if (!error || typeof error !== "object") return false
@@ -120,8 +143,8 @@ export async function listUserProfiles(options?: { useAdminApi?: boolean }) {
       if (Array.isArray(rows)) {
         return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
       }
-    } catch {
-      // Fall through to direct query for backward compatibility while backend rollout converges.
+    } catch (error: unknown) {
+      if (!shouldFallbackToDirectDb(error)) throw error
     }
   }
 
@@ -192,6 +215,12 @@ export async function createAdminUser(payload: {
   role: Role
   phoneNumber?: string | null
 }) {
+  const normalizedPhone = payload.phoneNumber ? normalizePhoneForOtp(payload.phoneNumber) : null
+  const requiresPhone = payload.role === ROLES.EMPLEADO || payload.role === ROLES.SUPERVISORA
+  if (requiresPhone && !normalizedPhone) {
+    throw new Error("Phone number is required in E.164 format for employee/supervisor users.")
+  }
+
   const [firstNameRaw, ...lastNameChunks] = payload.fullName.trim().split(/\s+/)
   const firstName = firstNameRaw || "Usuario"
   const lastName = lastNameChunks.join(" ") || "Nuevo"
@@ -204,7 +233,7 @@ export async function createAdminUser(payload: {
       role: payload.role,
       first_name: firstName,
       last_name: lastName,
-      phone_number: payload.phoneNumber?.trim() || null,
+      phone_number: normalizedPhone,
       is_active: true,
     },
   })

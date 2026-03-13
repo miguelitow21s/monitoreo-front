@@ -164,25 +164,31 @@ export async function assignScheduledShift(payload: {
   )
 }
 
-export async function listMyScheduledShifts(limit = 10) {
+function buildScheduledListBody(limit: number, restaurantId?: number | null) {
+  const body: Record<string, unknown> = {
+    action: "list",
+    status: "scheduled",
+    limit,
+  }
+
+  if (typeof restaurantId === "number" && Number.isFinite(restaurantId)) {
+    body.restaurant_id = restaurantId
+  }
+
+  return body
+}
+
+export async function listMyScheduledShifts(limit = 10, restaurantId?: number | null) {
   const data = await invokeScheduledManage<unknown>(
-    {
-      action: "list",
-      status: "scheduled",
-      limit,
-    },
+    buildScheduledListBody(limit, restaurantId),
     { allowUnavailable: true, fallback: [] }
   )
   return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
 }
 
-export async function listScheduledShifts(limit = 50) {
+export async function listScheduledShifts(limit = 50, restaurantId?: number | null) {
   const data = await invokeScheduledManage<unknown>(
-    {
-      action: "list",
-      status: "scheduled",
-      limit,
-    },
+    buildScheduledListBody(limit, restaurantId),
     { allowUnavailable: true, fallback: [] }
   )
   return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)

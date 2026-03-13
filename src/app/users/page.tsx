@@ -28,12 +28,21 @@ import {
 } from "@/services/users.service"
 import { useI18n } from "@/hooks/useI18n"
 import { ROLES, Role } from "@/utils/permissions"
+import { normalizePhoneForOtp } from "@/utils/phone"
 
 const roleOptions: Role[] = [ROLES.EMPLEADO, ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]
 const roleLabels: Record<Role, { es: string; en: string }> = {
   [ROLES.EMPLEADO]: { es: "Empleado", en: "Employee" },
   [ROLES.SUPERVISORA]: { es: "Supervisora", en: "Supervisor" },
   [ROLES.SUPER_ADMIN]: { es: "Superadmin", en: "Super Admin" },
+}
+
+function roleRequiresOtpPhone(role: Role | null | undefined) {
+  return role === ROLES.EMPLEADO || role === ROLES.SUPERVISORA
+}
+
+function escapeCsvValue(value: string) {
+  return `"${value.replaceAll('"', '""')}"`
 }
 
 export default function UsersPage() {
@@ -67,8 +76,8 @@ export default function UsersPage() {
     setLoading(true)
     try {
       const [usersData, restaurantsData, scheduledData] = await Promise.all([
-        listUserProfiles(),
-        listRestaurants(),
+        listUserProfiles({ useAdminApi: true }),
+        listRestaurants({ useAdminApi: true }),
         listScheduledShifts(scheduledLimit),
       ])
       setRows(usersData)
@@ -104,9 +113,33 @@ export default function UsersPage() {
   const handleCreateUser = async () => {
     const email = newUserEmail.trim()
     const fullName = newUserFullName.trim()
+    const phone = newUserPhone.trim()
+    const requiresPhone = newUserRole === ROLES.EMPLEADO || newUserRole === ROLES.SUPERVISORA
 
     if (!email || !fullName) {
       showToast("info", t("Completa nombre completo y correo para crear usuario.", "Fill full name and email to create user."))
+      return
+    }
+    if (requiresPhone && !phone) {
+      showToast(
+        "info",
+        t(
+          "Para empleado o supervisora el celular es obligatorio para OTP.",
+          "Phone number is required for employee/supervisor OTP."
+        )
+      )
+      return
+    }
+
+    const normalizedPhone = phone ? normalizePhoneForOtp(phone) : null
+    if (phone && !normalizedPhone) {
+      showToast(
+        "info",
+        t(
+          "Ingresa un celular valido con codigo de pais. Ejemplo: +12025550123.",
+          "Enter a valid phone number with country code. Example: +12025550123."
+        )
+      )
       return
     }
 
@@ -116,7 +149,7 @@ export default function UsersPage() {
         email,
         fullName,
         role: newUserRole,
-        phoneNumber: newUserPhone.trim() || null,
+        phoneNumber: normalizedPhone,
       })
 
       setRows(prev => [created, ...prev])
@@ -278,6 +311,61 @@ export default function UsersPage() {
 
   const usersById = new Map(rows.map(item => [item.id, item]))
   const restaurantsById = new Map(restaurants.map(item => [String(item.id), item]))
+  const otpPhoneMissingRows = rows.filter(item => {
+    if (!roleRequiresOtpPhone(item.role)) return false
+    return !item.phone_number?.trim()
+  })
+
+  const handleExportOtpPendingCsv = () => {
+    if (otpPhoneMissingRows.length === 0) {
+      showToast("info", t("No hay pendientes de celular OTP.", "No OTP phone pending records."))
+      return
+    }
+
+    const header = ["user_id", "full_name", "email", "role", "is_active", "phone_number"]
+    const lines = otpPhoneMissingRows.map(item =>
+      [
+        item.id,
+        item.full_name ?? "",
+        item.email ?? "",
+        item.role ?? "",
+        String(item.is_active ?? ""),
+        item.phone_number ?? "",
+      ]
+        .map(value => escapeCsvValue(String(value)))
+        .join(",")
+    )
+
+    const csv = [header.join(","), ...lines].join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `otp-phone-pending-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    showToast("success", t("CSV exportado correctamente.", "CSV exported successfully."))
+  }
+
+  const handleCopyOtpPendingList = async () => {
+    if (otpPhoneMissingRows.length === 0) {
+      showToast("info", t("No hay pendientes de celular OTP.", "No OTP phone pending records."))
+      return
+    }
+
+    const header = ["full_name", "email", "role", "is_active", "phone_number"]
+    const lines = otpPhoneMissingRows.map(item =>
+      [item.full_name ?? "", item.email ?? "", item.role ?? "", String(item.is_active ?? ""), item.phone_number ?? ""].join("\t")
+    )
+    const text = [header.join("\t"), ...lines].join("\n")
+
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast("success", t("Pendientes copiados al portapapeles.", "Pending users copied to clipboard."))
+    } catch {
+      showToast("error", t("No se pudo copiar al portapapeles.", "Could not copy to clipboard."))
+    }
+  }
 
   return (
     <ProtectedRoute>
@@ -310,7 +398,11 @@ export default function UsersPage() {
                   <input
                     value={newUserPhone}
                     onChange={event => setNewUserPhone(event.target.value)}
-                    placeholder={t("Telefono (opcional)", "Phone (optional)")}
+                    placeholder={
+                      newUserRole === ROLES.SUPER_ADMIN
+                        ? t("Telefono (opcional)", "Phone (optional)")
+                        : t("Telefono +codigo pais (obligatorio OTP)", "Phone +country code (required for OTP)")
+                    }
                     className="rounded-md border border-slate-300 px-2 py-2 text-sm"
                   />
                   <select
@@ -333,7 +425,29 @@ export default function UsersPage() {
                 </div>
               </Card>
 
-              <Card title={t("Gestion de usuarios", "User management")} subtitle={t("Roles y estado.", "Roles and status.")}>
+              <Card title={t("Gestion de usuarios", "User management")} subtitle={t("Roles, estado y trazabilidad de celular OTP.", "Roles, status, and OTP phone traceability.")}>
+                {otpPhoneMissingRows.length > 0 && (
+                  <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <p className="font-semibold">
+                      {t("Perfiles sin celular para OTP", "Profiles missing OTP phone")}: {otpPhoneMissingRows.length}
+                    </p>
+                    <p className="mt-1 text-amber-800">
+                      {t(
+                        "Empleados y supervisoras sin celular no podran completar OTP para iniciar/finalizar turnos.",
+                        "Employees and supervisors without phone number cannot complete OTP for shift start/end."
+                      )}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" onClick={handleExportOtpPendingCsv}>
+                        {t("Exportar pendientes CSV", "Export pending CSV")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => void handleCopyOtpPendingList()}>
+                        {t("Copiar pendientes", "Copy pending list")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {rows.length === 0 ? (
                   <EmptyState
                     title={t("Sin usuarios", "No users")}
@@ -348,6 +462,14 @@ export default function UsersPage() {
                         <div key={item.id} className="rounded-lg border border-slate-200 p-3">
                           <p className="font-medium text-slate-900">{item.full_name ?? t("Sin nombre", "No name")}</p>
                           <p className="mt-1 break-all text-xs text-slate-500">{item.email ?? "-"}</p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            {t("Celular", "Phone")}: {item.phone_number?.trim() || "-"}
+                          </p>
+                          {roleRequiresOtpPhone(item.role) && !item.phone_number?.trim() && (
+                            <p className="mt-1 text-xs font-semibold text-amber-700">
+                              {t("Falta celular OTP", "Missing OTP phone")}
+                            </p>
+                          )}
                           <p className="mt-2 text-xs text-slate-600">
                             {t("Estado", "Status")}: {item.is_active === false ? t("Inactivo", "Inactive") : t("Activo", "Active")}
                           </p>
@@ -381,7 +503,9 @@ export default function UsersPage() {
                           <tr className="border-b border-slate-200 text-left text-slate-500">
                             <th className="pb-2 pr-3">{t("Usuario", "User")}</th>
                             <th className="pb-2 pr-3">{t("Correo", "Email")}</th>
+                            <th className="pb-2 pr-3">{t("Celular", "Phone")}</th>
                             <th className="pb-2 pr-3">{t("Rol", "Role")}</th>
+                            <th className="pb-2 pr-3">{t("OTP", "OTP")}</th>
                             <th className="pb-2 pr-3">{t("Estado", "Status")}</th>
                             <th className="pb-2 pr-3">{t("Acciones", "Actions")}</th>
                           </tr>
@@ -391,6 +515,7 @@ export default function UsersPage() {
                             <tr key={item.id} className="border-b border-slate-100">
                               <td className="py-2 pr-3">{item.full_name ?? t("Sin nombre", "No name")}</td>
                               <td className="py-2 pr-3">{item.email ?? "-"}</td>
+                              <td className="py-2 pr-3">{item.phone_number?.trim() || "-"}</td>
                               <td className="py-2 pr-3">
                                 <select
                                   value={item.role ?? ROLES.EMPLEADO}
@@ -402,7 +527,24 @@ export default function UsersPage() {
                                       {roleLabels[role][language]}
                                     </option>
                                   ))}
-                                </select>
+                                  </select>
+                              </td>
+                              <td className="py-2 pr-3">
+                                {roleRequiresOtpPhone(item.role) ? (
+                                  item.phone_number?.trim() ? (
+                                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                                      {t("Listo", "Ready")}
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+                                      {t("Falta celular", "Missing phone")}
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
+                                    {t("No aplica", "N/A")}
+                                  </span>
+                                )}
                               </td>
                               <td className="py-2 pr-3">{item.is_active === false ? t("Inactivo", "Inactive") : t("Activo", "Active")}</td>
                               <td className="py-2 pr-3">

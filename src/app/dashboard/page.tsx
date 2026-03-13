@@ -60,7 +60,7 @@ export default function DashboardPage() {
     setLoadingData(true)
     try {
       const [metricRows, auditRows] = await Promise.all([
-        fetchDashboardMetrics(),
+        fetchDashboardMetrics({ useAdminApi: isSuperAdmin }),
         isSuperAdmin || isSupervisora ? fetchAuditEvents(10) : Promise.resolve([] as AuditEvent[]),
       ])
       setMetrics(metricRows)

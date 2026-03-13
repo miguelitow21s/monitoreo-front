@@ -283,6 +283,7 @@ export default function ShiftsPage() {
   const canOperateEmployee = isEmpleado
   const canOperateShift = isEmpleado || isSupervisora
   const canOperateSupervisor = isSupervisora || isSuperAdmin
+  const canOperateOtp = canOperateShift || canOperateSupervisor
 
   const activeShiftUploadedEvidenceTypes = useMemo(() => {
     const raw = employeeDashboard?.active_shift?.uploaded_evidence_types ?? employeeDashboard?.uploaded_evidence_types
@@ -514,27 +515,38 @@ export default function ShiftsPage() {
   const loadSupervisionScheduledShifts = useCallback(async () => {
     if (!canOperateSupervisor) return
     try {
-      const rows = await listScheduledShifts(120)
+      const restaurantId = isSupervisora
+        ? supervisorScheduleRestaurantId ?? staffRestaurantId ?? presenceRestaurants[0]?.id ?? null
+        : null
+      const rows = await listScheduledShifts(120, restaurantId)
       setSupervisionScheduledShifts(rows)
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudieron cargar los turnos programados.", "Could not load scheduled shifts.")))
     }
-  }, [canOperateSupervisor, showToast, t])
+  }, [
+    canOperateSupervisor,
+    isSupervisora,
+    presenceRestaurants,
+    showToast,
+    staffRestaurantId,
+    supervisorScheduleRestaurantId,
+    t,
+  ])
 
   const loadKnownRestaurants = useCallback(async () => {
     try {
-      const rows = await listRestaurants({ includeInactive: false })
+      const rows = await listRestaurants({ includeInactive: false, ...(isSuperAdmin ? { useAdminApi: true } : {}) })
       setKnownRestaurants(rows)
     } catch {
       // Best effort: backend remains source of truth for geofence validation.
     }
-  }, [])
+  }, [isSuperAdmin])
 
   const loadPresenceRestaurants = useCallback(async () => {
     if (!canOperateSupervisor) return
     try {
       const items = isSuperAdmin
-        ? (await listRestaurants())
+        ? (await listRestaurants({ useAdminApi: true }))
             .map(item => ({
               id: Number(item.id),
               name: item.name ?? `Restaurant #${item.id}`,
@@ -559,10 +571,10 @@ export default function ShiftsPage() {
   }, [historyPage, canOperateShift, isEmpleado, loadEmployeeData])
 
   useEffect(() => {
-    if (!canOperateShift) return
+    if (!canOperateOtp) return
     getOrCreateDeviceFingerprint()
     setShiftOtpReady(Boolean(getShiftOtpToken()))
-  }, [canOperateShift])
+  }, [canOperateOtp])
 
   useEffect(() => {
     if (!canOperateSupervisor) return
@@ -652,10 +664,10 @@ export default function ShiftsPage() {
     if (!canOperateSupervisor) return
     try {
       const [profiles, restaurants] = await Promise.all([
-        listUserProfiles(),
+        listUserProfiles(isSuperAdmin ? { useAdminApi: true } : undefined),
         isSuperAdmin
           ? (async () => {
-              const rows = await listRestaurants({ includeInactive: false })
+              const rows = await listRestaurants({ includeInactive: false, useAdminApi: true })
               return rows
                 .map(item => ({ id: Number(item.id), name: item.name ?? `Restaurant #${item.id}` }))
                 .filter(item => Number.isFinite(item.id))
@@ -1951,6 +1963,54 @@ export default function ShiftsPage() {
         {canOperateSupervisor && (
           <section className="space-y-5">
             <h2 className="text-lg font-semibold text-slate-900">{t("Panel de supervision", "Supervision panel")}</h2>
+
+            {!canOperateShift && (
+              <Card
+                title={t("OTP para aprobaciones e incidentes", "OTP for approvals and incidents")}
+                subtitle={t("Este token se usa para aprobar/rechazar turnos y registrar incidencias.", "This token is required to approve/reject shifts and register incidents.")}
+              >
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={shiftOtpReady ? "success" : "warning"}>
+                      {shiftOtpReady ? t("OTP verificado", "OTP verified") : t("OTP pendiente", "OTP pending")}
+                    </Badge>
+                    {otpVerifiedAt && (
+                      <span className="text-xs text-slate-600">
+                        {t("Validado", "Verified")}: {formatDateTime(otpVerifiedAt)}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-xs text-slate-700">
+                    {t(
+                      "Debes completar OTP de telefono en este dispositivo para aprobar/rechazar turnos y registrar incidencias.",
+                      "Phone OTP must be completed on this device to approve/reject shifts and register incidents."
+                    )}
+                  </p>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
+                      {sendingOtp ? t("Enviando OTP...", "Sending OTP...") : t("Enviar OTP", "Send OTP")}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
+                      {t("Reiniciar OTP", "Reset OTP")}
+                    </Button>
+                  </div>
+
+                  <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">
+                    <input
+                      value={otpCode}
+                      onChange={event => setOtpCode(event.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      placeholder={t("Codigo OTP", "OTP code")}
+                    />
+                    <Button size="sm" variant="primary" onClick={() => void handleVerifyShiftOtp()} disabled={verifyingOtp}>
+                      {verifyingOtp ? t("Verificando...", "Verifying...") : t("Verificar OTP", "Verify OTP")}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 
 import { useI18n } from "@/hooks/useI18n"
 import { supabase } from "@/services/supabaseClient"
+import { normalizePhoneForOtp } from "@/utils/phone"
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message
@@ -64,6 +65,15 @@ export default function RegisterPage() {
           )
         )
       }
+      const normalizedPhone = normalizePhoneForOtp(phone)
+      if (!normalizedPhone) {
+        throw new Error(
+          t(
+            "Ingresa un celular valido con codigo de pais. Ejemplo: +12025550123.",
+            "Enter a valid phone number with country code. Example: +12025550123."
+          )
+        )
+      }
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -74,7 +84,7 @@ export default function RegisterPage() {
             full_name: fullName,
             first_name: normalizedFirstName,
             last_name: normalizedLastName,
-            phone_number: phone.trim(),
+            phone_number: normalizedPhone,
           },
         },
       })
@@ -91,7 +101,7 @@ export default function RegisterPage() {
           p_full_name: fullName,
           p_first_name: normalizedFirstName,
           p_last_name: normalizedLastName,
-          p_phone_number: phone.trim(),
+          p_phone_number: normalizedPhone,
         })
 
         // Backward compatibility while database migration is being applied.
@@ -163,7 +173,7 @@ export default function RegisterPage() {
             type="tel"
             required
             autoComplete="tel"
-            placeholder={t("Celular", "Phone number")}
+            placeholder={t("Celular (+codigo de pais)", "Phone (+country code)")}
             value={phone}
             onChange={e => setPhone(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
@@ -186,14 +196,28 @@ export default function RegisterPage() {
               placeholder={t("Contrasena (min 8)", "Password (min 8)")}
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-11 text-sm text-slate-800 outline-none transition focus:border-slate-800"
             />
             <button
               type="button"
               onClick={() => setShowPassword(prev => !prev)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              aria-label={showPassword ? t("Ocultar contrasena", "Hide password") : t("Mostrar contrasena", "Show password")}
+              title={showPassword ? t("Ocultar contrasena", "Hide password") : t("Mostrar contrasena", "Show password")}
+              className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
             >
-              {showPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
+              {showPassword ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+                  <path d="M3 3l18 18" />
+                  <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+                  <path d="M9.4 5.2A10.7 10.7 0 0 1 12 5c5 0 8.7 3.1 10 7-0.5 1.4-1.3 2.6-2.4 3.7" />
+                  <path d="M6.2 6.2C4.3 7.5 2.9 9.4 2 12c1.3 3.9 5 7 10 7 1.9 0 3.6-0.5 5-1.3" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              )}
             </button>
           </div>
         </div>

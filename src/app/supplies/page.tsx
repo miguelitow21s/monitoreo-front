@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
+import { useRole } from "@/hooks/useRole"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -11,7 +12,7 @@ import Button from "@/components/ui/Button"
 import Card from "@/components/ui/Card"
 import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
-import { listRestaurants, Restaurant } from "@/services/restaurants.service"
+import { listMySupervisorRestaurants, listRestaurants, Restaurant } from "@/services/restaurants.service"
 import {
   createSupply,
   listSupplies,
@@ -71,8 +72,20 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;")
 }
 
+function toRestaurantShape(id: number, name: string): Restaurant {
+  return {
+    id: String(id),
+    name,
+    is_active: true,
+    lat: null,
+    lng: null,
+    geofence_radius_m: null,
+  }
+}
+
 export default function SuppliesPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
+  const { isSuperAdmin, isSupervisora } = useRole()
   const { formatDateTime, t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -95,27 +108,47 @@ export default function SuppliesPage() {
   const [periodFrom, setPeriodFrom] = useState(defaultPeriodStart)
   const [periodTo, setPeriodTo] = useState(defaultPeriodEnd)
   const [analysisRestaurantId, setAnalysisRestaurantId] = useState("")
+  const canCreateSupply = isSuperAdmin
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [suppliesRows, deliveryRows, restaurantRows] = await Promise.all([
-        listSupplies(),
-        listSupplyDeliveries(40),
-        listRestaurants(),
+      const restaurantRows = isSupervisora
+        ? (await listMySupervisorRestaurants()).map(item => toRestaurantShape(item.id, item.name))
+        : await listRestaurants(isSuperAdmin ? { useAdminApi: true } : undefined)
+
+      const scopedRestaurantId = isSupervisora
+        ? deliveryRestaurantId && restaurantRows.some(item => item.id === deliveryRestaurantId)
+          ? deliveryRestaurantId
+          : restaurantRows[0]?.id
+        : undefined
+
+      const [suppliesRows, deliveryRows] = await Promise.all([
+        listSupplies(scopedRestaurantId ? { restaurantId: scopedRestaurantId } : undefined),
+        listSupplyDeliveries(40, scopedRestaurantId ? { restaurantId: scopedRestaurantId } : undefined),
       ])
+
       setSupplies(suppliesRows)
       setDeliveries(deliveryRows)
       setRestaurants(restaurantRows)
 
       setDeliverySupplyId(prev => prev || suppliesRows[0]?.id || "")
-      setDeliveryRestaurantId(prev => prev || restaurantRows[0]?.id || "")
+      setDeliveryRestaurantId(prev => {
+        if (scopedRestaurantId) return scopedRestaurantId
+        if (prev && restaurantRows.some(item => item.id === prev)) return prev
+        return restaurantRows[0]?.id || ""
+      })
+      setAnalysisRestaurantId(prev => {
+        if (isSupervisora) return scopedRestaurantId ?? ""
+        if (prev && restaurantRows.some(item => item.id === prev)) return prev
+        return prev
+      })
     } catch (error: unknown) {
       showToast("error", extractError(error, t("No se pudo cargar el modulo de insumos.", "Could not load supplies module.")))
     } finally {
       setLoading(false)
     }
-  }, [showToast, t])
+  }, [deliveryRestaurantId, isSuperAdmin, isSupervisora, showToast, t])
 
   useEffect(() => {
     if (authLoading) return
@@ -123,15 +156,36 @@ export default function SuppliesPage() {
     void loadData()
   }, [authLoading, isAuthenticated, session?.access_token, loadData])
 
+  useEffect(() => {
+    if (!isSupervisora) return
+    if (restaurants.length === 0) {
+      setDeliveryRestaurantId("")
+      setAnalysisRestaurantId("")
+      return
+    }
+
+    setDeliveryRestaurantId(prev => (prev && restaurants.some(item => item.id === prev) ? prev : restaurants[0]?.id ?? ""))
+    setAnalysisRestaurantId(prev => (prev && restaurants.some(item => item.id === prev) ? prev : restaurants[0]?.id ?? ""))
+  }, [isSupervisora, restaurants])
+
   const loadAnalytics = useCallback(async () => {
     if (authLoading || !isAuthenticated || !session?.access_token) return
+
+    const scopedRestaurantId = isSupervisora
+      ? analysisRestaurantId || deliveryRestaurantId || restaurants[0]?.id || undefined
+      : analysisRestaurantId || undefined
+
+    if (isSupervisora && !scopedRestaurantId) {
+      setAnalyticsDeliveries([])
+      return
+    }
 
     setAnalyticsLoading(true)
     try {
       const rows = await listSupplyDeliveriesByPeriod({
         fromIso: toIsoStart(periodFrom),
         toIso: toIsoEnd(periodTo),
-        restaurantId: analysisRestaurantId || undefined,
+        restaurantId: scopedRestaurantId,
         limit: 4000,
       })
       setAnalyticsDeliveries(rows)
@@ -140,7 +194,19 @@ export default function SuppliesPage() {
     } finally {
       setAnalyticsLoading(false)
     }
-  }, [analysisRestaurantId, authLoading, isAuthenticated, periodFrom, periodTo, session?.access_token, showToast, t])
+  }, [
+    analysisRestaurantId,
+    authLoading,
+    deliveryRestaurantId,
+    isAuthenticated,
+    isSupervisora,
+    periodFrom,
+    periodTo,
+    restaurants,
+    session?.access_token,
+    showToast,
+    t,
+  ])
 
   useEffect(() => {
     if (authLoading) return
@@ -460,35 +526,37 @@ export default function SuppliesPage() {
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title={t("Crear insumo", "Create supply")} subtitle={t("Datos basicos del inventario.", "Basic inventory data.")}>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                  <input
-                    value={supplyName}
-                    onChange={event => setSupplyName(event.target.value)}
-                    placeholder={t("Nombre", "Name")}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={supplyUnit}
-                    onChange={event => setSupplyUnit(event.target.value)}
-                    placeholder={t("Unidad", "Unit")}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={supplyStock}
-                    onChange={event => setSupplyStock(event.target.value)}
-                    placeholder={t("Stock inicial", "Initial stock")}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={supplyUnitCost}
-                    onChange={event => setSupplyUnitCost(event.target.value)}
-                    placeholder={t("Costo unitario", "Unit cost")}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                  <Button onClick={handleCreateSupply}>{t("Guardar", "Save")}</Button>
-                </div>
-              </Card>
+              {canCreateSupply && (
+                <Card title={t("Crear insumo", "Create supply")} subtitle={t("Datos basicos del inventario.", "Basic inventory data.")}>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                    <input
+                      value={supplyName}
+                      onChange={event => setSupplyName(event.target.value)}
+                      placeholder={t("Nombre", "Name")}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={supplyUnit}
+                      onChange={event => setSupplyUnit(event.target.value)}
+                      placeholder={t("Unidad", "Unit")}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={supplyStock}
+                      onChange={event => setSupplyStock(event.target.value)}
+                      placeholder={t("Stock inicial", "Initial stock")}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={supplyUnitCost}
+                      onChange={event => setSupplyUnitCost(event.target.value)}
+                      placeholder={t("Costo unitario", "Unit cost")}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <Button onClick={handleCreateSupply}>{t("Guardar", "Save")}</Button>
+                  </div>
+                </Card>
+              )}
 
               <Card title={t("Registrar entrega", "Register delivery")} subtitle={t("Asocia la cantidad entregada a un restaurante.", "Associate delivered quantity to a restaurant.")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -554,7 +622,7 @@ export default function SuppliesPage() {
                     onChange={event => setAnalysisRestaurantId(event.target.value)}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   >
-                    <option value="">{t("Todos los restaurantes", "All restaurants")}</option>
+                    {!isSupervisora && <option value="">{t("Todos los restaurantes", "All restaurants")}</option>}
                     {restaurants.map(item => (
                       <option key={item.id} value={item.id}>
                         {item.name}

@@ -1,10 +1,10 @@
 import { supabase } from "@/services/supabaseClient"
 import { invokeEdge } from "@/services/edgeClient"
 import {
-  getOrCreateDeviceFingerprint,
   getShiftOtpToken,
   setShiftOtpToken,
 } from "@/services/securityContext.service"
+import { ensureTrustedDeviceReady } from "@/services/trustedDevice.service"
 
 export type ShiftStatus = "active" | "completed" | "cancelled" | string
 
@@ -47,7 +47,7 @@ function extractVerificationToken(payload: unknown) {
 }
 
 export async function sendShiftPhoneOtp() {
-  const fingerprint = getOrCreateDeviceFingerprint()
+  const { fingerprint } = await ensureTrustedDeviceReady()
 
   return invokeEdge<unknown>("phone_otp_send", {
     idempotencyKey: crypto.randomUUID(),
@@ -62,7 +62,7 @@ export async function verifyShiftPhoneOtp(payload: { code: string }) {
   const code = payload.code.trim()
   if (!code) throw new Error("OTP code is required.")
 
-  const fingerprint = getOrCreateDeviceFingerprint()
+  const { fingerprint } = await ensureTrustedDeviceReady()
 
   const data = await invokeEdge<unknown>("phone_otp_verify", {
     idempotencyKey: crypto.randomUUID(),
@@ -111,7 +111,7 @@ export async function startShift(payload: StartShiftPayload) {
     throw new Error("OTP token is required. Verify your phone before starting a shift.")
   }
 
-  const fingerprint = getOrCreateDeviceFingerprint()
+  const { fingerprint } = await ensureTrustedDeviceReady()
 
   const data = await invokeEdge<unknown>("shifts_start", {
     idempotencyKey: crypto.randomUUID(),
@@ -148,7 +148,7 @@ export async function endShift(payload: EndShiftPayload) {
     throw new Error("OTP token is required. Verify your phone before ending a shift.")
   }
 
-  const fingerprint = getOrCreateDeviceFingerprint()
+  const { fingerprint } = await ensureTrustedDeviceReady()
 
   return invokeEdge("shifts_end", {
     idempotencyKey: crypto.randomUUID(),
