@@ -1,4 +1,3 @@
-import { supabase } from "@/services/supabaseClient"
 import { invokeEdge } from "@/services/edgeClient"
 import {
   getShiftOtpToken,
