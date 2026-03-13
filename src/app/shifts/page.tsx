@@ -2143,98 +2143,100 @@ export default function ShiftsPage() {
               </div>
             </Card>
 
-            <Card title={t("Entrada/salida de supervision", "Supervisor entry/exit")} subtitle={t("Registro obligatorio por restaurante con GPS + evidencia.", "Mandatory record by restaurant with GPS + evidence.")}>
-              <div className="grid gap-3 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <select
-                    value={presenceRestaurantId ?? ""}
-                    onChange={event => setPresenceRestaurantId(Number(event.target.value) || null)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
-                    {presenceRestaurants.map(restaurant => (
-                      <option key={restaurant.id} value={restaurant.id}>
-                        {restaurant.name}
-                      </option>
-                    ))}
-                  </select>
+            {isSupervisora && (
+              <Card title={t("Entrada/salida de supervision", "Supervisor entry/exit")} subtitle={t("Registro obligatorio por restaurante con GPS + evidencia.", "Mandatory record by restaurant with GPS + evidence.")}>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="space-y-2">
+                    <select
+                      value={presenceRestaurantId ?? ""}
+                      onChange={event => setPresenceRestaurantId(Number(event.target.value) || null)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    >
+                      <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
+                      {presenceRestaurants.map(restaurant => (
+                        <option key={restaurant.id} value={restaurant.id}>
+                          {restaurant.name}
+                        </option>
+                      ))}
+                    </select>
 
-                  {presenceRestaurants.length === 0 && (
-                    <p className="text-xs text-amber-700">
-                      {t("No hay restaurantes asignados para registrar presencia.", "No assigned restaurants to register presence.")}
-                    </p>
-                  )}
+                    {presenceRestaurants.length === 0 && (
+                      <p className="text-xs text-amber-700">
+                        {t("No hay restaurantes asignados para registrar presencia.", "No assigned restaurants to register presence.")}
+                      </p>
+                    )}
 
-                  <div className="flex gap-4 text-sm">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="presence-phase"
-                        checked={presencePhase === "start"}
-                        onChange={() => setPresencePhase("start")}
-                      />
-                      {t("Entrada", "Entry")}
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="presence-phase"
-                        checked={presencePhase === "end"}
-                        onChange={() => setPresencePhase("end")}
-                      />
-                      {t("Salida", "Exit")}
-                    </label>
+                    <div className="flex gap-4 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="presence-phase"
+                          checked={presencePhase === "start"}
+                          onChange={() => setPresencePhase("start")}
+                        />
+                        {t("Entrada", "Entry")}
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="presence-phase"
+                          checked={presencePhase === "end"}
+                          onChange={() => setPresencePhase("end")}
+                        />
+                        {t("Salida", "Exit")}
+                      </label>
+                    </div>
+
+                    <textarea
+                      rows={2}
+                      value={presenceNotes}
+                      onChange={event => setPresenceNotes(event.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      placeholder={t("Notas de presencia (opcional)", "Presence notes (optional)")}
+                    />
                   </div>
 
-                  <textarea
-                    rows={2}
-                    value={presenceNotes}
-                    onChange={event => setPresenceNotes(event.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder={t("Notas de presencia (opcional)", "Presence notes (optional)")}
-                  />
+                  <div className="space-y-3">
+                    <GPSGuard onLocation={setPresenceCoords} />
+                    <CameraCapture
+                      onCapture={setPresencePhoto}
+                      overlayLines={[
+                        `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                        `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                        `${t("Restaurante", "Restaurant")}: ${presenceRestaurantId ?? "-"}`,
+                        `${t("Turno", "Shift")}: ${t("supervision", "supervision")}-${presencePhase}`,
+                        `${t("Fase de supervision", "Supervisor phase")}: ${presencePhase}`,
+                        presenceCoords
+                          ? `GPS: ${presenceCoords.lat.toFixed(6)}, ${presenceCoords.lng.toFixed(6)}`
+                          : t("GPS: pendiente", "GPS: pending"),
+                      ]}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  <GPSGuard onLocation={setPresenceCoords} />
-                  <CameraCapture
-                    onCapture={setPresencePhoto}
-                    overlayLines={[
-                      `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                      `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                      `${t("Restaurante", "Restaurant")}: ${presenceRestaurantId ?? "-"}`,
-                      `${t("Turno", "Shift")}: ${t("supervision", "supervision")}-${presencePhase}`,
-                      `${t("Fase de supervision", "Supervisor phase")}: ${presencePhase}`,
-                      presenceCoords
-                        ? `GPS: ${presenceCoords.lat.toFixed(6)}, ${presenceCoords.lng.toFixed(6)}`
-                        : t("GPS: pendiente", "GPS: pending"),
-                    ]}
-                  />
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Button variant="primary" onClick={() => void handleRegisterPresence()} disabled={registeringPresence}>
+                    {registeringPresence ? t("Guardando...", "Saving...") : t("Registrar presencia de supervision", "Register supervisor presence")}
+                  </Button>
+                  <span className="text-xs text-slate-500">
+                    {t("Registros recientes", "Latest records")}: {supervisorPresence.length}
+                  </span>
                 </div>
-              </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <Button variant="primary" onClick={() => void handleRegisterPresence()} disabled={registeringPresence}>
-                  {registeringPresence ? t("Guardando...", "Saving...") : t("Registrar presencia de supervision", "Register supervisor presence")}
-                </Button>
-                <span className="text-xs text-slate-500">
-                  {t("Registros recientes", "Latest records")}: {supervisorPresence.length}
-                </span>
-              </div>
-
-              {supervisorPresence.length > 0 && (
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <p className="mb-2 font-medium text-slate-700">{t("Historial reciente de presencia", "Recent presence history")}</p>
-                  <ul className="space-y-1 text-slate-600">
-                    {supervisorPresence.slice(0, 6).map(item => (
-                      <li key={item.id}>
-                        {formatDateTime(item.recorded_at)} | {t("Restaurante", "Restaurant")} #{item.restaurant_id} | {t("Fase", "Phase")}: {item.phase}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Card>
+                {supervisorPresence.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                    <p className="mb-2 font-medium text-slate-700">{t("Historial reciente de presencia", "Recent presence history")}</p>
+                    <ul className="space-y-1 text-slate-600">
+                      {supervisorPresence.slice(0, 6).map(item => (
+                        <li key={item.id}>
+                          {formatDateTime(item.recorded_at)} | {t("Restaurante", "Restaurant")} #{item.restaurant_id} | {t("Fase", "Phase")}: {item.phase}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Card>
+            )}
 
             <Card title={t("Monitoreo de tareas", "Task monitoring")} subtitle={t("Tareas recientes creadas o asignadas en restaurantes supervisados.", "Recent tasks created or assigned in supervised restaurants.")}>
               {loadingTasks ? (
