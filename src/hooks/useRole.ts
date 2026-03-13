@@ -62,6 +62,7 @@ export function useRole() {
   const [profileRole, setProfileRole] = useState<Role | null>(null)
   const [loadingRole, setLoadingRole] = useState(true)
   const bootstrapAttemptedRef = useRef(false)
+  const lastProfileFetchRef = useRef<string | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -70,6 +71,7 @@ export function useRole() {
       if (!user?.id) {
         setProfileRole(null)
         setLoadingRole(false)
+        lastProfileFetchRef.current = null
         return
       }
 
@@ -92,6 +94,7 @@ export function useRole() {
       })
 
       if (error) {
+        lastProfileFetchRef.current = user.id
         setProfileRole(null)
         setLoadingRole(false)
         return
@@ -126,30 +129,35 @@ export function useRole() {
         })
 
         if (retryError) {
+          lastProfileFetchRef.current = user.id
           setProfileRole(null)
           setLoadingRole(false)
           return
         }
 
         if (retryData?.is_active === false) {
+          lastProfileFetchRef.current = user.id
           setProfileRole(null)
           await supabase.auth.signOut()
           setLoadingRole(false)
           return
         }
 
+        lastProfileFetchRef.current = user.id
         setProfileRole(normalizeRole(retryData?.role) ?? null)
         setLoadingRole(false)
         return
       }
 
       if (data?.is_active === false) {
+        lastProfileFetchRef.current = user.id
         setProfileRole(null)
         await supabase.auth.signOut()
         setLoadingRole(false)
         return
       }
 
+      lastProfileFetchRef.current = user.id
       setProfileRole(normalizeRole(data?.role) ?? null)
       setLoadingRole(false)
     }
@@ -165,6 +173,8 @@ export function useRole() {
   // Source of truth is profiles.role for authenticated users.
   // Metadata fallback is only used before authentication is established.
   const role = user?.id ? profileRole ?? undefined : metadataRole ?? undefined
+  const pendingRole = !!user?.id && lastProfileFetchRef.current !== user.id
+  const combinedLoading = loading || loadingRole || pendingRole
 
   useEffect(() => {
     debugLog("role.snapshot", {
@@ -172,12 +182,14 @@ export function useRole() {
       profileRole,
       metadataRole,
       role,
+      pendingRole,
+      loading: combinedLoading,
     })
-  }, [metadataRole, profileRole, role, user?.id])
+  }, [combinedLoading, metadataRole, pendingRole, profileRole, role, user?.id])
 
   return {
     role,
-    loading: loading || loadingRole,
+    loading: combinedLoading,
     isSuperAdmin: role === ROLES.SUPER_ADMIN,
     isSupervisora: role === ROLES.SUPERVISORA,
     isEmpleado: role === ROLES.EMPLEADO,
