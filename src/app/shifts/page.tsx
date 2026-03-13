@@ -30,6 +30,7 @@ import {
   sendShiftPhoneOtp,
   ShiftRecord,
   startShift,
+  getOtpPhoneE164Status,
   verifyShiftPhoneOtp,
 } from "@/services/shifts.service"
 import { clearShiftOtpToken, getShiftOtpToken, getOrCreateDeviceFingerprint } from "@/services/securityContext.service"
@@ -293,6 +294,7 @@ export default function ShiftsPage() {
   const [otpCode, setOtpCode] = useState("")
   const [shiftOtpReady, setShiftOtpReady] = useState(false)
   const [otpVerifiedAt, setOtpVerifiedAt] = useState<string | null>(null)
+  const [otpPhoneMissingDemo, setOtpPhoneMissingDemo] = useState(false)
   const [clockMs, setClockMs] = useState(() => Date.now())
   const [historyPage, setHistoryPage] = useState(1)
   const [historyTotalPages, setHistoryTotalPages] = useState(1)
@@ -824,6 +826,29 @@ export default function ShiftsPage() {
   }, [canOperateOtp, roleLoading])
 
   useEffect(() => {
+    if (!otpDebugEnabled) {
+      setOtpPhoneMissingDemo(false)
+      return
+    }
+    if (roleLoading || !canOperateOtp) return
+    let mounted = true
+    const checkPhone = async () => {
+      try {
+        const status = await getOtpPhoneE164Status()
+        if (!mounted) return
+        setOtpPhoneMissingDemo(!status.isValid)
+      } catch {
+        if (!mounted) return
+        setOtpPhoneMissingDemo(true)
+      }
+    }
+    void checkPhone()
+    return () => {
+      mounted = false
+    }
+  }, [canOperateOtp, otpDebugEnabled, roleLoading])
+
+  useEffect(() => {
     if (roleLoading) return
     if (!canOperateSupervisor) return
     void loadSupervisorData()
@@ -1077,6 +1102,9 @@ export default function ShiftsPage() {
       const maskedPhone = result?.maskedPhone
       const deliveryStatus = result?.deliveryStatus
       const debugCode = otpDebugEnabled ? result?.debugCode : null
+      if (otpDebugEnabled && result?.phoneMissing) {
+        setOtpPhoneMissingDemo(true)
+      }
       const debugSuffix =
         deliveryStatus === "debug"
           ? t(" (modo debug: SMS no enviado)", " (debug mode: SMS not sent)")
@@ -2059,6 +2087,14 @@ export default function ShiftsPage() {
                     "Phone OTP must be completed to start/end shift on this device."
                   )}
                 </p>
+                {otpDebugEnabled && otpPhoneMissingDemo && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    {t(
+                      "Telefono no configurado (demo).",
+                      "Phone not configured (demo)."
+                    )}
+                  </p>
+                )}
 
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
