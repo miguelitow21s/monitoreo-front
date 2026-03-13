@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { useI18n } from "@/hooks/useI18n"
@@ -20,13 +20,65 @@ export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [checkingLink, setCheckingLink] = useState(true)
+  const [sessionReady, setSessionReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    const hydrateSessionFromLink = async () => {
+      if (typeof window === "undefined") return
+      setCheckingLink(true)
+      setError(null)
+
+      const url = new URL(window.location.href)
+      const code = url.searchParams.get("code")
+      const hasAccessToken = window.location.hash.includes("access_token")
+
+      try {
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+          if (exchangeError) throw exchangeError
+        } else if (hasAccessToken) {
+          const { error: sessionError } = await supabase.auth.getSessionFromUrl({ storeSession: true })
+          if (sessionError) throw sessionError
+        }
+
+        const { data } = await supabase.auth.getSession()
+        if (!mounted) return
+        setSessionReady(!!data.session)
+
+        if (data.session) {
+          window.history.replaceState(null, document.title, "/auth/reset-password")
+          setMessage(t("Enlace verificado. Puedes crear una nueva contrasena.", "Link verified. You can create a new password."))
+        } else if (code || hasAccessToken) {
+          setError(t("El enlace de recuperacion no es valido o expiro.", "Recovery link is invalid or expired."))
+        }
+      } catch (err: unknown) {
+        if (!mounted) return
+        setError(errorMessage(err, t("No se pudo validar el enlace de recuperacion.", "Could not validate recovery link.")))
+      } finally {
+        if (mounted) setCheckingLink(false)
+      }
+    }
+
+    void hydrateSessionFromLink()
+    return () => {
+      mounted = false
+    }
+  }, [t])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setError(null)
     setMessage(null)
+
+    if (!sessionReady) {
+      setError(t("Debes abrir el enlace de recuperacion enviado al correo.", "Please open the recovery link sent by email."))
+      return
+    }
 
     if (password.length < 8) {
       setError(t("La contrasena debe tener al menos 8 caracteres.", "Password must be at least 8 characters long."))
@@ -67,6 +119,12 @@ export default function ResetPasswordPage() {
           {t("Define una nueva contrasena para tu cuenta.", "Set a new password for your account.")}
         </p>
 
+        {checkingLink && (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            {t("Validando enlace de recuperacion...", "Validating recovery link...")}
+          </div>
+        )}
+
         <div className="mt-6 space-y-3">
           <div className="relative">
             <input
@@ -77,11 +135,13 @@ export default function ResetPasswordPage() {
               placeholder={t("Nueva contrasena (min 8)", "New password (min 8)")}
               value={password}
               onChange={e => setPassword(e.target.value)}
+              disabled={checkingLink || !sessionReady}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
             />
             <button
               type="button"
               onClick={() => setShowPassword(prev => !prev)}
+              disabled={checkingLink || !sessionReady}
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
             >
               {showPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
@@ -96,11 +156,13 @@ export default function ResetPasswordPage() {
               placeholder={t("Confirmar nueva contrasena", "Confirm new password")}
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
+              disabled={checkingLink || !sessionReady}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
             />
             <button
               type="button"
               onClick={() => setShowConfirmPassword(prev => !prev)}
+              disabled={checkingLink || !sessionReady}
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
             >
               {showConfirmPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
@@ -113,7 +175,7 @@ export default function ResetPasswordPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || checkingLink || !sessionReady}
           className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
         >
           {submitting ? t("Actualizando...", "Updating...") : t("Guardar contrasena", "Save password")}
