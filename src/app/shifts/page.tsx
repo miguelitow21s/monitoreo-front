@@ -306,6 +306,11 @@ export default function ShiftsPage() {
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
   const [endEvidenceUploadError, setEndEvidenceUploadError] = useState<string | null>(null)
   const [endShiftError, setEndShiftError] = useState<string | null>(null)
+  const [activeScheduledMeta, setActiveScheduledMeta] = useState<{
+    shiftId: string | number
+    scheduledEndMs: number | null
+    restaurantId?: number | null
+  } | null>(null)
   const [sendingOtp, setSendingOtp] = useState(false)
   const [verifyingOtp, setVerifyingOtp] = useState(false)
   const [otpCode, setOtpCode] = useState("")
@@ -511,22 +516,68 @@ export default function ShiftsPage() {
     [clockMs, scheduledShifts]
   )
 
+  const activeScheduledShift = useMemo(() => {
+    if (!activeShift || scheduledShifts.length === 0) return null
+    const startMs = new Date(activeShift.start_time).getTime()
+    if (!Number.isFinite(startMs)) return null
+
+    const shiftRestaurantId = Number(
+      (activeShift as { restaurant_id?: unknown; restaurantId?: unknown }).restaurant_id ??
+        (activeShift as { restaurantId?: unknown }).restaurantId ??
+        NaN
+    )
+
+    const candidates = scheduledShifts.filter(item => {
+      if (!item.scheduled_start || !item.scheduled_end) return false
+      const status = (item.status ?? "").toLowerCase()
+      if (status === "cancelled" || status === "canceled") return false
+      if (status === "completed" || status === "finished" || status === "finalizado") return false
+      if (Number.isFinite(shiftRestaurantId)) {
+        return Number(item.restaurant_id) === shiftRestaurantId
+      }
+      return true
+    })
+
+    let best: { shift: ScheduledShift; score: number } | null = null
+    for (const item of candidates) {
+      const itemStart = new Date(item.scheduled_start).getTime()
+      const itemEnd = new Date(item.scheduled_end).getTime()
+      if (!Number.isFinite(itemStart) || !Number.isFinite(itemEnd)) continue
+      const inRange = startMs >= itemStart - SHIFT_START_WINDOW_MINUTES * 60 * 1000 && startMs <= itemEnd + 60 * 60 * 1000
+      const score = Math.abs(startMs - itemStart)
+      if (inRange && (!best || score < best.score)) {
+        best = { shift: item, score }
+      }
+    }
+
+    if (best) return best.shift
+    return null
+  }, [activeShift, scheduledShifts])
+
   const currentScheduledRestaurant = useMemo(() => {
     const currentRestaurantId = currentScheduledShift?.restaurant_id ?? null
     if (!currentRestaurantId) return null
     return knownRestaurants.find(item => Number(item.id) === Number(currentRestaurantId)) ?? null
   }, [currentScheduledShift, knownRestaurants])
 
-  const currentScheduledEndMs = useMemo(() => {
-    if (!currentScheduledShift?.scheduled_end) return null
-    const endMs = new Date(currentScheduledShift.scheduled_end).getTime()
+  const activeScheduledEndMs = useMemo(() => {
+    if (!activeShift) return null
+    const metaMatch =
+      activeScheduledMeta &&
+      String(activeScheduledMeta.shiftId) === String(activeShift.id) &&
+      Number.isFinite(activeScheduledMeta.scheduledEndMs)
+        ? activeScheduledMeta.scheduledEndMs
+        : null
+    if (typeof metaMatch === "number") return metaMatch
+    if (!activeScheduledShift?.scheduled_end) return null
+    const endMs = new Date(activeScheduledShift.scheduled_end).getTime()
     return Number.isFinite(endMs) ? endMs : null
-  }, [currentScheduledShift])
+  }, [activeScheduledMeta, activeScheduledShift, activeShift])
 
   const earlyEndReasonRequired = useMemo(() => {
-    if (!activeShift || currentScheduledEndMs === null) return false
-    return clockMs < currentScheduledEndMs
-  }, [activeShift, clockMs, currentScheduledEndMs])
+    if (!activeShift || activeScheduledEndMs === null) return false
+    return clockMs < activeScheduledEndMs
+  }, [activeShift, clockMs, activeScheduledEndMs])
 
   const canSubmit =
     !!coords &&
@@ -929,6 +980,12 @@ export default function ShiftsPage() {
   }, [loadKnownRestaurants, roleLoading])
 
   useEffect(() => {
+    if (!activeShift) {
+      setActiveScheduledMeta(null)
+    }
+  }, [activeShift])
+
+  useEffect(() => {
     let mounted = true
     const loadUser = async () => {
       const {
@@ -1251,6 +1308,16 @@ export default function ShiftsPage() {
         })
       )
       startedShiftId = shiftId
+      if (scheduledShift?.scheduled_end) {
+        const scheduledEndMs = new Date(scheduledShift.scheduled_end).getTime()
+        setActiveScheduledMeta({
+          shiftId,
+          scheduledEndMs: Number.isFinite(scheduledEndMs) ? scheduledEndMs : null,
+          restaurantId: scheduledShift.restaurant_id,
+        })
+      } else {
+        setActiveScheduledMeta({ shiftId, scheduledEndMs: null, restaurantId: currentRestaurantId })
+      }
 
       await uploadShiftEvidence({
         shiftId,
@@ -2326,6 +2393,46 @@ export default function ShiftsPage() {
                     </div>
                   </div>
                 </div>
+              ) : !hasStartEvidence ? (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="font-semibold">
+                    {t("Evidencia de inicio pendiente", "Start evidence pending")}
+                  </p>
+                  <p className="mt-1 text-xs text-amber-800">
+                    {t(
+                      "Sube la foto de inicio para poder continuar con el cierre.",
+                      "Upload the start photo to continue with shift closing."
+                    )}
+                  </p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold text-amber-800">{t("Ubicacion actual", "Current location")}</p>
+                      <div className="mt-2">
+                        <GPSGuard onLocation={setCoords} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-800">{t("Foto de inicio", "Start photo")}</p>
+                      <div className="mt-2">
+                        <CameraCapture onCapture={setStartRecoveryPhoto} overlayLines={shiftOverlayLines} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-amber-800">
+                    <span>{t("GPS", "GPS")}: {coords ? t("Listo", "Ready") : t("Pendiente", "Pending")}</span>
+                    <span>{t("Foto de inicio", "Start photo")}: {startRecoveryPhoto ? t("Lista", "Ready") : t("Pendiente", "Pending")}</span>
+                  </div>
+                  <div className="mt-3">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handleUploadMissingStartEvidence()}
+                      disabled={uploadingStartEvidence || !coords || !startRecoveryPhoto}
+                    >
+                      {uploadingStartEvidence ? t("Subiendo...", "Uploading...") : t("Subir evidencia de inicio", "Upload start evidence")}
+                    </Button>
+                  </div>
+                </div>
               ) : (
                 <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                   <p className="font-semibold text-slate-800">
@@ -2346,45 +2453,9 @@ export default function ShiftsPage() {
                     </div>
                   </div>
 
-                  {!hasStartEvidence && (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      <p className="font-semibold">
-                        {t("Evidencia de inicio pendiente", "Start evidence pending")}
-                      </p>
-                      <p className="mt-1 text-xs text-amber-800">
-                        {t(
-                          "Sube la foto de inicio faltante. Luego toma la foto de salida.",
-                          "Upload the missing start photo. Then take the end photo."
-                        )}
-                      </p>
-                      <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        <div>
-                          <p className="text-xs font-semibold text-amber-800">{t("Foto de inicio", "Start photo")}</p>
-                          <div className="mt-2">
-                            <CameraCapture onCapture={setStartRecoveryPhoto} overlayLines={shiftOverlayLines} />
-                          </div>
-                        </div>
-                        <div className="flex flex-col justify-between gap-2">
-                          <div className="text-xs text-amber-800">
-                            {t("Foto de inicio", "Start photo")}: {startRecoveryPhoto ? t("Lista", "Ready") : t("Pendiente", "Pending")}
-                          </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void handleUploadMissingStartEvidence()}
-                        disabled={uploadingStartEvidence || !coords || !startRecoveryPhoto}
-                      >
-                        {uploadingStartEvidence ? t("Subiendo...", "Uploading...") : t("Subir evidencia de inicio", "Upload start evidence")}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
                   <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
                     <span>{t("GPS", "GPS")}: {coords ? t("Listo", "Ready") : t("Pendiente", "Pending")}</span>
                     <span>{t("Foto de salida", "End photo")}: {photo ? t("Lista", "Ready") : t("Pendiente", "Pending")}</span>
-                    <span>{t("Evidencia inicio", "Start evidence")}: {hasStartEvidence ? "OK" : t("Pendiente", "Pending")}</span>
                   </div>
                   {endEvidenceUploadError && (
                     <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
@@ -2414,7 +2485,7 @@ export default function ShiftsPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : hasStartEvidence ? (
                 <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                   <p className="font-semibold text-slate-800">{t("Checklist de validacion de salida", "End validation checklist")}</p>
                   <div className="mt-2 space-y-2">
@@ -2434,7 +2505,7 @@ export default function ShiftsPage() {
                     </div>
                   </div>
                 </div>
-              )}
+              ) : null}
 
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                 <p className="font-medium text-slate-800">
@@ -2484,7 +2555,7 @@ export default function ShiftsPage() {
                 )}
               </div>
 
-              {activeShift && earlyEndReasonRequired && (
+              {activeShift && hasStartEvidence && earlyEndReasonRequired && (
                 <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
                   <p className="font-medium text-amber-900">
                     {t("Motivo de salida temprana (obligatorio)", "Early end reason (required)")}
@@ -2531,20 +2602,20 @@ export default function ShiftsPage() {
                   >
                     {processing ? t("Iniciando...", "Starting...") : t("Iniciar turno", "Start shift")}
                   </Button>
-                ) : (
+                ) : hasStartEvidence ? (
                   <Button onClick={handleEnd} disabled={!canSubmit} variant="danger">
                     {processing ? t("Finalizando...", "Ending...") : t("Finalizar turno", "End shift")}
                   </Button>
-                )}
+                ) : null}
               </div>
 
-              {activeShift && endShiftError && (
+              {activeShift && hasStartEvidence && endShiftError && (
                 <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
                   {endShiftError}
                 </div>
               )}
 
-              {submitBlockers.length > 0 && (
+              {submitBlockers.length > 0 && (!activeShift || hasStartEvidence) && (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600">
                   {submitBlockers.map(item => (
                     <li key={item}>{item}</li>
