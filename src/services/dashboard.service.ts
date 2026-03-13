@@ -49,7 +49,7 @@ function shouldFallbackToDirectDb(error: unknown) {
 
   const status = (error as { status?: unknown }).status
   if (typeof status === "number") {
-    if (status === 404 || status === 503) return true
+    if (status === 404 || status === 405 || status === 503) return true
     return false
   }
 
@@ -59,6 +59,8 @@ function shouldFallbackToDirectDb(error: unknown) {
       : ""
 
   return (
+    message.includes("method not allowed") ||
+    message.includes("metodo no permitido") ||
     message.includes("failed to fetch") ||
     message.includes("network") ||
     message.includes("cors") ||

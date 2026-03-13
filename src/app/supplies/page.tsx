@@ -85,7 +85,7 @@ function toRestaurantShape(id: number, name: string): Restaurant {
 
 export default function SuppliesPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
-  const { isSuperAdmin, isSupervisora } = useRole()
+  const { loading: roleLoading, isSuperAdmin, isSupervisora } = useRole()
   const { formatDateTime, t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -109,23 +109,33 @@ export default function SuppliesPage() {
   const [periodTo, setPeriodTo] = useState(defaultPeriodEnd)
   const [analysisRestaurantId, setAnalysisRestaurantId] = useState("")
   const canCreateSupply = isSuperAdmin
+  const canAccessSupplies = isSuperAdmin || isSupervisora
 
   const loadData = useCallback(async () => {
+    if (!canAccessSupplies) return
     setLoading(true)
     try {
       const restaurantRows = isSupervisora
         ? (await listMySupervisorRestaurants()).map(item => toRestaurantShape(item.id, item.name))
         : await listRestaurants(isSuperAdmin ? { useAdminApi: true } : undefined)
 
-      const scopedRestaurantId = isSupervisora
-        ? deliveryRestaurantId && restaurantRows.some(item => item.id === deliveryRestaurantId)
+      const scopedRestaurantId =
+        deliveryRestaurantId && restaurantRows.some(item => item.id === deliveryRestaurantId)
           ? deliveryRestaurantId
           : restaurantRows[0]?.id
-        : undefined
+
+      if (!scopedRestaurantId) {
+        setSupplies([])
+        setDeliveries([])
+        setRestaurants(restaurantRows)
+        setDeliveryRestaurantId("")
+        setAnalysisRestaurantId(prev => (prev && restaurantRows.some(item => item.id === prev) ? prev : ""))
+        return
+      }
 
       const [suppliesRows, deliveryRows] = await Promise.all([
-        listSupplies(scopedRestaurantId ? { restaurantId: scopedRestaurantId } : undefined),
-        listSupplyDeliveries(40, scopedRestaurantId ? { restaurantId: scopedRestaurantId } : undefined),
+        listSupplies({ restaurantId: scopedRestaurantId }),
+        listSupplyDeliveries(40, { restaurantId: scopedRestaurantId }),
       ])
 
       setSupplies(suppliesRows)
@@ -139,22 +149,22 @@ export default function SuppliesPage() {
         return restaurantRows[0]?.id || ""
       })
       setAnalysisRestaurantId(prev => {
-        if (isSupervisora) return scopedRestaurantId ?? ""
         if (prev && restaurantRows.some(item => item.id === prev)) return prev
-        return prev
+        return scopedRestaurantId ?? ""
       })
     } catch (error: unknown) {
       showToast("error", extractError(error, t("No se pudo cargar el modulo de insumos.", "Could not load supplies module.")))
     } finally {
       setLoading(false)
     }
-  }, [deliveryRestaurantId, isSuperAdmin, isSupervisora, showToast, t])
+  }, [canAccessSupplies, deliveryRestaurantId, isSuperAdmin, isSupervisora, showToast, t])
 
   useEffect(() => {
-    if (authLoading) return
+    if (authLoading || roleLoading) return
     if (!isAuthenticated || !session?.access_token) return
+    if (!canAccessSupplies) return
     void loadData()
-  }, [authLoading, isAuthenticated, session?.access_token, loadData])
+  }, [authLoading, roleLoading, isAuthenticated, session?.access_token, canAccessSupplies, loadData])
 
   useEffect(() => {
     if (!isSupervisora) return
@@ -169,13 +179,11 @@ export default function SuppliesPage() {
   }, [isSupervisora, restaurants])
 
   const loadAnalytics = useCallback(async () => {
-    if (authLoading || !isAuthenticated || !session?.access_token) return
+    if (authLoading || roleLoading || !canAccessSupplies || !isAuthenticated || !session?.access_token) return
 
-    const scopedRestaurantId = isSupervisora
-      ? analysisRestaurantId || deliveryRestaurantId || restaurants[0]?.id || undefined
-      : analysisRestaurantId || undefined
+    const scopedRestaurantId = analysisRestaurantId || deliveryRestaurantId || restaurants[0]?.id || undefined
 
-    if (isSupervisora && !scopedRestaurantId) {
+    if (!scopedRestaurantId) {
       setAnalyticsDeliveries([])
       return
     }
@@ -197,11 +205,12 @@ export default function SuppliesPage() {
   }, [
     analysisRestaurantId,
     authLoading,
+    canAccessSupplies,
     deliveryRestaurantId,
     isAuthenticated,
-    isSupervisora,
     periodFrom,
     periodTo,
+    roleLoading,
     restaurants,
     session?.access_token,
     showToast,
@@ -209,10 +218,11 @@ export default function SuppliesPage() {
   ])
 
   useEffect(() => {
-    if (authLoading) return
+    if (authLoading || roleLoading) return
     if (!isAuthenticated || !session?.access_token) return
+    if (!canAccessSupplies) return
     void loadAnalytics()
-  }, [authLoading, isAuthenticated, session?.access_token, loadAnalytics])
+  }, [authLoading, roleLoading, isAuthenticated, session?.access_token, canAccessSupplies, loadAnalytics])
 
   const suppliesById = useMemo(() => {
     const map = new Map<string, Supply>()

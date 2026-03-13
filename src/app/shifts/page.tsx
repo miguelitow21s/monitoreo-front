@@ -288,6 +288,7 @@ export default function ShiftsPage() {
   const [staffUsers, setStaffUsers] = useState<UserProfile[]>([])
   const [staffUserId, setStaffUserId] = useState("")
   const [staffAssignments, setStaffAssignments] = useState<RestaurantEmployee[]>([])
+  const [supervisorScheduleAssignments, setSupervisorScheduleAssignments] = useState<RestaurantEmployee[]>([])
   const [assigningStaff, setAssigningStaff] = useState(false)
   const [supervisorShiftRestaurantId, setSupervisorShiftRestaurantId] = useState<number | null>(null)
   const [supervisorScheduleEmployeeId, setSupervisorScheduleEmployeeId] = useState("")
@@ -406,15 +407,23 @@ export default function ShiftsPage() {
     [knownRestaurants]
   )
 
+  const supervisorScheduleEligibleUsers = useMemo(() => {
+    if (!supervisorScheduleRestaurantId) return [] as UserProfile[]
+    if (supervisorScheduleAssignments.length === 0) return [] as UserProfile[]
+
+    const allowed = new Set(supervisorScheduleAssignments.map(item => item.user_id))
+    return staffUsers.filter(item => allowed.has(item.id))
+  }, [staffUsers, supervisorScheduleAssignments, supervisorScheduleRestaurantId])
+
   const selectedSupervisorScheduleEmployeeLabel = useMemo(() => {
-    const selected = staffUsers.find(item => item.id === supervisorScheduleEmployeeId)
+    const selected = supervisorScheduleEligibleUsers.find(item => item.id === supervisorScheduleEmployeeId)
     return (
       selected?.full_name ??
       selected?.email ??
       selected?.id ??
       t("Sin empleado seleccionado", "No employee selected")
     )
-  }, [staffUsers, supervisorScheduleEmployeeId, t])
+  }, [supervisorScheduleEligibleUsers, supervisorScheduleEmployeeId, t])
 
   const selectedSupervisorScheduleRestaurantLabel = useMemo(() => {
     if (!supervisorScheduleRestaurantId) {
@@ -797,6 +806,23 @@ export default function ShiftsPage() {
     }
   }, [canOperateSupervisor, showToast, staffRestaurantId, t])
 
+  const loadSupervisorScheduleAssignments = useCallback(async () => {
+    if (!canOperateSupervisor || !supervisorScheduleRestaurantId) {
+      setSupervisorScheduleAssignments([])
+      return
+    }
+    try {
+      const rows = await listRestaurantEmployees(String(supervisorScheduleRestaurantId), "employee")
+      setSupervisorScheduleAssignments(rows.filter((row): row is RestaurantEmployee => row !== null))
+    } catch (error: unknown) {
+      setSupervisorScheduleAssignments([])
+      showToast(
+        "error",
+        extractErrorMessage(error, t("No se pudo cargar el personal disponible para este restaurante.", "Could not load available staff for this restaurant."))
+      )
+    }
+  }, [canOperateSupervisor, showToast, supervisorScheduleRestaurantId, t])
+
   useEffect(() => {
     void loadTasks()
   }, [loadTasks])
@@ -823,6 +849,26 @@ export default function ShiftsPage() {
   useEffect(() => {
     void loadStaffAssignments()
   }, [loadStaffAssignments])
+
+  useEffect(() => {
+    void loadSupervisorScheduleAssignments()
+  }, [loadSupervisorScheduleAssignments])
+
+  useEffect(() => {
+    if (!supervisorScheduleRestaurantId) {
+      setSupervisorScheduleEmployeeId("")
+      return
+    }
+    if (supervisorScheduleEligibleUsers.length === 0) {
+      setSupervisorScheduleEmployeeId("")
+      return
+    }
+    setSupervisorScheduleEmployeeId(prev =>
+      prev && supervisorScheduleEligibleUsers.some(item => item.id === prev)
+        ? prev
+        : supervisorScheduleEligibleUsers[0]?.id ?? ""
+    )
+  }, [supervisorScheduleEligibleUsers, supervisorScheduleRestaurantId])
 
   useEffect(() => {
     void loadEmployeeSelfServiceDashboard()
@@ -1403,6 +1449,26 @@ export default function ShiftsPage() {
       showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
       return
     }
+    if (supervisorScheduleEligibleUsers.length === 0) {
+      showToast(
+        "info",
+        t(
+          "No hay empleados asignados al restaurante seleccionado. Asigna personal primero.",
+          "There are no employees assigned to the selected restaurant. Assign staff first."
+        )
+      )
+      return
+    }
+    if (!supervisorScheduleEligibleUsers.some(item => item.id === supervisorScheduleEmployeeId)) {
+      showToast(
+        "info",
+        t(
+          "El empleado seleccionado no pertenece al restaurante elegido.",
+          "Selected employee is not assigned to the selected restaurant."
+        )
+      )
+      return
+    }
 
     const validBlocks = supervisorScheduleBlocks
       .map(item => ({
@@ -1496,8 +1562,6 @@ export default function ShiftsPage() {
   return (
     <ProtectedRoute>
       <div className="space-y-5">
-        <Card title={t("Turnos", "Shifts")} subtitle={t("Operacion de empleado y supervision en un solo modulo.", "Employee operation and supervision in one module.")} />
-
         {canOperateShift && (
           <section className="space-y-5">
             <h2 className="text-lg font-semibold text-slate-900">
@@ -2286,7 +2350,7 @@ export default function ShiftsPage() {
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   >
                     <option value="">{t("Seleccionar empleado", "Select employee")}</option>
-                    {staffUsers.map(item => (
+                    {supervisorScheduleEligibleUsers.map(item => (
                       <option key={item.id} value={item.id}>
                         {item.full_name ?? item.email ?? item.id}
                       </option>
@@ -2305,6 +2369,14 @@ export default function ShiftsPage() {
                     ))}
                   </select>
                 </div>
+                {supervisorScheduleRestaurantId && supervisorScheduleEligibleUsers.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    {t(
+                      "Este restaurante no tiene empleados asignados para programar.",
+                      "This restaurant has no assigned employees available for scheduling."
+                    )}
+                  </p>
+                )}
                 <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
                   <p>
                     <span className="font-semibold">{t("Empleado seleccionado", "Selected employee")}:</span> {selectedSupervisorScheduleEmployeeLabel}

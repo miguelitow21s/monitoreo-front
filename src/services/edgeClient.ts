@@ -107,7 +107,19 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
   if (envelope && typeof envelope === "object" && "success" in envelope) {
     if (!envelope.success) {
       const message = envelope.error?.message ?? "Request was rejected by backend."
-      throw toError(message, undefined, envelope.error?.code, envelope.request_id ?? envelope.error?.request_id)
+      const rawCode = envelope.error?.code
+      const parsedStatus =
+        typeof rawCode === "number"
+          ? rawCode
+          : typeof rawCode === "string" && /^\d{3}$/.test(rawCode)
+            ? Number(rawCode)
+            : undefined
+      throw toError(
+        message,
+        parsedStatus,
+        typeof rawCode === "string" ? rawCode : typeof rawCode === "number" ? String(rawCode) : undefined,
+        envelope.request_id ?? envelope.error?.request_id
+      )
     }
     return (envelope.data ?? null) as T
   }
