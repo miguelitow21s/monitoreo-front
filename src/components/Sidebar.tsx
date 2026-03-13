@@ -136,6 +136,7 @@ export default function Sidebar({
 
   if (isSuperAdmin) {
     items.push({ href: "/admin", label: t("Admin", "Admin"), key: "admin" })
+    items.push({ href: "/supplies", label: t("Insumos", "Supplies"), key: "supplies" })
     items.push({ href: "/restaurants", label: t("Restaurantes", "Restaurants"), key: "restaurants" })
     items.push({ href: "/users", label: t("Usuarios", "Users"), key: "users" })
     items.push({ href: "/reports", label: t("Reportes", "Reports"), key: "reports" })

@@ -1,17 +1,19 @@
 "use client"
 
-import { ReactNode, useEffect, useRef } from "react"
+import { ReactNode, useEffect, useId, useRef } from "react"
 import { useI18n } from "@/hooks/useI18n"
 
 interface ModalProps {
   open: boolean
   onClose: () => void
   children: ReactNode
+  title?: string
 }
 
-export default function Modal({ open, onClose, children }: ModalProps) {
+export default function Modal({ open, onClose, children, title }: ModalProps) {
   const { t } = useI18n()
   const dialogRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
 
   useEffect(() => {
     if (!open) return
@@ -37,10 +39,14 @@ export default function Modal({ open, onClose, children }: ModalProps) {
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         tabIndex={-1}
         className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl outline-none"
         onClick={e => e.stopPropagation()}
       >
+        <h2 id={titleId} className="sr-only">
+          {title ?? t("Dialogo", "Dialog")}
+        </h2>
         <button
           onClick={onClose}
           aria-label={t("Cerrar", "Close")}

@@ -295,7 +295,6 @@ export default function ShiftsPage() {
   const [staffUsers, setStaffUsers] = useState<UserProfile[]>([])
   const [staffUserId, setStaffUserId] = useState("")
   const [staffAssignments, setStaffAssignments] = useState<RestaurantEmployee[]>([])
-  const [supervisorScheduleAssignments, setSupervisorScheduleAssignments] = useState<RestaurantEmployee[]>([])
   const [assigningStaff, setAssigningStaff] = useState(false)
   const [supervisorShiftRestaurantId, setSupervisorShiftRestaurantId] = useState<number | null>(null)
   const [supervisorScheduleEmployeeId, setSupervisorScheduleEmployeeId] = useState("")
@@ -330,7 +329,7 @@ export default function ShiftsPage() {
     (activeShift ? endChecklistComplete : startChecklistComplete)
 
   const canOperateEmployee = !roleLoading && isEmpleado
-  const canOperateShift = !roleLoading && (isEmpleado || isSupervisora)
+  const canOperateShift = !roleLoading && isEmpleado
   const canOperateSupervisor = !roleLoading && (isSupervisora || isSuperAdmin)
   const canOperateOtp = canOperateShift || canOperateSupervisor
   const weekdayOptions = [
@@ -408,13 +407,7 @@ export default function ShiftsPage() {
     [knownRestaurants]
   )
 
-  const supervisorScheduleEligibleUsers = useMemo(() => {
-    if (!supervisorScheduleRestaurantId) return [] as UserProfile[]
-    if (supervisorScheduleAssignments.length === 0) return [] as UserProfile[]
-
-    const allowed = new Set(supervisorScheduleAssignments.map(item => item.user_id))
-    return staffUsers.filter(item => allowed.has(item.id))
-  }, [staffUsers, supervisorScheduleAssignments, supervisorScheduleRestaurantId])
+  const supervisorScheduleEligibleUsers = useMemo(() => staffUsers, [staffUsers])
 
   const selectedSupervisorScheduleEmployeeLabel = useMemo(() => {
     const selected = supervisorScheduleEligibleUsers.find(item => item.id === supervisorScheduleEmployeeId)
@@ -632,7 +625,7 @@ export default function ShiftsPage() {
     if (!canOperateSupervisor) return
     try {
       const restaurantId = isSupervisora
-        ? supervisorScheduleRestaurantId ?? staffRestaurantId ?? presenceRestaurants[0]?.id ?? null
+        ? supervisorScheduleRestaurantId ?? null
         : null
       const rows = await listScheduledShifts(120, restaurantId)
       setSupervisionScheduledShifts(rows)
@@ -642,9 +635,7 @@ export default function ShiftsPage() {
   }, [
     canOperateSupervisor,
     isSupervisora,
-    presenceRestaurants,
     showToast,
-    staffRestaurantId,
     supervisorScheduleRestaurantId,
     t,
   ])
@@ -795,14 +786,21 @@ export default function ShiftsPage() {
     try {
       const [profiles, restaurants] = await Promise.all([
         listUserProfiles(isSuperAdmin ? { useAdminApi: true } : undefined),
-        isSuperAdmin
-          ? (async () => {
-              const rows = await listRestaurants({ includeInactive: false, useAdminApi: true })
-              return rows
-                .map(item => ({ id: Number(item.id), name: item.name ?? `Restaurant #${item.id}` }))
-                .filter(item => Number.isFinite(item.id))
-            })()
-          : listMySupervisorRestaurants(),
+        (async () => {
+          try {
+            const rows = await listRestaurants({
+              includeInactive: false,
+              ...(isSuperAdmin ? { useAdminApi: true } : {}),
+            })
+            const normalized = rows
+              .map(item => ({ id: Number(item.id), name: item.name ?? `Restaurant #${item.id}` }))
+              .filter(item => Number.isFinite(item.id))
+            if (normalized.length > 0) return normalized
+          } catch {
+            // fallback below
+          }
+          return isSuperAdmin ? [] : listMySupervisorRestaurants()
+        })(),
       ])
 
       const employees = profiles.filter(item => item.role === "empleado" && item.is_active !== false)
@@ -831,23 +829,6 @@ export default function ShiftsPage() {
       showToast("error", extractErrorMessage(error, t("No se pudo cargar el personal asignado.", "Could not load assigned staff.")))
     }
   }, [canOperateSupervisor, showToast, staffRestaurantId, t])
-
-  const loadSupervisorScheduleAssignments = useCallback(async () => {
-    if (!canOperateSupervisor || !supervisorScheduleRestaurantId) {
-      setSupervisorScheduleAssignments([])
-      return
-    }
-    try {
-      const rows = await listRestaurantEmployees(String(supervisorScheduleRestaurantId), "employee")
-      setSupervisorScheduleAssignments(rows.filter((row): row is RestaurantEmployee => row !== null))
-    } catch (error: unknown) {
-      setSupervisorScheduleAssignments([])
-      showToast(
-        "error",
-        extractErrorMessage(error, t("No se pudo cargar el personal disponible para este restaurante.", "Could not load available staff for this restaurant."))
-      )
-    }
-  }, [canOperateSupervisor, showToast, supervisorScheduleRestaurantId, t])
 
   useEffect(() => {
     if (roleLoading) return
@@ -879,11 +860,6 @@ export default function ShiftsPage() {
     if (roleLoading) return
     void loadStaffAssignments()
   }, [loadStaffAssignments, roleLoading])
-
-  useEffect(() => {
-    if (roleLoading) return
-    void loadSupervisorScheduleAssignments()
-  }, [loadSupervisorScheduleAssignments, roleLoading])
 
   useEffect(() => {
     if (!supervisorScheduleRestaurantId) {
@@ -1507,27 +1483,6 @@ export default function ShiftsPage() {
       showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
       return
     }
-    if (supervisorScheduleEligibleUsers.length === 0) {
-      showToast(
-        "info",
-        t(
-          "No hay empleados asignados al restaurante seleccionado. Asigna personal primero.",
-          "There are no employees assigned to the selected restaurant. Assign staff first."
-        )
-      )
-      return
-    }
-    if (!supervisorScheduleEligibleUsers.some(item => item.id === supervisorScheduleEmployeeId)) {
-      showToast(
-        "info",
-        t(
-          "El empleado seleccionado no pertenece al restaurante elegido.",
-          "Selected employee is not assigned to the selected restaurant."
-        )
-      )
-      return
-    }
-
     const validBlocks = supervisorScheduleBlocks
       .map(item => ({
         startIso: item.start ? new Date(item.start).toISOString() : "",
@@ -1701,7 +1656,7 @@ export default function ShiftsPage() {
         {canOperateShift && (
           <section className="space-y-5">
             <h2 className="text-lg font-semibold text-slate-900">
-              {isSupervisora ? t("Operacion de supervisora", "Supervisor operations") : t("Operacion de empleado", "Employee operations")}
+              {t("Operacion de empleado", "Employee operations")}
             </h2>
 
             {isEmpleado && (
@@ -2443,14 +2398,6 @@ export default function ShiftsPage() {
                     ))}
                   </select>
                 </div>
-                {supervisorScheduleRestaurantId && supervisorScheduleEligibleUsers.length === 0 && (
-                  <p className="mt-2 text-xs text-amber-700">
-                    {t(
-                      "Este restaurante no tiene empleados asignados para programar.",
-                      "This restaurant has no assigned employees available for scheduling."
-                    )}
-                  </p>
-                )}
                 <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
                   <p>
                     <span className="font-semibold">{t("Empleado seleccionado", "Selected employee")}:</span> {selectedSupervisorScheduleEmployeeLabel}

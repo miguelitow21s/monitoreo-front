@@ -89,9 +89,9 @@ export function useRole() {
   }, [user?.id])
 
   const metadataRole = normalizeRole(user?.user_metadata?.role)
-  // Source of truth is always profiles.role for authenticated users.
-  // Metadata fallback is only used when there is no authenticated user yet.
-  const role = user?.id ? (profileRole ?? undefined) : metadataRole ?? undefined
+  // Source of truth remains profiles.role. Metadata is fallback for resilience
+  // when profile loading fails or profile row is not yet available.
+  const role = profileRole ?? metadataRole ?? undefined
 
   return {
     role,
