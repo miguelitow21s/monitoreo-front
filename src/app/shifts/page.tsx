@@ -42,7 +42,6 @@ import {
 import {
   assignScheduledShiftsBulk,
   cancelScheduledShift,
-  listMyScheduledShifts,
   listScheduledShifts,
   reprogramScheduledShift,
   ScheduledShift,
@@ -588,20 +587,16 @@ export default function ShiftsPage() {
     coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : t("GPS: pendiente", "GPS: pending"),
   ]
 
-  const loadEmployeeData = useCallback(async (page: number, options?: { includeSchedule?: boolean }) => {
+  const loadEmployeeData = useCallback(async (page: number) => {
     setLoadingData(true)
     try {
-      const includeSchedule = options?.includeSchedule ?? true
-      const scheduledPromise = includeSchedule ? listMyScheduledShifts(100) : Promise.resolve([] as ScheduledShift[])
-      const [active, historyResult, scheduledResult] = await Promise.all([
+      const [active, historyResult] = await Promise.all([
         getMyActiveShift(),
         getMyShiftHistory(page, HISTORY_PAGE_SIZE),
-        scheduledPromise,
       ])
       setActiveShift(active)
       setHistory(historyResult.rows)
       setHistoryTotalPages(historyResult.totalPages)
-      setScheduledShifts(scheduledResult)
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo cargar la informacion de turnos.", "Could not load shift information.")))
     } finally {
@@ -675,8 +670,8 @@ export default function ShiftsPage() {
   useEffect(() => {
     if (roleLoading) return
     if (!canOperateShift) return
-    void loadEmployeeData(historyPage, { includeSchedule: isEmpleado })
-  }, [historyPage, canOperateShift, isEmpleado, loadEmployeeData, roleLoading])
+    void loadEmployeeData(historyPage)
+  }, [historyPage, canOperateShift, loadEmployeeData, roleLoading])
 
   useEffect(() => {
     if (roleLoading) return
@@ -766,10 +761,28 @@ export default function ShiftsPage() {
     try {
       const payload = await getEmployeeSelfDashboard()
       setEmployeeDashboard(payload)
+      const normalizedScheduled = (payload.scheduled_shifts ?? [])
+        .map((item): ScheduledShift | null => {
+          const id = Number(item.id)
+          const restaurantId = Number(item.restaurant_id)
+          if (!Number.isFinite(id) || !Number.isFinite(restaurantId)) return null
+          if (!item.scheduled_start || !item.scheduled_end) return null
+          return {
+            id,
+            employee_id: currentUserId ?? "",
+            restaurant_id: restaurantId,
+            scheduled_start: item.scheduled_start,
+            scheduled_end: item.scheduled_end,
+            status: item.status ?? "scheduled",
+            notes: null,
+          }
+        })
+        .filter((item): item is ScheduledShift => item !== null)
+      setScheduledShifts(normalizedScheduled)
     } catch {
       // Keep UX resilient while backend rollout converges.
     }
-  }, [canOperateEmployee, roleLoading])
+  }, [canOperateEmployee, currentUserId, roleLoading])
 
   const loadPresenceLogs = useCallback(async () => {
     if (!canOperateSupervisor) return
@@ -1013,13 +1026,13 @@ export default function ShiftsPage() {
       setStartNoSymptoms(null)
       setStartHealthDeclaration("")
       setHistoryPage(1)
-      await loadEmployeeData(1, { includeSchedule: isEmpleado })
+      await loadEmployeeData(1)
       await loadEmployeeSelfServiceDashboard()
       await loadTasks()
       await loadSupervisorData()
     } catch (error: unknown) {
       if (startedShiftId) {
-        await loadEmployeeData(1, { includeSchedule: isEmpleado })
+        await loadEmployeeData(1)
       }
       if (isConsentPendingError(error)) {
         showToast("error", t("Consentimiento pendiente: acepta terminos de tratamiento de datos para operar turnos.", "Consent pending: accept data processing terms to operate shifts."))
@@ -1079,7 +1092,7 @@ export default function ShiftsPage() {
       setEndAreaDelivered(null)
       setEndHealthDeclaration("")
       setHistoryPage(1)
-      await loadEmployeeData(1, { includeSchedule: isEmpleado })
+      await loadEmployeeData(1)
       await loadEmployeeSelfServiceDashboard()
       await loadTasks()
       await loadSupervisorData()
@@ -2162,7 +2175,7 @@ export default function ShiftsPage() {
                   title={t("Sin historial", "No history")}
                   description={t("Cuando registres turnos apareceran aqui.", "When you register shifts, they will appear here.")}
                   actionLabel={t("Recargar", "Reload")}
-                  onAction={() => void loadEmployeeData(historyPage, { includeSchedule: isEmpleado })}
+                  onAction={() => void loadEmployeeData(historyPage)}
                 />
               ) : (
                 <>
