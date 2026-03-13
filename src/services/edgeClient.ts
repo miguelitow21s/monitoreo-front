@@ -94,6 +94,14 @@ function extractErrorContext(error: unknown) {
   let code: string | undefined
   let requestId: string | undefined
 
+  const headerRequestId = (() => {
+    const headers = err.context?.headers
+    if (!headers) return null
+    const entries = Object.entries(headers)
+    const match = entries.find(([key]) => key.toLowerCase() === "x-request-id")
+    return match?.[1] ?? null
+  })()
+
   const rawBody = err.context?.body ?? err.body
   if (rawBody) {
     try {
@@ -127,6 +135,10 @@ function extractErrorContext(error: unknown) {
     } catch {
       // Keep original message if parsing fails.
     }
+  }
+
+  if (!requestId && headerRequestId) {
+    requestId = headerRequestId
   }
 
   return { message, status, code, requestId }

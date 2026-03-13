@@ -150,6 +150,18 @@ function extractErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+function formatErrorDetails(error: unknown, fallback: string) {
+  const message = extractErrorMessage(error, fallback)
+  if (!error || typeof error !== "object") return message
+  const details = error as { status?: unknown; code?: unknown; request_id?: unknown }
+  const parts: string[] = []
+  if (typeof details.status === "number") parts.push(`status ${details.status}`)
+  if (typeof details.code === "string" && details.code.trim()) parts.push(`code ${details.code}`)
+  if (typeof details.request_id === "string" && details.request_id.trim()) parts.push(`request_id ${details.request_id}`)
+  if (parts.length === 0) return message
+  return `${message} (${parts.join(" | ")})`
+}
+
 function isConsentPendingError(error: unknown) {
   if (typeof error !== "object" || error === null) return false
 
@@ -1321,7 +1333,7 @@ export default function ShiftsPage() {
           accuracy: coords.accuracyMeters,
         })
       } catch (error: unknown) {
-        const exact = extractErrorMessage(error, t("No se pudo subir la evidencia de salida.", "Could not upload end evidence."))
+        const exact = formatErrorDetails(error, t("No se pudo subir la evidencia de salida.", "Could not upload end evidence."))
         setEndEvidenceUploadError(exact)
         throw error
       }
@@ -1421,10 +1433,10 @@ export default function ShiftsPage() {
             "Invalid or expired OTP. Verify again to upload evidence."
           )
         )
-        setStartEvidenceUploadError(message)
+        setStartEvidenceUploadError(formatErrorDetails(error, message))
       } else {
         const fallback = t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence.")
-        const exact = extractErrorMessage(error, fallback)
+        const exact = formatErrorDetails(error, fallback)
         setStartEvidenceUploadError(exact)
         showToast("error", exact)
       }
