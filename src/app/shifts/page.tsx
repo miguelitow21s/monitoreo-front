@@ -702,9 +702,11 @@ export default function ShiftsPage() {
   const loadSupervisionScheduledShifts = useCallback(async () => {
     if (!canOperateSupervisor) return
     try {
-      const restaurantId = isSupervisora
-        ? supervisorScheduleRestaurantId ?? null
-        : null
+      const restaurantId = isSupervisora ? supervisorScheduleRestaurantId ?? null : null
+      if (isSupervisora && !restaurantId) {
+        setSupervisionScheduledShifts([])
+        return
+      }
       const rows = await listScheduledShifts(120, restaurantId)
       setSupervisionScheduledShifts(rows)
     } catch (error: unknown) {
@@ -823,7 +825,7 @@ export default function ShiftsPage() {
         setEmployeeTasks(items)
       }
       if (canOperateSupervisor) {
-        const restaurantId = staffRestaurantId ?? presenceRestaurants[0]?.id ?? null
+        const restaurantId = staffRestaurantId ?? presenceRestaurantId ?? null
         if (restaurantId) {
           const items = await listSupervisorOperationalTasks(60, restaurantId)
           setSupervisorTasks(items)
@@ -836,7 +838,7 @@ export default function ShiftsPage() {
     } finally {
       setLoadingTasks(false)
     }
-  }, [canOperateEmployee, canOperateSupervisor, presenceRestaurants, roleLoading, showToast, staffRestaurantId, t])
+  }, [canOperateEmployee, canOperateSupervisor, presenceRestaurantId, roleLoading, showToast, staffRestaurantId, t])
 
   const loadEmployeeSelfServiceDashboard = useCallback(async () => {
     if (roleLoading) return

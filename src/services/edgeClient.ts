@@ -1,5 +1,5 @@
 import { supabase } from "@/services/supabaseClient"
-import { debugGroup, isDebugAllEnabled, isDebugEnabled } from "@/services/debug"
+import { debugGroup, debugLog, isDebugAllEnabled, isDebugEnabled } from "@/services/debug"
 
 interface BackendEnvelope<T> {
   success?: boolean
@@ -105,6 +105,21 @@ function redactBody(body: EdgeInvokeOptions["body"]) {
   }
 }
 
+function extractActionAndRestaurant(body: EdgeInvokeOptions["body"]) {
+  if (!body || typeof body !== "object") return null
+  if (body instanceof Blob || body instanceof ArrayBuffer || body instanceof FormData) return null
+  const raw = body as Record<string, unknown>
+  const action = typeof raw.action === "string" ? raw.action : null
+  const restaurantId =
+    typeof raw.restaurant_id === "number" || typeof raw.restaurant_id === "string"
+      ? raw.restaurant_id
+      : typeof raw.restaurantId === "number" || typeof raw.restaurantId === "string"
+        ? raw.restaurantId
+        : null
+  if (!action && restaurantId === null) return null
+  return { action: action ?? null, restaurant_id: restaurantId }
+}
+
 export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {}) {
   if (isEdgeTemporarilyUnavailable()) {
     throw toError(
@@ -152,6 +167,10 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
       headers: redactHeaders(headers),
       body: redactBody(options.body),
     })
+    const summary = extractActionAndRestaurant(options.body)
+    if (summary) {
+      debugLog(`edge.summary ${fn}`, summary)
+    }
   }
 
   const { data, error } = await supabase.functions.invoke(fn, {
