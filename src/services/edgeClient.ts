@@ -1,4 +1,5 @@
 import { supabase } from "@/services/supabaseClient"
+import { getOrCreateDeviceFingerprint } from "@/services/securityContext.service"
 import { debugGroup, debugLog, isDebugAllEnabled, isDebugEnabled } from "@/services/debug"
 
 interface BackendEnvelope<T> {
@@ -73,7 +74,14 @@ function redactHeaders(headers: Record<string, string>) {
   const redacted: Record<string, string> = {}
   for (const [key, value] of Object.entries(headers)) {
     const lower = key.toLowerCase()
-    if (lower.includes("authorization") || lower.includes("apikey") || lower.includes("otp")) {
+    if (
+      lower.includes("authorization") ||
+      lower.includes("apikey") ||
+      lower.includes("otp") ||
+      lower === "x-device-fingerprint" ||
+      lower === "x-device-id" ||
+      lower === "x-device-key"
+    ) {
       redacted[key] = "[redacted]"
     } else {
       redacted[key] = value
@@ -158,6 +166,14 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
         headers[key] = value
       }
     }
+  }
+
+  const hasDeviceHeader = Object.keys(headers).some(key => {
+    const lower = key.toLowerCase()
+    return lower === "x-device-fingerprint" || lower === "x-device-id" || lower === "x-device-key"
+  })
+  if (!hasDeviceHeader) {
+    headers["x-device-fingerprint"] = getOrCreateDeviceFingerprint()
   }
 
   if (shouldDebugEndpoint(fn)) {

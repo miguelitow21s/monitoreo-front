@@ -157,14 +157,31 @@ function isConsentPendingError(error: unknown) {
   return message.includes("consent") || message.includes("legal") || message.includes("data processing")
 }
 
-function getCurrentScheduledRestaurantId(scheduledShifts: ScheduledShift[]) {
-  const now = Date.now()
-  const match = scheduledShifts.find(item => {
-    if (item.status !== "scheduled") return false
-    const start = new Date(item.scheduled_start).getTime() - 15 * 60 * 1000
-    const end = new Date(item.scheduled_end).getTime() + 15 * 60 * 1000
-    return now >= start && now <= end
-  })
+const SHIFT_START_WINDOW_MINUTES = 30
+
+function findEligibleScheduledShift(scheduledShifts: ScheduledShift[], nowMs = Date.now()) {
+  const sorted = [...scheduledShifts].sort(
+    (a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
+  )
+
+  return (
+    sorted.find(item => {
+      const status = (item.status ?? "").toLowerCase()
+      if (status === "cancelled" || status === "canceled") return false
+      if (status === "completed" || status === "finished" || status === "finalizado") return false
+
+      const startMs = new Date(item.scheduled_start).getTime()
+      const endMs = new Date(item.scheduled_end).getTime()
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return false
+
+      const windowStart = startMs - SHIFT_START_WINDOW_MINUTES * 60 * 1000
+      return nowMs >= windowStart && nowMs <= endMs
+    }) ?? null
+  )
+}
+
+function getCurrentScheduledRestaurantId(scheduledShifts: ScheduledShift[], nowMs = Date.now()) {
+  const match = findEligibleScheduledShift(scheduledShifts, nowMs)
   return match?.restaurant_id
 }
 
@@ -288,6 +305,7 @@ export default function ShiftsPage() {
   const [endAreaDelivered, setEndAreaDelivered] = useState<boolean | null>(null)
   const [startHealthDeclaration, setStartHealthDeclaration] = useState("")
   const [endHealthDeclaration, setEndHealthDeclaration] = useState("")
+  const [endEarlyReason, setEndEarlyReason] = useState("")
   const [employeeIncident, setEmployeeIncident] = useState("")
   const [creatingEmployeeIncident, setCreatingEmployeeIncident] = useState(false)
 
@@ -355,15 +373,6 @@ export default function ShiftsPage() {
 
   const startChecklistComplete = startPpeReady !== null && startNoSymptoms !== null
   const endChecklistComplete = endIncidentsOccurred !== null && endAreaDelivered !== null
-
-  const canSubmit =
-    !!coords &&
-    !!photo &&
-    !processing &&
-    shiftOtpReady &&
-    healthAnswered &&
-    (!healthDeclarationRequired || healthDeclarationProvided) &&
-    (activeShift ? endChecklistComplete : startChecklistComplete)
 
   const canOperateEmployee = !roleLoading && isEmpleado
   const canOperateShift = !roleLoading && isEmpleado
@@ -459,11 +468,37 @@ export default function ShiftsPage() {
     [nextScheduledShift, scheduledShiftUiStateById]
   )
 
+  const currentScheduledShift = useMemo(
+    () => findEligibleScheduledShift(scheduledShifts, clockMs),
+    [clockMs, scheduledShifts]
+  )
+
   const currentScheduledRestaurant = useMemo(() => {
-    const currentRestaurantId = getCurrentScheduledRestaurantId(scheduledShifts)
+    const currentRestaurantId = currentScheduledShift?.restaurant_id ?? null
     if (!currentRestaurantId) return null
     return knownRestaurants.find(item => Number(item.id) === Number(currentRestaurantId)) ?? null
-  }, [knownRestaurants, scheduledShifts])
+  }, [currentScheduledShift, knownRestaurants])
+
+  const currentScheduledEndMs = useMemo(() => {
+    if (!currentScheduledShift?.scheduled_end) return null
+    const endMs = new Date(currentScheduledShift.scheduled_end).getTime()
+    return Number.isFinite(endMs) ? endMs : null
+  }, [currentScheduledShift])
+
+  const earlyEndReasonRequired = useMemo(() => {
+    if (!activeShift || currentScheduledEndMs === null) return false
+    return clockMs < currentScheduledEndMs
+  }, [activeShift, clockMs, currentScheduledEndMs])
+
+  const canSubmit =
+    !!coords &&
+    !!photo &&
+    !processing &&
+    shiftOtpReady &&
+    healthAnswered &&
+    (!healthDeclarationRequired || healthDeclarationProvided) &&
+    (!earlyEndReasonRequired || endEarlyReason.trim().length > 0) &&
+    (activeShift ? endChecklistComplete : startChecklistComplete)
 
   const knownRestaurantsById = useMemo(
     () => new Map(knownRestaurants.map(item => [Number(item.id), item])),
@@ -588,6 +623,14 @@ export default function ShiftsPage() {
         )
       )
     }
+    if (!activeShift && !currentScheduledShift) {
+      blockers.push(
+        t(
+          `No hay turno programado dentro de la ventana permitida (30 min antes del inicio hasta el fin).`,
+          "No scheduled shift is within the allowed window (30 min before start through end time)."
+        )
+      )
+    }
     if (typeof coords?.accuracyMeters === "number" && coords.accuracyMeters > MAX_GPS_ACCURACY_METERS) {
       blockers.push(
         t(
@@ -621,6 +664,14 @@ export default function ShiftsPage() {
     if (activeShift && !endChecklistComplete) {
       blockers.push(t("Completa todas las preguntas del checklist de salida.", "Complete all end checklist questions."))
     }
+    if (activeShift && earlyEndReasonRequired && endEarlyReason.trim().length === 0) {
+      blockers.push(
+        t(
+          "Debes indicar la razon de salida temprana.",
+          "You must provide a reason for early shift end."
+        )
+      )
+    }
     if (activeShift && !hasStartEvidence) {
       blockers.push(
         t(
@@ -644,6 +695,7 @@ export default function ShiftsPage() {
     if (processing) blockers.push(t("Hay una accion en curso.", "There is an action in progress."))
     return blockers
   }, [
+    currentScheduledShift,
     coords,
     photo,
     healthAnswered,
@@ -655,6 +707,8 @@ export default function ShiftsPage() {
     hasStartEvidence,
     startChecklistComplete,
     endChecklistComplete,
+    earlyEndReasonRequired,
+    endEarlyReason,
     geofenceValidation,
     isSupervisora,
     expectedRestaurantId,
@@ -1068,9 +1122,18 @@ export default function ShiftsPage() {
       }
 
       if (!photo) throw new Error(t("Debes capturar evidencia fotografica.", "You must capture photo evidence."))
-      const currentRestaurantId = overrideRestaurantId ?? getCurrentScheduledRestaurantId(scheduledShifts)
-      if (isSupervisora && !currentRestaurantId) {
-        throw new Error(t("Selecciona un restaurante para iniciar tu turno.", "Select a restaurant to start your shift."))
+      const scheduledShift = currentScheduledShift
+      const currentRestaurantId = overrideRestaurantId ?? scheduledShift?.restaurant_id ?? null
+      if (!currentRestaurantId) {
+        throw new Error(
+          t(
+            "No hay turno programado disponible en la ventana de inicio (30 min antes hasta el fin).",
+            "No scheduled shift is available within the start window (30 min before until end)."
+          )
+        )
+      }
+      if (isSupervisora && !scheduledShift && !overrideRestaurantId) {
+        throw new Error(t("Selecciona un restaurante programado para iniciar tu turno.", "Select a scheduled restaurant to start your shift."))
       }
       const shiftId = Number(
         await startShift({
@@ -1141,6 +1204,16 @@ export default function ShiftsPage() {
         throw new Error(t("Debes describir incidentes si tu condicion de salida no es optima.", "You must describe incidents if your end condition is not optimal."))
       }
 
+      const earlyReason = endEarlyReason.trim()
+      if (earlyEndReasonRequired && !earlyReason) {
+        throw new Error(
+          t(
+            "Debes indicar la razon de salida temprana.",
+            "You must provide a reason for early shift end."
+          )
+        )
+      }
+
       if (!photo) throw new Error(t("Debes capturar evidencia fotografica.", "You must capture photo evidence."))
       await uploadShiftEvidence({
         shiftId: Number(activeShift.id),
@@ -1156,6 +1229,7 @@ export default function ShiftsPage() {
         lng: coords.lng,
         fitForWork: endFitForWork,
         declaration: endHealthDeclaration.trim() || null,
+        earlyEndReason: earlyReason || null,
       })
 
       if (endObservation.trim()) {
@@ -1169,6 +1243,7 @@ export default function ShiftsPage() {
       setEndIncidentsOccurred(null)
       setEndAreaDelivered(null)
       setEndHealthDeclaration("")
+      setEndEarlyReason("")
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadEmployeeSelfServiceDashboard()
@@ -2021,6 +2096,21 @@ export default function ShiftsPage() {
                   />
                 )}
               </div>
+
+              {activeShift && earlyEndReasonRequired && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                  <p className="font-medium text-amber-900">
+                    {t("Motivo de salida temprana (obligatorio)", "Early end reason (required)")}
+                  </p>
+                  <textarea
+                    rows={2}
+                    value={endEarlyReason}
+                    onChange={event => setEndEarlyReason(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500"
+                    placeholder={t("Ej: Termine tareas antes de la hora.", "Example: Finished tasks before scheduled end.")}
+                  />
+                </div>
+              )}
 
               <div className="mt-3">
                 <textarea

@@ -1,4 +1,5 @@
 import { supabase } from "@/services/supabaseClient"
+import { getOrCreateDeviceFingerprint } from "@/services/securityContext.service"
 
 export interface LegalConsentStatus {
   accepted: boolean
@@ -97,6 +98,7 @@ async function invokeLegalConsentDirect<T>(
     Authorization: `Bearer ${accessToken}`,
     apikey: anonKey,
     "Content-Type": "application/json",
+    "x-device-fingerprint": getOrCreateDeviceFingerprint(),
   }
 
   if (idempotencyKey) {

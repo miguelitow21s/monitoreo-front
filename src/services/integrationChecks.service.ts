@@ -1,4 +1,5 @@
 import { supabase } from "@/services/supabaseClient"
+import { getOrCreateDeviceFingerprint } from "@/services/securityContext.service"
 
 export type CheckStatus = "pass" | "warn" | "fail"
 
@@ -47,6 +48,7 @@ async function callEdge(endpoint: string, method: "GET" | "POST", body?: unknown
     Authorization: `Bearer ${session.access_token}`,
     apikey: anonKey,
     "Content-Type": "application/json",
+    "x-device-fingerprint": getOrCreateDeviceFingerprint(),
   }
 
   if (idempotencyKey) {

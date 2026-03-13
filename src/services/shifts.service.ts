@@ -29,6 +29,7 @@ interface EndShiftPayload {
   lng: number
   fitForWork: boolean
   declaration: string | null
+  earlyEndReason?: string | null
 }
 
 function extractVerificationToken(payload: unknown) {
@@ -138,7 +139,7 @@ export async function startShift(payload: StartShiftPayload) {
 }
 
 export async function endShift(payload: EndShiftPayload) {
-  const { shiftId, lat, lng, fitForWork, declaration } = payload
+  const { shiftId, lat, lng, fitForWork, declaration, earlyEndReason } = payload
   if (!shiftId || !Number.isFinite(lat) || !Number.isFinite(lng) || typeof fitForWork !== "boolean") {
     throw new Error("Incomplete data to end shift.")
   }
@@ -162,6 +163,7 @@ export async function endShift(payload: EndShiftPayload) {
       lng,
       fit_for_work: fitForWork,
       declaration,
+      ...(earlyEndReason ? { early_end_reason: earlyEndReason } : {}),
     },
   })
 }
