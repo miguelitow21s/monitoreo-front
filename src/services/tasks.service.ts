@@ -49,10 +49,15 @@ interface TaskManageUploadResponse {
   upload?: {
     token?: string
     path?: string
+    signedUrl?: string
   }
   bucket?: string
   path?: string
+  upload_url?: string
+  signed_url?: string
+  url?: string
   required_mime?: string
+  headers?: Record<string, string>
 }
 
 export interface TaskEvidenceManifestItem {
@@ -338,25 +343,13 @@ export async function completeOperationalTask(payload: CompleteOperationalTaskPa
 }
 
 export async function requestTaskManifestUpload(taskId: number) {
-  let payload: TaskManageUploadResponse | null = null
-
-  try {
-    payload = await invokeEdge<TaskManageUploadResponse>("operational_tasks_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "request_manifest_upload",
-        task_id: taskId,
-      },
-    })
-  } catch {
-    payload = await invokeEdge<TaskManageUploadResponse>("operational_tasks_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "request_evidence_upload",
-        task_id: taskId,
-      },
-    })
-  }
+  const payload = await invokeEdge<TaskManageUploadResponse>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "request_manifest_upload",
+      task_id: taskId,
+    },
+  })
 
   if (!payload) {
     throw new Error("Invalid evidence upload payload from backend.")
@@ -378,6 +371,46 @@ export async function requestTaskManifestUpload(taskId: number) {
   }
 }
 
+function resolveTaskUploadUrl(payload: TaskManageUploadResponse) {
+  return payload.upload?.signedUrl ?? payload.upload_url ?? payload.signed_url ?? payload.url ?? null
+}
+
+function resolveTaskUploadPath(payload: TaskManageUploadResponse) {
+  return payload.upload?.path ?? payload.path ?? null
+}
+
+function resolveTaskUploadToken(payload: TaskManageUploadResponse) {
+  return payload.upload?.token ?? null
+}
+
+function resolveTaskUploadBucket(payload: TaskManageUploadResponse) {
+  return payload.bucket ?? null
+}
+
+export async function requestTaskEvidenceUpload(taskId: number, mimeType: string) {
+  const payload = await invokeEdge<TaskManageUploadResponse>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "request_evidence_upload",
+      task_id: taskId,
+      mime_type: mimeType,
+    },
+  })
+
+  const path = resolveTaskUploadPath(payload)
+  if (!path) {
+    throw new Error("Invalid evidence upload payload from backend.")
+  }
+
+  return {
+    path,
+    bucket: resolveTaskUploadBucket(payload),
+    token: resolveTaskUploadToken(payload),
+    uploadUrl: resolveTaskUploadUrl(payload),
+    headers: payload.headers ?? {},
+  }
+}
+
 export async function uploadTaskManifestViaSignedToken(payload: {
   bucket: string
   path: string
@@ -389,4 +422,23 @@ export async function uploadTaskManifestViaSignedToken(payload: {
     .uploadToSignedUrl(payload.path, payload.token, payload.file)
 
   if (error) throw error
+}
+
+export async function uploadTaskEvidenceViaSignedUrl(payload: {
+  uploadUrl: string
+  file: Blob
+  headers?: Record<string, string>
+}) {
+  const response = await fetch(payload.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": payload.file.type || "application/octet-stream",
+      ...(payload.headers ?? {}),
+    },
+    body: payload.file,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Could not upload task evidence (HTTP ${response.status}).`)
+  }
 }

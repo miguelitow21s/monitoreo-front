@@ -5,6 +5,7 @@ import {
   setShiftOtpToken,
 } from "@/services/securityContext.service"
 import { ensureTrustedDeviceReady } from "@/services/trustedDevice.service"
+import { debugLog } from "@/services/debug"
 
 export type ShiftStatus = "active" | "completed" | "cancelled" | string
 
@@ -47,16 +48,36 @@ function extractVerificationToken(payload: unknown) {
   return typeof token === "string" && token.trim().length > 0 ? token.trim() : null
 }
 
+function toErrorSnapshot(error: unknown) {
+  if (!error || typeof error !== "object") return { message: String(error ?? "") }
+  const candidate = error as { message?: unknown; code?: unknown; status?: unknown; details?: unknown; hint?: unknown }
+  return {
+    message: typeof candidate.message === "string" ? candidate.message : null,
+    code: typeof candidate.code === "string" ? candidate.code : null,
+    status: typeof candidate.status === "number" ? candidate.status : null,
+    details: typeof candidate.details === "string" ? candidate.details : null,
+    hint: typeof candidate.hint === "string" ? candidate.hint : null,
+  }
+}
+
 export async function sendShiftPhoneOtp() {
   const { fingerprint } = await ensureTrustedDeviceReady()
+  debugLog("otp.send.request", { fingerprint: fingerprint ? "set" : null })
 
-  return invokeEdge<unknown>("phone_otp_send", {
-    idempotencyKey: crypto.randomUUID(),
-    extraHeaders: {
-      "x-device-fingerprint": fingerprint,
-    },
-    body: { device_fingerprint: fingerprint },
-  })
+  try {
+    const response = await invokeEdge<unknown>("phone_otp_send", {
+      idempotencyKey: crypto.randomUUID(),
+      extraHeaders: {
+        "x-device-fingerprint": fingerprint,
+      },
+      body: { device_fingerprint: fingerprint },
+    })
+    debugLog("otp.send.success", { fingerprint: fingerprint ? "set" : null })
+    return response
+  } catch (error: unknown) {
+    debugLog("otp.send.error", { error: toErrorSnapshot(error) })
+    throw error
+  }
 }
 
 export async function verifyShiftPhoneOtp(payload: { code: string }) {
@@ -64,23 +85,30 @@ export async function verifyShiftPhoneOtp(payload: { code: string }) {
   if (!code) throw new Error("OTP code is required.")
 
   const { fingerprint } = await ensureTrustedDeviceReady()
+  debugLog("otp.verify.request", { codeLength: code.length, fingerprint: fingerprint ? "set" : null })
 
-  const data = await invokeEdge<unknown>("phone_otp_verify", {
-    idempotencyKey: crypto.randomUUID(),
-    extraHeaders: {
-      "x-device-fingerprint": fingerprint,
-    },
-    body: {
-      code,
-      device_fingerprint: fingerprint,
-    },
-  })
+  try {
+    const data = await invokeEdge<unknown>("phone_otp_verify", {
+      idempotencyKey: crypto.randomUUID(),
+      extraHeaders: {
+        "x-device-fingerprint": fingerprint,
+      },
+      body: {
+        code,
+        device_fingerprint: fingerprint,
+      },
+    })
 
-  const token = extractVerificationToken(data)
-  if (!token) throw new Error("Phone verification succeeded but verification token was not returned.")
+    const token = extractVerificationToken(data)
+    if (!token) throw new Error("Phone verification succeeded but verification token was not returned.")
 
-  setShiftOtpToken(token)
-  return token
+    setShiftOtpToken(token)
+    debugLog("otp.verify.success", { token: "set" })
+    return token
+  } catch (error: unknown) {
+    debugLog("otp.verify.error", { error: toErrorSnapshot(error) })
+    throw error
+  }
 }
 
 export interface ShiftHistoryResult {

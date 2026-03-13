@@ -57,7 +57,9 @@ import {
   OperationalTask,
   TaskPriority,
   TaskEvidenceManifestResolved,
+  requestTaskEvidenceUpload,
   requestTaskManifestUpload,
+  uploadTaskEvidenceViaSignedUrl,
   uploadTaskManifestViaSignedToken,
 } from "@/services/tasks.service"
 import {
@@ -322,6 +324,7 @@ export default function ShiftsPage() {
   const [taskPhotoClose, setTaskPhotoClose] = useState<Blob | null>(null)
   const [taskPhotoMid, setTaskPhotoMid] = useState<Blob | null>(null)
   const [taskPhotoWide, setTaskPhotoWide] = useState<Blob | null>(null)
+  const [taskEvidenceMode, setTaskEvidenceMode] = useState<"manifest" | "image">("manifest")
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [processingTask, setProcessingTask] = useState(false)
   const [newTaskByShift, setNewTaskByShift] = useState<Record<string, { title: string; description: string; priority: TaskPriority; dueAt: string }>>({})
@@ -1383,56 +1386,105 @@ export default function ShiftsPage() {
       showToast("info", t("Selecciona una tarea para completar.", "Select a task to complete."))
       return
     }
-    if (!taskCoords || !taskPhotoClose || !taskPhotoMid || !taskPhotoWide) {
-      showToast("info", t("Completar una tarea requiere GPS y 3 evidencias: primer plano, plano medio y vista general.", "Completing a task requires GPS and 3 evidences: close-up, mid-range, and wide overview."))
+    if (!taskCoords) {
+      showToast("info", t("Completar una tarea requiere GPS.", "Completing a task requires GPS."))
+      return
+    }
+    if (taskEvidenceMode === "manifest") {
+      if (!taskPhotoClose || !taskPhotoMid || !taskPhotoWide) {
+        showToast(
+          "info",
+          t(
+            "Completar una tarea requiere 3 evidencias: primer plano, plano medio y vista general.",
+            "Completing a task requires 3 evidences: close-up, mid-range, and wide overview."
+          )
+        )
+        return
+      }
+    } else if (!taskPhotoClose) {
+      showToast("info", t("Debes capturar al menos una evidencia fotografica.", "You must capture at least one photo evidence."))
       return
     }
 
     setProcessingTask(true)
     try {
-      const [closeEvidence, midEvidence, wideEvidence] = await Promise.all([
-        uploadEvidence("task-close", taskPhotoClose, taskCoords),
-        uploadEvidence("task-mid", taskPhotoMid, taskCoords),
-        uploadEvidence("task-wide", taskPhotoWide, taskCoords),
-      ])
+      let evidencePath = ""
 
-      const manifestPayload = {
-        version: 1,
-        task_id: selectedTaskId,
-        captured_at: new Date().toISOString(),
-        captured_by: currentUserId,
-        gps: {
-          lat: taskCoords.lat,
-          lng: taskCoords.lng,
-        },
-        evidences: [
-          { shot: "close_up" as TaskEvidenceShotKey, ...closeEvidence },
-          { shot: "mid_range" as TaskEvidenceShotKey, ...midEvidence },
-          { shot: "wide_general" as TaskEvidenceShotKey, ...wideEvidence },
-        ],
+      if (taskEvidenceMode === "image") {
+        const file = taskPhotoClose as Blob
+        const mimeType = file.type || "image/jpeg"
+        const uploadRequest = await requestTaskEvidenceUpload(selectedTaskId, mimeType)
+
+        if (uploadRequest.token && uploadRequest.bucket) {
+          await uploadTaskManifestViaSignedToken({
+            bucket: uploadRequest.bucket,
+            path: uploadRequest.path,
+            token: uploadRequest.token,
+            file,
+          })
+        } else if (uploadRequest.uploadUrl) {
+          await uploadTaskEvidenceViaSignedUrl({
+            uploadUrl: uploadRequest.uploadUrl,
+            file,
+            headers: uploadRequest.headers,
+          })
+        } else {
+          throw new Error("No upload URL/token was provided for evidence upload.")
+        }
+
+        evidencePath = uploadRequest.path
+      } else {
+        const [closeEvidence, midEvidence, wideEvidence] = await Promise.all([
+          uploadEvidence("task-close", taskPhotoClose as Blob, taskCoords),
+          uploadEvidence("task-mid", taskPhotoMid as Blob, taskCoords),
+          uploadEvidence("task-wide", taskPhotoWide as Blob, taskCoords),
+        ])
+
+        const manifestPayload = {
+          version: 1,
+          task_id: selectedTaskId,
+          captured_at: new Date().toISOString(),
+          captured_by: currentUserId,
+          gps: {
+            lat: taskCoords.lat,
+            lng: taskCoords.lng,
+          },
+          evidences: [
+            { shot: "close_up" as TaskEvidenceShotKey, ...closeEvidence },
+            { shot: "mid_range" as TaskEvidenceShotKey, ...midEvidence },
+            { shot: "wide_general" as TaskEvidenceShotKey, ...wideEvidence },
+          ],
+        }
+
+        const manifestBlob = new Blob([JSON.stringify(manifestPayload, null, 2)], {
+          type: "application/json",
+        })
+        const manifestUpload = await requestTaskManifestUpload(selectedTaskId)
+        await uploadTaskManifestViaSignedToken({
+          bucket: manifestUpload.bucket,
+          path: manifestUpload.path,
+          token: manifestUpload.token,
+          file: manifestBlob,
+        })
+
+        evidencePath = manifestUpload.path
       }
-
-      const manifestBlob = new Blob([JSON.stringify(manifestPayload, null, 2)], {
-        type: "application/json",
-      })
-      const manifestUpload = await requestTaskManifestUpload(selectedTaskId)
-      await uploadTaskManifestViaSignedToken({
-        bucket: manifestUpload.bucket,
-        path: manifestUpload.path,
-        token: manifestUpload.token,
-        file: manifestBlob,
-      })
 
       await completeOperationalTask({
         taskId: selectedTaskId,
-        evidencePath: manifestUpload.path,
+        evidencePath,
         evidenceHash: "",
-        evidenceMimeType: manifestUpload.requiredMime,
-        evidenceSizeBytes: manifestBlob.size,
+        evidenceMimeType: taskEvidenceMode === "image" ? (taskPhotoClose?.type || "image/jpeg") : "application/json",
+        evidenceSizeBytes: taskEvidenceMode === "image" ? (taskPhotoClose?.size ?? 0) : 0,
       })
       resetTaskEvidenceCapture()
       setSelectedTaskId(null)
-      showToast("success", t("Tarea completada con evidencia triple.", "Task completed with triple evidence."))
+      showToast(
+        "success",
+        taskEvidenceMode === "image"
+          ? t("Tarea completada con evidencia fotografica.", "Task completed with photo evidence.")
+          : t("Tarea completada con evidencia triple.", "Task completed with triple evidence.")
+      )
       await loadTasks()
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo completar la tarea.", "Could not complete task.")))
@@ -2248,14 +2300,36 @@ export default function ShiftsPage() {
                         {t("Evidencia de cierre de tarea", "Task closing evidence")} (#{selectedTaskId})
                       </p>
                       <p className="mt-1 text-xs text-slate-600">
-                        {t("Requerido: GPS + 3 fotos (primer plano, plano medio, vista general).", "Required: GPS + 3 photos (close-up, mid-range, wide overview).")}
+                        {taskEvidenceMode === "image"
+                          ? t("Requerido: GPS + 1 foto.", "Required: GPS + 1 photo.")
+                          : t("Requerido: GPS + 3 fotos (primer plano, plano medio, vista general).", "Required: GPS + 3 photos (close-up, mid-range, wide overview).")}
                       </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="task-evidence-mode"
+                            checked={taskEvidenceMode === "manifest"}
+                            onChange={() => setTaskEvidenceMode("manifest")}
+                          />
+                          {t("Evidencia triple (manifest JSON)", "Triple evidence (JSON manifest)")}
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="task-evidence-mode"
+                            checked={taskEvidenceMode === "image"}
+                            onChange={() => setTaskEvidenceMode("image")}
+                          />
+                          {t("Evidencia por imagen unica", "Single image evidence")}
+                        </label>
+                      </div>
 
                       <div className="mt-3">
                         <GPSGuard onLocation={setTaskCoords} />
                       </div>
 
-                      <div className="mt-3 grid gap-3 xl:grid-cols-3">
+                      <div className={`mt-3 grid gap-3 ${taskEvidenceMode === "image" ? "xl:grid-cols-1" : "xl:grid-cols-3"}`}>
                         <div className="rounded-lg border border-slate-200 bg-white p-3">
                           <p className="text-sm font-semibold text-slate-700">{t("Primer plano", "Close-up")}</p>
                           <p className="mb-2 text-xs text-slate-500">{t("Captura un detalle directo del area intervenida.", "Capture a direct detail of the intervened area.")}</p>
@@ -2274,54 +2348,66 @@ export default function ShiftsPage() {
                             ]}
                           />
                         </div>
-                        <div className="rounded-lg border border-slate-200 bg-white p-3">
-                          <p className="text-sm font-semibold text-slate-700">{t("Plano medio", "Mid-range shot")}</p>
-                          <p className="mb-2 text-xs text-slate-500">{t("Captura a distancia media mostrando contexto cercano.", "Capture from mid distance showing nearby context.")}</p>
-                          <CameraCapture
-                            onCapture={setTaskPhotoMid}
-                            overlayLines={[
-                              `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
-                              `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
-                              `${t("Tarea", "Task")}: ${selectedTaskId}`,
-                              `${t("Toma", "Shot")}: mid_range`,
-                              taskCoords
-                                ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : t("GPS: pendiente", "GPS: pending"),
-                            ]}
-                          />
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-white p-3">
-                          <p className="text-sm font-semibold text-slate-700">{t("Vista general", "Wide overview")}</p>
-                          <p className="mb-2 text-xs text-slate-500">{t("Captura una vista panoramica final del espacio completo.", "Capture a final panoramic view of the full space.")}</p>
-                          <CameraCapture
-                            onCapture={setTaskPhotoWide}
-                            overlayLines={[
-                              `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
-                              `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
-                              `${t("Tarea", "Task")}: ${selectedTaskId}`,
-                              `${t("Toma", "Shot")}: wide_general`,
-                              taskCoords
-                                ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : t("GPS: pendiente", "GPS: pending"),
-                            ]}
-                          />
-                        </div>
+                        {taskEvidenceMode === "manifest" && (
+                          <>
+                            <div className="rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="text-sm font-semibold text-slate-700">{t("Plano medio", "Mid-range shot")}</p>
+                              <p className="mb-2 text-xs text-slate-500">{t("Captura a distancia media mostrando contexto cercano.", "Capture from mid distance showing nearby context.")}</p>
+                              <CameraCapture
+                                onCapture={setTaskPhotoMid}
+                                overlayLines={[
+                                  `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                                  `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
+                                  `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
+                                  `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
+                                  `${t("Tarea", "Task")}: ${selectedTaskId}`,
+                                  `${t("Toma", "Shot")}: mid_range`,
+                                  taskCoords
+                                    ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
+                                    : t("GPS: pendiente", "GPS: pending"),
+                                ]}
+                              />
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="text-sm font-semibold text-slate-700">{t("Vista general", "Wide overview")}</p>
+                              <p className="mb-2 text-xs text-slate-500">{t("Captura una vista panoramica final del espacio completo.", "Capture a final panoramic view of the full space.")}</p>
+                              <CameraCapture
+                                onCapture={setTaskPhotoWide}
+                                overlayLines={[
+                                  `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                                  `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
+                                  `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
+                                  `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
+                                  `${t("Tarea", "Task")}: ${selectedTaskId}`,
+                                  `${t("Toma", "Shot")}: wide_general`,
+                                  taskCoords
+                                    ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
+                                    : t("GPS: pendiente", "GPS: pending"),
+                                ]}
+                              />
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
                         <p>GPS: {taskCoords ? "OK" : t("Pendiente", "Pending")}</p>
                         <p>{t("Primer plano", "Close-up")}: {taskPhotoClose ? "OK" : t("Pendiente", "Pending")}</p>
-                        <p>{t("Plano medio", "Mid-range shot")}: {taskPhotoMid ? "OK" : t("Pendiente", "Pending")}</p>
-                        <p>{t("Vista general", "Wide overview")}: {taskPhotoWide ? "OK" : t("Pendiente", "Pending")}</p>
+                        {taskEvidenceMode === "manifest" && (
+                          <>
+                            <p>{t("Plano medio", "Mid-range shot")}: {taskPhotoMid ? "OK" : t("Pendiente", "Pending")}</p>
+                            <p>{t("Vista general", "Wide overview")}: {taskPhotoWide ? "OK" : t("Pendiente", "Pending")}</p>
+                          </>
+                        )}
                       </div>
 
                       <div className="mt-3">
                         <Button variant="primary" onClick={() => void handleCompleteTask()} disabled={processingTask}>
-                          {processingTask ? t("Completando...", "Completing...") : t("Completar tarea con evidencia triple", "Complete task with triple evidence")}
+                          {processingTask
+                            ? t("Completando...", "Completing...")
+                            : taskEvidenceMode === "image"
+                              ? t("Completar tarea con evidencia fotografica", "Complete task with photo evidence")
+                              : t("Completar tarea con evidencia triple", "Complete task with triple evidence")}
                         </Button>
                       </div>
                     </div>
