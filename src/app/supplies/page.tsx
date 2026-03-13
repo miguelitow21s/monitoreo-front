@@ -558,7 +558,7 @@ export default function SuppliesPage() {
           ) : (
             <>
               {canCreateSupply && (
-                <Card title={t("Crear insumo", "Create supply")} subtitle={t("Datos basicos del inventario.", "Basic inventory data.")}>
+                <Card title={t("Crear insumo", "Create supply")}>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                     <input
                       value={supplyName}
@@ -589,7 +589,7 @@ export default function SuppliesPage() {
                 </Card>
               )}
 
-              <Card title={t("Registrar entrega", "Register delivery")} subtitle={t("Asocia la cantidad entregada a un restaurante.", "Associate delivered quantity to a restaurant.")}>
+              <Card title={t("Registrar entrega", "Register delivery")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   <select
                     value={deliverySupplyId}
@@ -631,10 +631,7 @@ export default function SuppliesPage() {
                 </div>
               </Card>
 
-              <Card
-                title={t("Control de gastos operativos", "Operational expense control")}
-                subtitle={t("Filtra por restaurante y periodo para revisar consumo y gastos.", "Filter by restaurant and period to review consumption and expenses.")}
-              >
+              <Card title={t("Control de gastos operativos", "Operational expense control")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   <input
                     type="date"
@@ -673,10 +670,7 @@ export default function SuppliesPage() {
                 </p>
               </Card>
 
-              <Card
-                title={t("Gastos por restaurante", "Expenses by restaurant")}
-                subtitle={t("Consolidado para informes de cliente por periodo.", "Consolidated client reporting by period.")}
-              >
+              <Card title={t("Gastos por restaurante", "Expenses by restaurant")}>
                 {analyticsLoading ? (
                   <Skeleton className="h-20" />
                 ) : expenseByRestaurant.length === 0 ? (
@@ -709,10 +703,7 @@ export default function SuppliesPage() {
                 )}
               </Card>
 
-              <Card
-                title={t("Consumo historico", "Historical consumption")}
-                subtitle={t("Detalle por restaurante e insumo en el periodo filtrado.", "Per-restaurant and supply detail in the selected period.")}
-              >
+              <Card title={t("Consumo historico", "Historical consumption")}>
                 {analyticsLoading ? (
                   <Skeleton className="h-20" />
                 ) : historicalConsumption.length === 0 ? (
@@ -747,10 +738,7 @@ export default function SuppliesPage() {
                 )}
               </Card>
 
-              <Card
-                title={t("Consumos atipicos", "Atypical consumption")}
-                subtitle={t("Alerta cuando una entrega supera el patron esperado del insumo en el restaurante.", "Alerts when a delivery exceeds expected supply pattern in the restaurant.")}
-              >
+              <Card title={t("Consumos atipicos", "Atypical consumption")}>
                 {analyticsLoading ? (
                   <Skeleton className="h-20" />
                 ) : atypicalConsumption.length === 0 ? (
@@ -766,7 +754,7 @@ export default function SuppliesPage() {
                 )}
               </Card>
 
-              <Card title={t("Inventario actual", "Current inventory")} subtitle={t("Stock y costo por insumo.", "Stock and cost by supply.")}>
+              <Card title={t("Inventario actual", "Current inventory")}>
                 <p className="mb-3 text-sm text-slate-600">
                   {t("Costo estimado de inventario", "Estimated inventory cost")}: ${estimatedInventoryCost.toFixed(0)}
                 </p>
@@ -816,7 +804,7 @@ export default function SuppliesPage() {
                 )}
               </Card>
 
-              <Card title={t("Historial de entregas", "Delivery history")} subtitle={t("Ultimos movimientos registrados.", "Latest registered movements.")}>
+              <Card title={t("Historial de entregas", "Delivery history")}>
                 {deliveries.length === 0 ? (
                   <p className="text-sm text-slate-500">{t("No hay entregas registradas.", "No deliveries registered.")}</p>
                 ) : (
@@ -831,7 +819,7 @@ export default function SuppliesPage() {
               </Card>
 
               {inconsistencies.length > 0 && (
-                <Card title={t("Inconsistencias detectadas", "Detected inconsistencies")} subtitle={t("Se detecto stock negativo.", "Negative stock detected.")}>
+                <Card title={t("Inconsistencias detectadas", "Detected inconsistencies")}>
                   <ul className="list-disc space-y-1 pl-5 text-sm text-red-700">
                     {inconsistencies.map(item => (
                       <li key={item.id}>

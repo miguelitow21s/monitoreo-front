@@ -1346,6 +1346,17 @@ export default function ShiftsPage() {
       )
       return
     }
+    if (!getShiftOtpToken()) {
+      setShiftOtpReady(false)
+      showToast(
+        "info",
+        t(
+          "OTP vencido o ausente. Verifica OTP para subir evidencia.",
+          "OTP missing or expired. Verify OTP before uploading evidence."
+        )
+      )
+      return
+    }
     if (!shiftOtpReady) {
       showToast(
         "info",
@@ -1370,7 +1381,19 @@ export default function ShiftsPage() {
       await loadEmployeeData(1)
       await loadEmployeeSelfServiceDashboard()
     } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence.")))
+      const message = extractErrorMessage(error, "")
+      if (message.toLowerCase().includes("otp")) {
+        setShiftOtpReady(false)
+        showToast(
+          "error",
+          t(
+            "OTP invalido o vencido. Verificalo de nuevo para subir la evidencia.",
+            "Invalid or expired OTP. Verify again to upload evidence."
+          )
+        )
+      } else {
+        showToast("error", extractErrorMessage(error, t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence.")))
+      }
     } finally {
       setUploadingStartEvidence(false)
     }

@@ -141,7 +141,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Card title={t("Acciones rapidas", "Quick actions")} subtitle={t("Solo lo esencial.", "Only essentials.")}>
+              <Card title={t("Acciones rapidas", "Quick actions")}>
                 <div className="mt-4 space-y-2">
                   {quickActions.map(action => (
                     <Button
@@ -156,7 +156,7 @@ export default function DashboardPage() {
                 </div>
               </Card>
 
-              <Card title={t("Estado", "Status")} subtitle={t("Resumen rapido.", "Quick summary.")}>
+              <Card title={t("Estado", "Status")}>
                 <p className="text-sm text-slate-700">
                   {isSuperAdmin || isSupervisora
                     ? t("Supervision habilitada.", "Supervision enabled.")
@@ -169,10 +169,7 @@ export default function DashboardPage() {
             </div>
 
             {isEmpleado && employeeHome && (
-              <Card
-                title={t("Mi inicio", "My home")}
-                subtitle={t("Resumen de self-service: restaurante, agenda, tareas y turno.", "Self-service summary: restaurant, schedule, tasks and shift.")}
-              >
+              <Card title={t("Mi inicio", "My home")}>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <p className="text-xs text-slate-500">{t("Restaurantes", "Restaurants")}</p>
@@ -202,7 +199,7 @@ export default function DashboardPage() {
                 onAction={() => void loadData()}
               />
             ) : (
-              <Card title={t("Linea de tiempo de auditoria", "Audit timeline")} subtitle={t("Ultimos eventos operativos.", "Latest operational events.")}>
+              <Card title={t("Linea de tiempo de auditoria", "Audit timeline")}>
                 <ul className="space-y-2 text-sm text-slate-700">
                   {auditEvents.map(item => (
                       <li key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5">

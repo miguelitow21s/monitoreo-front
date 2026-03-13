@@ -488,10 +488,7 @@ export default function UsersPage() {
             <Skeleton className="h-28" />
           ) : (
             <div className="space-y-4">
-              <Card
-                title={t("Alta de usuario", "Create user")}
-                subtitle={t("Crea usuarios operativos sin salir del panel.", "Create operational users directly from this panel.")}
-              >
+              <Card title={t("Alta de usuario", "Create user")}>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <input
                     value={newUserFullName}
@@ -536,7 +533,7 @@ export default function UsersPage() {
                 </div>
               </Card>
 
-              <Card title={t("Gestion de usuarios", "User management")} subtitle={t("Roles, estado y trazabilidad de celular OTP.", "Roles, status, and OTP phone traceability.")}>
+              <Card title={t("Gestion de usuarios", "User management")}>
                 {otpPhoneMissingRows.length > 0 && (
                   <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                     <p className="font-semibold">
@@ -544,8 +541,8 @@ export default function UsersPage() {
                     </p>
                     <p className="mt-1 text-amber-800">
                       {t(
-                        "Empleados y supervisoras sin celular no podran completar OTP para iniciar/finalizar turnos.",
-                        "Employees and supervisors without phone number cannot complete OTP for shift start/end."
+                        "Sin celular OTP no pueden iniciar/finalizar turnos.",
+                        "Without OTP phone they cannot start/end shifts."
                       )}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -676,10 +673,12 @@ export default function UsersPage() {
                 )}
               </Card>
 
-              <Card title={t("Programar turno", "Schedule shift")} subtitle={t("Usa programacion multiple para crear uno o varios turnos.", "Use bulk scheduling to create one or multiple shifts.")}>
+              <Card title={t("Programar turno", "Schedule shift")}>
                 <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
-                  <p className="text-xs text-slate-500">{t("Genera turnos por rango y dias de semana, o agrega bloques manuales.", "Generate shifts by date range and weekdays, or add manual blocks.")}</p>
+                  <p className="text-xs text-slate-500">
+                    {t("Define rangos, dias o bloques.", "Define ranges, weekdays, or blocks.")}
+                  </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <select
                       value={scheduleEmployeeId}
