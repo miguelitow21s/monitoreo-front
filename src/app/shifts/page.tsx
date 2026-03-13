@@ -295,6 +295,9 @@ export default function ShiftsPage() {
   const [shiftOtpReady, setShiftOtpReady] = useState(false)
   const [otpVerifiedAt, setOtpVerifiedAt] = useState<string | null>(null)
   const [otpPhoneMissingDemo, setOtpPhoneMissingDemo] = useState(false)
+  const [otpDebugCode, setOtpDebugCode] = useState<string | null>(null)
+  const [otpDebugMaskedPhone, setOtpDebugMaskedPhone] = useState<string | null>(null)
+  const [otpDebugExpiresAt, setOtpDebugExpiresAt] = useState<string | null>(null)
   const [clockMs, setClockMs] = useState(() => Date.now())
   const [historyPage, setHistoryPage] = useState(1)
   const [historyTotalPages, setHistoryTotalPages] = useState(1)
@@ -1102,6 +1105,11 @@ export default function ShiftsPage() {
       const maskedPhone = result?.maskedPhone
       const deliveryStatus = result?.deliveryStatus
       const debugCode = otpDebugEnabled ? result?.debugCode : null
+      if (otpDebugEnabled) {
+        setOtpDebugCode(debugCode ?? null)
+        setOtpDebugMaskedPhone(maskedPhone ?? null)
+        setOtpDebugExpiresAt(result?.expiresAt ?? null)
+      }
       if (otpDebugEnabled && result?.phoneMissing) {
         setOtpPhoneMissingDemo(true)
       }
@@ -2094,6 +2102,34 @@ export default function ShiftsPage() {
                       "Phone not configured (demo)."
                     )}
                   </p>
+                )}
+                {otpDebugEnabled && otpDebugCode && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{t("Codigo OTP (demo)", "OTP code (demo)")}</span>
+                      <span className="rounded bg-white px-2 py-1 font-mono text-sm text-amber-900">
+                        {otpDebugCode}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                            void navigator.clipboard.writeText(otpDebugCode)
+                          }
+                          showToast("success", t("Codigo copiado.", "Code copied."))
+                        }}
+                      >
+                        {t("Copiar", "Copy")}
+                      </Button>
+                    </div>
+                    <div className="mt-1 text-[11px] text-amber-800">
+                      {otpDebugMaskedPhone ? `${t("Enviado a", "Sent to")}: ${otpDebugMaskedPhone}. ` : ""}
+                      {otpDebugExpiresAt
+                        ? `${t("Expira", "Expires")}: ${formatDateTime(otpDebugExpiresAt)}`
+                        : ""}
+                    </div>
+                  </div>
                 )}
 
                 <div className="mt-2 flex flex-wrap items-center gap-2">
