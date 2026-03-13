@@ -113,7 +113,13 @@ export async function sendShiftPhoneOtp() {
       expiresAt: meta?.expiresAt ?? null,
       deliveryStatus: meta?.deliveryStatus ?? null,
     })
-    return response
+    return {
+      raw: response,
+      maskedPhone: meta?.maskedPhone ?? null,
+      otpId: meta?.otpId ?? null,
+      expiresAt: meta?.expiresAt ?? null,
+      deliveryStatus: meta?.deliveryStatus ?? null,
+    }
   } catch (error: unknown) {
     debugLog("otp.send.error", { error: toErrorSnapshot(error) })
     throw error

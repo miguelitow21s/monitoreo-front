@@ -1072,8 +1072,20 @@ export default function ShiftsPage() {
   const handleSendShiftOtp = async () => {
     setSendingOtp(true)
     try {
-      await sendShiftPhoneOtp()
-      showToast("success", t("Codigo OTP enviado. Revisa tu telefono.", "OTP code sent. Check your phone."))
+      const result = await sendShiftPhoneOtp()
+      const maskedPhone = result?.maskedPhone
+      const deliveryStatus = result?.deliveryStatus
+      const debugSuffix =
+        deliveryStatus === "debug"
+          ? t(" (modo debug: SMS no enviado)", " (debug mode: SMS not sent)")
+          : ""
+      const phoneLabel = maskedPhone ? ` ${maskedPhone}` : ""
+      showToast(
+        "success",
+        maskedPhone
+          ? t(`Codigo OTP enviado a${phoneLabel}.${debugSuffix}`, `OTP sent to${phoneLabel}.${debugSuffix}`)
+          : t(`Codigo OTP enviado. Revisa tu telefono.${debugSuffix}`, `OTP code sent. Check your phone.${debugSuffix}`)
+      )
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo enviar OTP.", "Could not send OTP.")))
     } finally {
