@@ -304,8 +304,8 @@ export default function ShiftsPage() {
   const [uploadingStartEvidence, setUploadingStartEvidence] = useState(false)
   const [localStartEvidenceShiftId, setLocalStartEvidenceShiftId] = useState<string | number | null>(null)
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
-  const [startEvidenceUploadError, setStartEvidenceUploadError] = useState<string | null>(null)
   const [endEvidenceUploadError, setEndEvidenceUploadError] = useState<string | null>(null)
+  const [endShiftError, setEndShiftError] = useState<string | null>(null)
   const [sendingOtp, setSendingOtp] = useState(false)
   const [verifyingOtp, setVerifyingOtp] = useState(false)
   const [otpCode, setOtpCode] = useState("")
@@ -1131,8 +1131,8 @@ export default function ShiftsPage() {
     setCoords(null)
     setPhoto(null)
     setStartRecoveryPhoto(null)
-    setStartEvidenceUploadError(null)
     setEndEvidenceUploadError(null)
+    setEndShiftError(null)
   }
 
   const resetTaskEvidenceCapture = () => {
@@ -1295,6 +1295,7 @@ export default function ShiftsPage() {
   const handleEnd = async () => {
     if (!canSubmit || !coords || !activeShift) return
     setProcessing(true)
+    setEndShiftError(null)
 
     try {
       if (!hasStartEvidence) {
@@ -1365,11 +1366,14 @@ export default function ShiftsPage() {
       await loadTasks()
       await loadSupervisorData()
     } catch (error: unknown) {
+      const fallback = t("No se pudo finalizar el turno.", "Could not end shift.")
+      const exact = formatErrorDetails(error, fallback)
+      setEndShiftError(exact)
       if (isConsentPendingError(error)) {
         showToast("error", t("Consentimiento pendiente: acepta terminos de tratamiento de datos para operar turnos.", "Consent pending: accept data processing terms to operate shifts."))
         return
       }
-      showToast("error", extractErrorMessage(error, t("No se pudo finalizar el turno.", "Could not end shift.")))
+      showToast("error", exact)
     } finally {
       setProcessing(false)
     }
@@ -1377,7 +1381,6 @@ export default function ShiftsPage() {
 
   const handleUploadMissingStartEvidence = async () => {
     if (!activeShift) return
-    setStartEvidenceUploadError(null)
     if (!coords || !startRecoveryPhoto) {
       showToast(
         "info",
@@ -1416,7 +1419,6 @@ export default function ShiftsPage() {
       })
       setLocalStartEvidenceShiftId(activeShift.id)
       setStartRecoveryPhoto(null)
-      setStartEvidenceUploadError(null)
       showToast("success", t("Evidencia de inicio cargada.", "Start evidence uploaded."))
       resetEvidenceAndLocation()
       setHistoryPage(1)
@@ -1432,7 +1434,6 @@ export default function ShiftsPage() {
         // Treat as already registered on backend.
         setLocalStartEvidenceShiftId(activeShift.id)
         setStartRecoveryPhoto(null)
-        setStartEvidenceUploadError(null)
         showToast(
           "success",
           t("Evidencia de inicio ya estaba registrada.", "Start evidence was already registered.")
@@ -1448,13 +1449,9 @@ export default function ShiftsPage() {
             "Invalid or expired OTP. Verify again to upload evidence."
           )
         )
-        setStartEvidenceUploadError(formatErrorDetails(error, message))
-      } else {
-        const fallback = t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence.")
-        const exact = formatErrorDetails(error, fallback)
-        setStartEvidenceUploadError(exact)
-        showToast("error", exact)
+        return
       }
+      showToast("error", t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence."))
     } finally {
       setUploadingStartEvidence(false)
     }
@@ -2346,23 +2343,18 @@ export default function ShiftsPage() {
                           <div className="text-xs text-amber-800">
                             {t("Foto de inicio", "Start photo")}: {startRecoveryPhoto ? t("Lista", "Ready") : t("Pendiente", "Pending")}
                           </div>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => void handleUploadMissingStartEvidence()}
-                            disabled={uploadingStartEvidence || !coords || !startRecoveryPhoto}
-                          >
-                            {uploadingStartEvidence ? t("Subiendo...", "Uploading...") : t("Subir evidencia de inicio", "Upload start evidence")}
-                          </Button>
-                        </div>
-                      </div>
-                      {startEvidenceUploadError && (
-                        <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                          {startEvidenceUploadError}
-                        </div>
-                      )}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void handleUploadMissingStartEvidence()}
+                        disabled={uploadingStartEvidence || !coords || !startRecoveryPhoto}
+                      >
+                        {uploadingStartEvidence ? t("Subiendo...", "Uploading...") : t("Subir evidencia de inicio", "Upload start evidence")}
+                      </Button>
                     </div>
-                  )}
+                  </div>
+                </div>
+              )}
 
                   <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
                     <span>{t("GPS", "GPS")}: {coords ? t("Listo", "Ready") : t("Pendiente", "Pending")}</span>
@@ -2520,6 +2512,12 @@ export default function ShiftsPage() {
                   </Button>
                 )}
               </div>
+
+              {activeShift && endShiftError && (
+                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {endShiftError}
+                </div>
+              )}
 
               {submitBlockers.length > 0 && (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600">
