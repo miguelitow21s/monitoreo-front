@@ -48,6 +48,7 @@ import {
   ScheduledShift,
 } from "@/services/scheduling.service"
 import { supabase } from "@/services/supabaseClient"
+import { debugLog } from "@/services/debug"
 import {
   completeOperationalTask,
   createOperationalTask,
@@ -1200,12 +1201,15 @@ export default function ShiftsPage() {
   }
 
   const handleSendShiftOtp = async () => {
+    const fingerprint = getOrCreateDeviceFingerprint()
+    debugLog("otp.send.click", { fingerprint: fingerprint ? `${fingerprint.slice(0, 6)}...` : null })
     setSendingOtp(true)
     try {
       const result = await sendShiftPhoneOtp()
       const maskedPhone = result?.maskedPhone
       const deliveryStatus = result?.deliveryStatus
       const debugCode = otpDebugEnabled ? result?.debugCode : null
+      debugLog("otp.send.result", { deliveryStatus, maskedPhone, debugCode: otpDebugEnabled ? debugCode : null })
       if (otpDebugEnabled) {
         setOtpDebugCode(debugCode ?? null)
         setOtpDebugMaskedPhone(maskedPhone ?? null)
@@ -1235,6 +1239,7 @@ export default function ShiftsPage() {
             )
       )
     } catch (error: unknown) {
+      debugLog("otp.send.error", { message: extractErrorMessage(error, "otp send failed") })
       showToast("error", extractErrorMessage(error, t("No se pudo enviar OTP.", "Could not send OTP.")))
     } finally {
       setSendingOtp(false)
@@ -1249,13 +1254,16 @@ export default function ShiftsPage() {
 
     setVerifyingOtp(true)
     try {
+      debugLog("otp.verify.click", { codeLength: otpCode.trim().length })
       await verifyShiftPhoneOtp({ code: otpCode })
       setShiftOtpReady(true)
       setOtpVerifiedAt(new Date().toISOString())
       setOtpCode("")
+      debugLog("otp.verify.success")
       showToast("success", t("Telefono verificado. Ya puedes operar turnos.", "Phone verified. You can now operate shifts."))
     } catch (error: unknown) {
       setShiftOtpReady(false)
+      debugLog("otp.verify.error", { message: extractErrorMessage(error, "otp verify failed") })
       showToast("error", extractErrorMessage(error, t("No se pudo verificar OTP.", "Could not verify OTP.")))
     } finally {
       setVerifyingOtp(false)
@@ -1287,6 +1295,12 @@ export default function ShiftsPage() {
       if (!photo) throw new Error(t("Debes capturar evidencia fotografica.", "You must capture photo evidence."))
       const scheduledShift = currentScheduledShift
       const currentRestaurantId = overrideRestaurantId ?? scheduledShift?.restaurant_id ?? null
+      debugLog("shift.start.intent", {
+        restaurantId: currentRestaurantId,
+        scheduledShiftId: scheduledShift?.id ?? null,
+        coords: coords ? { lat: coords.lat, lng: coords.lng, accuracy: coords.accuracyMeters } : null,
+        otpReady: shiftOtpReady,
+      })
       if (!currentRestaurantId) {
         throw new Error(
           t(
@@ -1308,6 +1322,7 @@ export default function ShiftsPage() {
         })
       )
       startedShiftId = shiftId
+      debugLog("shift.start.success", { shiftId })
       if (scheduledShift?.scheduled_end) {
         const scheduledEndMs = new Date(scheduledShift.scheduled_end).getTime()
         setActiveScheduledMeta({
@@ -1327,6 +1342,7 @@ export default function ShiftsPage() {
         lng: coords.lng,
         accuracy: coords.accuracyMeters,
       })
+      debugLog("shift.start.evidence.success", { shiftId, type: "inicio" })
       setLocalStartEvidenceShiftId(shiftId)
 
       if (startObservation.trim()) {
@@ -1353,6 +1369,7 @@ export default function ShiftsPage() {
         showToast("error", t("Consentimiento pendiente: acepta terminos de tratamiento de datos para operar turnos.", "Consent pending: accept data processing terms to operate shifts."))
         return
       }
+      debugLog("shift.start.error", { message: extractErrorMessage(error, "shift start failed") })
       showToast("error", extractErrorMessage(error, t("No se pudo iniciar el turno.", "Could not start shift.")))
     } finally {
       setProcessing(false)
@@ -1363,6 +1380,15 @@ export default function ShiftsPage() {
     if (!canSubmit || !coords || !activeShift) return
     setProcessing(true)
     setEndShiftError(null)
+    debugLog("shift.end.intent", {
+      shiftId: activeShift.id,
+      coords: { lat: coords.lat, lng: coords.lng, accuracy: coords.accuracyMeters },
+      hasEndPhoto: !!photo,
+      hasStartEvidence,
+      earlyEndReasonRequired,
+      earlyEndReason: endEarlyReason.trim() ? "set" : "missing",
+      otpReady: shiftOtpReady,
+    })
 
     try {
       if (!hasStartEvidence) {
@@ -1400,11 +1426,14 @@ export default function ShiftsPage() {
           lng: coords.lng,
           accuracy: coords.accuracyMeters,
         })
+        debugLog("shift.end.evidence.success", { shiftId: activeShift.id })
       } catch (error: unknown) {
         const exact = formatErrorDetails(error, t("No se pudo subir la evidencia de salida.", "Could not upload end evidence."))
         setEndEvidenceUploadError(exact)
+        debugLog("shift.end.evidence.error", { message: extractErrorMessage(error, "end evidence upload failed") })
         throw error
       }
+      debugLog("shift.end.request", { shiftId: activeShift.id })
       await endShift({
         shiftId: activeShift.id,
         lat: coords.lat,
@@ -1413,6 +1442,7 @@ export default function ShiftsPage() {
         declaration: endHealthDeclaration.trim() || null,
         earlyEndReason: earlyReason || null,
       })
+      debugLog("shift.end.success", { shiftId: activeShift.id })
 
       if (endObservation.trim()) {
         await createShiftIncident(activeShift.id, `[SALIDA] ${endObservation.trim()}`)
@@ -1439,6 +1469,7 @@ export default function ShiftsPage() {
       const status = typeof (error as { status?: unknown }).status === "number" ? (error as { status?: number }).status : undefined
       const code =
         typeof (error as { code?: unknown }).code === "string" ? (error as { code?: string }).code : undefined
+      debugLog("shift.end.error", { status, code, message: exact })
       if (status === 409 || code === "409" || normalized.includes("409") || normalized.includes("conflict")) {
         setEndShiftError(exact)
         showToast(
@@ -1480,6 +1511,12 @@ export default function ShiftsPage() {
       )
       return
     }
+    debugLog("shift.start_evidence.recover.intent", {
+      shiftId: activeShift.id,
+      coords: { lat: coords.lat, lng: coords.lng, accuracy: coords.accuracyMeters },
+      hasPhoto: !!startRecoveryPhoto,
+      otpReady: shiftOtpReady,
+    })
     if (!getShiftOtpToken()) {
       setShiftOtpReady(false)
       showToast(
@@ -1509,6 +1546,7 @@ export default function ShiftsPage() {
         lng: coords.lng,
         accuracy: coords.accuracyMeters,
       })
+      debugLog("shift.start_evidence.recover.success", { shiftId: activeShift.id })
       setLocalStartEvidenceShiftId(activeShift.id)
       setStartRecoveryPhoto(null)
       showToast("success", t("Evidencia de inicio cargada.", "Start evidence uploaded."))
@@ -1526,6 +1564,7 @@ export default function ShiftsPage() {
         // Treat as already registered on backend.
         setLocalStartEvidenceShiftId(activeShift.id)
         setStartRecoveryPhoto(null)
+        debugLog("shift.start_evidence.recover.already", { shiftId: activeShift.id })
         showToast(
           "success",
           t("Evidencia de inicio ya estaba registrada.", "Start evidence was already registered.")
@@ -1534,6 +1573,7 @@ export default function ShiftsPage() {
       }
       if (normalized.includes("otp")) {
         setShiftOtpReady(false)
+        debugLog("shift.start_evidence.recover.otp_error", { shiftId: activeShift.id })
         showToast(
           "error",
           t(
@@ -1543,6 +1583,7 @@ export default function ShiftsPage() {
         )
         return
       }
+      debugLog("shift.start_evidence.recover.error", { message: extractErrorMessage(error, "start evidence upload failed") })
       showToast("error", t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence."))
     } finally {
       setUploadingStartEvidence(false)
@@ -1551,10 +1592,13 @@ export default function ShiftsPage() {
 
   const handleStatusChange = async (shiftId: string, status: string) => {
     try {
+      debugLog("supervisor.shift.status.intent", { shiftId, status })
       await updateShiftStatus(shiftId, status)
+      debugLog("supervisor.shift.status.success", { shiftId, status })
       showToast("success", t(`Turno actualizado a ${status}.`, `Shift updated to ${status}.`))
       await loadSupervisorData()
     } catch (error: unknown) {
+      debugLog("supervisor.shift.status.error", { message: extractErrorMessage(error, "status update failed") })
       showToast("error", extractErrorMessage(error, t("No se pudo actualizar el estado del turno.", "Could not update shift status.")))
     }
   }

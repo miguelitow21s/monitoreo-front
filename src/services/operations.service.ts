@@ -3,6 +3,7 @@ import { createEvidenceSignedUrl } from "@/services/storageEvidence.service"
 import { invokeEdge } from "@/services/edgeClient"
 import { getShiftOtpToken } from "@/services/securityContext.service"
 import { ensureTrustedDeviceReady } from "@/services/trustedDevice.service"
+import { debugLog } from "@/services/debug"
 
 export interface SupervisorShiftRow {
   id: string
@@ -58,13 +59,23 @@ export async function getActiveShiftsForSupervision(limit = 20) {
 export async function updateShiftStatus(shiftId: string, status: string) {
   if (status === "approved" || status === "rejected") {
     const endpoint = status === "approved" ? "shifts_approve" : "shifts_reject"
-    await invokeEdge(endpoint, {
-      idempotencyKey: crypto.randomUUID(),
-      extraHeaders: await getShiftSecureHeaders(),
-      body: {
-        shift_id: parseShiftId(shiftId),
-      },
-    })
+    debugLog("supervisor.shift.status.edge", { shiftId, status, endpoint })
+    try {
+      await invokeEdge(endpoint, {
+        idempotencyKey: crypto.randomUUID(),
+        extraHeaders: await getShiftSecureHeaders(),
+        body: {
+          shift_id: parseShiftId(shiftId),
+        },
+      })
+    } catch (error: unknown) {
+      debugLog("supervisor.shift.status.edge_error", {
+        shiftId,
+        status,
+        message: error instanceof Error ? error.message : "edge status update failed",
+      })
+      throw error
+    }
     return
   }
 
