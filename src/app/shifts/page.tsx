@@ -99,6 +99,7 @@ type ScheduleTaskDraft = {
   priority: TaskPriority
   dueAt: string
 }
+type ScheduledShiftUiState = "scheduled" | "in_progress" | "ended" | "cancelled" | "other"
 
 function formatDuration(start: string, end: string | null) {
   const startDate = new Date(start).getTime()
@@ -165,6 +166,42 @@ function getCurrentScheduledRestaurantId(scheduledShifts: ScheduledShift[]) {
     return now >= start && now <= end
   })
   return match?.restaurant_id
+}
+
+function getScheduledShiftUiState(shift: ScheduledShift, nowMs: number): ScheduledShiftUiState {
+  const rawStatus = (shift.status ?? "").trim().toLowerCase()
+  if (rawStatus === "cancelled" || rawStatus === "canceled") return "cancelled"
+  if (rawStatus === "completed" || rawStatus === "finished" || rawStatus === "finalizado") return "ended"
+  if (rawStatus === "in_progress" || rawStatus === "active" || rawStatus === "activo") return "in_progress"
+
+  const startMs = new Date(shift.scheduled_start).getTime()
+  const endMs = new Date(shift.scheduled_end).getTime()
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return "other"
+
+  if (nowMs < startMs) return "scheduled"
+  if (nowMs >= startMs && nowMs <= endMs) return "in_progress"
+  if (nowMs > endMs) return "ended"
+  return "other"
+}
+
+function formatDateOnly(value: string) {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return "-"
+  return date.toLocaleDateString("es-CO", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+}
+
+function formatTimeOnly(value: string) {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return "-"
+  return date.toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
 }
 
 async function sha256Hex(blob: Blob) {
@@ -236,6 +273,7 @@ export default function ShiftsPage() {
   const [otpCode, setOtpCode] = useState("")
   const [shiftOtpReady, setShiftOtpReady] = useState(false)
   const [otpVerifiedAt, setOtpVerifiedAt] = useState<string | null>(null)
+  const [clockMs, setClockMs] = useState(() => Date.now())
   const [historyPage, setHistoryPage] = useState(1)
   const [historyTotalPages, setHistoryTotalPages] = useState(1)
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([])
@@ -387,12 +425,38 @@ export default function ShiftsPage() {
     [history]
   )
 
-  const nextScheduledShift = useMemo(
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setClockMs(Date.now()), 30000)
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  const scheduledShiftsWithUiState = useMemo(
     () =>
       [...scheduledShifts]
-        .filter(item => item.status === "scheduled")
-        .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())[0] ?? null,
-    [scheduledShifts]
+        .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
+        .map(item => ({
+          shift: item,
+          uiState: getScheduledShiftUiState(item, clockMs),
+        })),
+    [clockMs, scheduledShifts]
+  )
+
+  const scheduledShiftUiStateById = useMemo(
+    () => new Map(scheduledShiftsWithUiState.map(item => [item.shift.id, item.uiState])),
+    [scheduledShiftsWithUiState]
+  )
+
+  const nextScheduledShift = useMemo(
+    () =>
+      scheduledShiftsWithUiState.find(item => item.uiState === "in_progress" || item.uiState === "scheduled")?.shift ??
+      scheduledShiftsWithUiState[0]?.shift ??
+      null,
+    [scheduledShiftsWithUiState]
+  )
+
+  const nextScheduledShiftUiState = useMemo(
+    () => (nextScheduledShift ? scheduledShiftUiStateById.get(nextScheduledShift.id) ?? "other" : null),
+    [nextScheduledShift, scheduledShiftUiStateById]
   )
 
   const currentScheduledRestaurant = useMemo(() => {
@@ -441,6 +505,25 @@ export default function ShiftsPage() {
     },
     [knownRestaurantsById]
   )
+
+  const getScheduledShiftStatusLabel = useCallback(
+    (state: ScheduledShiftUiState) => {
+      if (state === "scheduled") return t("Programado", "Scheduled")
+      if (state === "in_progress") return t("En curso", "In progress")
+      if (state === "ended") return t("Terminado", "Ended")
+      if (state === "cancelled") return t("Cancelado", "Cancelled")
+      return t("Sin estado", "No status")
+    },
+    [t]
+  )
+
+  const getScheduledShiftStatusClass = useCallback((state: ScheduledShiftUiState) => {
+    if (state === "scheduled") return "bg-blue-50 text-blue-700 border-blue-200"
+    if (state === "in_progress") return "bg-emerald-50 text-emerald-700 border-emerald-200"
+    if (state === "ended") return "bg-slate-100 text-slate-700 border-slate-200"
+    if (state === "cancelled") return "bg-rose-50 text-rose-700 border-rose-200"
+    return "bg-slate-50 text-slate-600 border-slate-200"
+  }, [])
 
   const expectedRestaurantId = useMemo(() => {
     if (currentScheduledRestaurant?.id) return Number(currentScheduledRestaurant.id)
@@ -1692,7 +1775,7 @@ export default function ShiftsPage() {
                   <p className="font-semibold text-slate-800">{employeeDashboard?.pending_tasks_count ?? employeeDashboard?.pending_tasks_preview?.length ?? 0}</p>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                  <p className="text-xs text-slate-500">{t("Turno activo", "Active shift")}</p>
+                  <p className="text-xs text-slate-500">{t("Turno en curso", "Shift in progress")}</p>
                   <p className="font-semibold text-slate-800">#{employeeDashboard?.active_shift?.id ?? "-"}</p>
                 </div>
               </div>
@@ -1704,9 +1787,9 @@ export default function ShiftsPage() {
               <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    {t("Turno activo desde", "Active shift since")} <b>{formatDateTime(activeShift.start_time)}</b>
+                    {t("Turno en curso desde", "Shift in progress since")} <b>{formatDateTime(activeShift.start_time)}</b>
                   </span>
-                  <Badge variant="success">{t("Activo", "Active")}</Badge>
+                  <Badge variant="success">{t("En curso", "In progress")}</Badge>
                 </div>
                 <p className="mt-2 text-xs text-emerald-900">
                   {t("Evidencia inicio", "Start evidence")}: {hasStartEvidence ? "OK" : t("Pendiente", "Pending")}
@@ -1753,7 +1836,8 @@ export default function ShiftsPage() {
                       <span className="font-semibold">{t("Fin:", "End:")}</span> {formatDateTime(nextScheduledShift.scheduled_end)}
                     </p>
                     <p>
-                      <span className="font-semibold">{t("Estado:", "Status:")}</span> {nextScheduledShift.status}
+                      <span className="font-semibold">{t("Estado:", "Status:")}</span>{" "}
+                      {getScheduledShiftStatusLabel(nextScheduledShiftUiState ?? "other")}
                     </p>
                     {currentScheduledRestaurant && currentScheduledRestaurant.geofence_radius_m !== null && (
                       <p>
@@ -2237,16 +2321,36 @@ export default function ShiftsPage() {
 
             {isEmpleado && (
               <Card title={t("Turnos programados", "Scheduled shifts")} subtitle={t("Agenda asignada para tus proximos periodos de trabajo.", "Agenda assigned for your upcoming work periods.")}>
-              {scheduledShifts.length === 0 ? (
+              {scheduledShiftsWithUiState.length === 0 ? (
                 <p className="text-sm text-slate-500">{t("No tienes turnos programados.", "You do not have scheduled shifts.")}</p>
               ) : (
-                <div className="space-y-2">
-                  {scheduledShifts.map(item => (
-                    <div key={item.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                      {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)} |{" "}
-                      {t("Estado", "Status")}: {item.status}
-                    </div>
-                  ))}
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
+                        <th className="px-3 py-2">{t("Fecha", "Date")}</th>
+                        <th className="px-3 py-2">{t("Inicio", "Start")}</th>
+                        <th className="px-3 py-2">{t("Fin", "End")}</th>
+                        <th className="px-3 py-2">{t("Restaurante", "Restaurant")}</th>
+                        <th className="px-3 py-2">{t("Estado", "Status")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scheduledShiftsWithUiState.map(({ shift, uiState }) => (
+                        <tr key={shift.id} className="border-b border-slate-100 last:border-b-0">
+                          <td className="px-3 py-2 text-slate-700">{formatDateOnly(shift.scheduled_start)}</td>
+                          <td className="px-3 py-2 text-slate-700">{formatTimeOnly(shift.scheduled_start)}</td>
+                          <td className="px-3 py-2 text-slate-700">{formatTimeOnly(shift.scheduled_end)}</td>
+                          <td className="px-3 py-2 text-slate-700">{getRestaurantLabelById(shift.restaurant_id)}</td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${getScheduledShiftStatusClass(uiState)}`}>
+                              {getScheduledShiftStatusLabel(uiState)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
               </Card>
