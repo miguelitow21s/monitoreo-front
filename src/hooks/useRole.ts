@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
 import { supabase } from "@/services/supabaseClient"
+import { debugLog } from "@/services/debug"
 import { ROLES, Role } from "@/utils/permissions"
 
 function normalizeRole(value: unknown): Role | undefined {
@@ -89,9 +90,18 @@ export function useRole() {
   }, [user?.id])
 
   const metadataRole = normalizeRole(user?.user_metadata?.role)
-  // Source of truth remains profiles.role. Metadata is fallback for resilience
-  // when profile loading fails or profile row is not yet available.
-  const role = profileRole ?? metadataRole ?? undefined
+  // Source of truth is profiles.role for authenticated users.
+  // Metadata fallback is only used before authentication is established.
+  const role = user?.id ? profileRole ?? undefined : metadataRole ?? undefined
+
+  useEffect(() => {
+    debugLog("role.snapshot", {
+      userId: user?.id ?? null,
+      profileRole,
+      metadataRole,
+      role,
+    })
+  }, [metadataRole, profileRole, role, user?.id])
 
   return {
     role,

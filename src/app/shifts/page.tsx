@@ -882,21 +882,14 @@ export default function ShiftsPage() {
     try {
       const [profiles, restaurants] = await Promise.all([
         listUserProfiles(isSuperAdmin ? { useAdminApi: true } : undefined),
-        (async () => {
-          try {
-            const rows = await listRestaurants({
-              includeInactive: false,
-              ...(isSuperAdmin ? { useAdminApi: true } : {}),
-            })
-            const normalized = rows
-              .map(item => ({ id: Number(item.id), name: item.name ?? `Restaurant #${item.id}` }))
-              .filter(item => Number.isFinite(item.id))
-            if (normalized.length > 0) return normalized
-          } catch {
-            // fallback below
-          }
-          return isSuperAdmin ? [] : listMySupervisorRestaurants()
-        })(),
+        isSuperAdmin
+          ? (async () => {
+              const rows = await listRestaurants({ includeInactive: false, useAdminApi: true })
+              return rows
+                .map(item => ({ id: Number(item.id), name: item.name ?? `Restaurant #${item.id}` }))
+                .filter(item => Number.isFinite(item.id))
+            })()
+          : listMySupervisorRestaurants(),
       ])
 
       const employees = profiles.filter(item => item.role === "empleado" && item.is_active !== false)

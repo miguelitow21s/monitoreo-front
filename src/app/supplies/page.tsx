@@ -22,6 +22,7 @@ import {
   Supply,
   SupplyDelivery,
 } from "@/services/supplies.service"
+import { debugLog } from "@/services/debug"
 import { ROLES } from "@/utils/permissions"
 
 function extractError(error: unknown, fallback: string) {
@@ -124,6 +125,14 @@ export default function SuppliesPage() {
           ? deliveryRestaurantId
           : restaurantRows[0]?.id
 
+      debugLog("supplies.loadData", {
+        isSupervisora,
+        isSuperAdmin,
+        deliveryRestaurantId,
+        scopedRestaurantId,
+        restaurantsCount: restaurantRows.length,
+      })
+
       if (!scopedRestaurantId) {
         setSupplies([])
         setDeliveries([])
@@ -183,6 +192,16 @@ export default function SuppliesPage() {
 
     const scopedRestaurantId = analysisRestaurantId || deliveryRestaurantId || restaurants[0]?.id || undefined
 
+    debugLog("supplies.loadAnalytics", {
+      isSupervisora,
+      isSuperAdmin,
+      analysisRestaurantId,
+      deliveryRestaurantId,
+      scopedRestaurantId,
+      periodFrom,
+      periodTo,
+    })
+
     if (!scopedRestaurantId) {
       setAnalyticsDeliveries([])
       return
@@ -208,6 +227,8 @@ export default function SuppliesPage() {
     canAccessSupplies,
     deliveryRestaurantId,
     isAuthenticated,
+    isSuperAdmin,
+    isSupervisora,
     periodFrom,
     periodTo,
     roleLoading,
