@@ -41,6 +41,7 @@ import {
 } from "@/services/supervisorPresence.service"
 import {
   assignScheduledShift,
+  assignScheduledShiftsBulk,
   cancelScheduledShift,
   listMyScheduledShifts,
   listScheduledShifts,
@@ -78,6 +79,11 @@ import {
   getEmployeeSelfDashboard,
 } from "@/services/employeeSelfService.service"
 import { listUserProfiles, UserProfile } from "@/services/users.service"
+import {
+  generateScheduleBlocksFromRange,
+  getSchedulePresetRange,
+  ScheduleQuickPreset,
+} from "@/utils/scheduling"
 
 const HISTORY_PAGE_SIZE = 8
 const MAX_GPS_ACCURACY_METERS = 80
@@ -162,6 +168,39 @@ async function sha256Hex(blob: Blob) {
   return Array.from(new Uint8Array(hashBuffer))
     .map(item => item.toString(16).padStart(2, "0"))
     .join("")
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function daysFromToday(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return toDateInputValue(date)
+}
+
+function formatRestaurantAddress(restaurant: Restaurant | null | undefined) {
+  if (!restaurant) return ""
+  return [
+    restaurant.address_line,
+    restaurant.city,
+    restaurant.state,
+    restaurant.postal_code,
+    restaurant.country,
+  ]
+    .map(item => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean)
+    .join(", ")
+}
+
+function formatRestaurantLabel(restaurant: Restaurant | null | undefined) {
+  if (!restaurant) return ""
+  const address = formatRestaurantAddress(restaurant)
+  return address ? `${restaurant.name} - ${address}` : restaurant.name
 }
 
 export default function ShiftsPage() {
@@ -258,6 +297,13 @@ export default function ShiftsPage() {
   const [supervisorScheduleEnd, setSupervisorScheduleEnd] = useState("")
   const [supervisorScheduleNotes, setSupervisorScheduleNotes] = useState("")
   const [supervisorScheduling, setSupervisorScheduling] = useState(false)
+  const [supervisorScheduleBlocks, setSupervisorScheduleBlocks] = useState<Array<{ id: number; start: string; end: string }>>([])
+  const [supervisorBulkRangeStart, setSupervisorBulkRangeStart] = useState("")
+  const [supervisorBulkRangeEnd, setSupervisorBulkRangeEnd] = useState("")
+  const [supervisorBulkStartTime, setSupervisorBulkStartTime] = useState("08:00")
+  const [supervisorBulkEndTime, setSupervisorBulkEndTime] = useState("16:00")
+  const [supervisorBulkWeekdays, setSupervisorBulkWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
+  const [supervisorBulkScheduling, setSupervisorBulkScheduling] = useState(false)
 
   const healthAnswered = activeShift ? endFitForWork !== null : startFitForWork !== null
   const healthDeclarationRequired =
@@ -284,6 +330,15 @@ export default function ShiftsPage() {
   const canOperateShift = isEmpleado || isSupervisora
   const canOperateSupervisor = isSupervisora || isSuperAdmin
   const canOperateOtp = canOperateShift || canOperateSupervisor
+  const weekdayOptions = [
+    { value: 1, label: t("Lun", "Mon") },
+    { value: 2, label: t("Mar", "Tue") },
+    { value: 3, label: t("Mie", "Wed") },
+    { value: 4, label: t("Jue", "Thu") },
+    { value: 5, label: t("Vie", "Fri") },
+    { value: 6, label: t("Sab", "Sat") },
+    { value: 0, label: t("Dom", "Sun") },
+  ]
 
   const activeShiftUploadedEvidenceTypes = useMemo(() => {
     const raw = employeeDashboard?.active_shift?.uploaded_evidence_types ?? employeeDashboard?.uploaded_evidence_types
@@ -349,6 +404,21 @@ export default function ShiftsPage() {
     if (!supervisorShiftRestaurantId) return null
     return knownRestaurants.find(item => Number(item.id) === Number(supervisorShiftRestaurantId)) ?? null
   }, [knownRestaurants, supervisorShiftRestaurantId])
+
+  const knownRestaurantsById = useMemo(
+    () => new Map(knownRestaurants.map(item => [Number(item.id), item])),
+    [knownRestaurants]
+  )
+
+  const getRestaurantLabelById = useCallback(
+    (restaurantId: number | null | undefined) => {
+      if (!restaurantId) return "-"
+      const restaurant = knownRestaurantsById.get(Number(restaurantId))
+      if (!restaurant) return `#${restaurantId}`
+      return formatRestaurantLabel(restaurant) || restaurant.name || `#${restaurantId}`
+    },
+    [knownRestaurantsById]
+  )
 
   const geofenceTarget = isSupervisora ? supervisorSelectedRestaurant : currentScheduledRestaurant
 
@@ -473,7 +543,7 @@ export default function ShiftsPage() {
   const shiftOverlayLines = [
     `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
     `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-    `${t("Restaurante", "Restaurant")}: ${expectedRestaurantId ?? "-"}`,
+    `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(expectedRestaurantId)}`,
     `${t("Turno", "Shift")}: ${activeShift ? `#${activeShift.id}` : t("inicio", "start")}`,
     `${t("Fase", "Phase")}: ${activeShift ? t("fin-turno", "shift-end") : t("inicio-turno", "shift-start")}`,
     coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : t("GPS: pendiente", "GPS: pending"),
@@ -597,6 +667,11 @@ export default function ShiftsPage() {
     if (presenceRestaurants.length === 0) return
     setSupervisorShiftRestaurantId(presenceRestaurants[0].id)
   }, [isSupervisora, presenceRestaurants, supervisorShiftRestaurantId])
+
+  useEffect(() => {
+    if (!supervisorBulkRangeStart) setSupervisorBulkRangeStart(daysFromToday(0))
+    if (!supervisorBulkRangeEnd) setSupervisorBulkRangeEnd(daysFromToday(30))
+  }, [supervisorBulkRangeStart, supervisorBulkRangeEnd])
 
   useEffect(() => {
     void loadKnownRestaurants()
@@ -1224,6 +1299,85 @@ export default function ShiftsPage() {
     }
   }
 
+  const handleToggleSupervisorBulkWeekday = (day: number) => {
+    setSupervisorBulkWeekdays(prev => {
+      if (prev.includes(day)) return prev.filter(item => item !== day)
+      return [...prev, day].sort((a, b) => a - b)
+    })
+  }
+
+  const appendSupervisorGeneratedScheduleBlocks = (generated: Array<{ startLocal: string; endLocal: string }>) => {
+    if (generated.length === 0) {
+      showToast("info", t("No se pudieron generar bloques con esos criterios.", "Could not generate schedule blocks with those criteria."))
+      return
+    }
+
+    let addedCount = 0
+    setSupervisorScheduleBlocks(prev => {
+      const seen = new Set(prev.map(item => `${item.start}|${item.end}`))
+      const next = [...prev]
+
+      for (const item of generated) {
+        const key = `${item.startLocal}|${item.endLocal}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        next.push({
+          id: Date.now() + next.length + Math.floor(Math.random() * 1000),
+          start: item.startLocal,
+          end: item.endLocal,
+        })
+        addedCount += 1
+      }
+      return next
+    })
+
+    if (addedCount === 0) {
+      showToast("info", t("Los bloques ya existian en la lista.", "Those blocks already exist in the list."))
+      return
+    }
+
+    showToast("success", t(`${addedCount} bloque(s) agregados.`, `${addedCount} block(s) added.`))
+  }
+
+  const handleGenerateSupervisorScheduleBlocks = () => {
+    const generated = generateScheduleBlocksFromRange({
+      startDate: supervisorBulkRangeStart,
+      endDate: supervisorBulkRangeEnd,
+      startTime: supervisorBulkStartTime,
+      endTime: supervisorBulkEndTime,
+      weekdays: supervisorBulkWeekdays,
+      maxEntries: 200,
+    })
+
+    appendSupervisorGeneratedScheduleBlocks(generated)
+  }
+
+  const handleApplySupervisorBulkPreset = (preset: ScheduleQuickPreset) => {
+    const range = getSchedulePresetRange(preset)
+    setSupervisorBulkRangeStart(range.startDate)
+    setSupervisorBulkRangeEnd(range.endDate)
+    setSupervisorBulkWeekdays(range.weekdays)
+
+    const generated = generateScheduleBlocksFromRange({
+      startDate: range.startDate,
+      endDate: range.endDate,
+      startTime: supervisorBulkStartTime,
+      endTime: supervisorBulkEndTime,
+      weekdays: range.weekdays,
+      maxEntries: 200,
+    })
+
+    appendSupervisorGeneratedScheduleBlocks(generated)
+  }
+
+  const handleRemoveSupervisorScheduleBlock = (blockId: number) => {
+    setSupervisorScheduleBlocks(prev => prev.filter(item => item.id !== blockId))
+  }
+
+  const handleClearSupervisorScheduleBlocks = () => {
+    setSupervisorScheduleBlocks([])
+  }
+
   const handleScheduleSupervisorShift = async () => {
     if (!supervisorScheduleEmployeeId || !supervisorScheduleRestaurantId || !supervisorScheduleStart || !supervisorScheduleEnd) {
       showToast("info", t("Completa empleado, restaurante, inicio y fin.", "Complete employee, restaurant, start, and end."))
@@ -1253,6 +1407,52 @@ export default function ShiftsPage() {
       showToast("error", extractErrorMessage(error, t("No se pudo programar el turno.", "Could not schedule shift.")))
     } finally {
       setSupervisorScheduling(false)
+    }
+  }
+
+  const handleScheduleSupervisorShiftBulk = async () => {
+    if (!supervisorScheduleEmployeeId || !supervisorScheduleRestaurantId) {
+      showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
+      return
+    }
+
+    const validBlocks = supervisorScheduleBlocks
+      .map(item => ({
+        startIso: item.start ? new Date(item.start).toISOString() : "",
+        endIso: item.end ? new Date(item.end).toISOString() : "",
+      }))
+      .filter(item => item.startIso && item.endIso)
+
+    if (validBlocks.length === 0) {
+      showToast("info", t("Agrega al menos un bloque valido para programar lote.", "Add at least one valid block to schedule bulk."))
+      return
+    }
+    if (validBlocks.length > 200) {
+      showToast("info", t("El lote permite maximo 200 turnos por envio.", "Bulk scheduling allows a maximum of 200 shifts per request."))
+      return
+    }
+
+    const hasInvalidRange = validBlocks.some(item => new Date(item.endIso).getTime() <= new Date(item.startIso).getTime())
+    if (hasInvalidRange) {
+      showToast("info", t("Todos los bloques deben tener fin posterior al inicio.", "All blocks must have end time after start time."))
+      return
+    }
+
+    setSupervisorBulkScheduling(true)
+    try {
+      await assignScheduledShiftsBulk({
+        employeeId: supervisorScheduleEmployeeId,
+        restaurantId: String(supervisorScheduleRestaurantId),
+        blocks: validBlocks.map(item => ({ scheduledStartIso: item.startIso, scheduledEndIso: item.endIso })),
+        notes: supervisorScheduleNotes.trim() || undefined,
+      })
+      showToast("success", t("Turnos en lote programados correctamente.", "Bulk shifts scheduled successfully."))
+      setSupervisorScheduleBlocks([])
+      await loadSupervisionScheduledShifts()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudieron programar turnos en lote.", "Could not schedule bulk shifts.")))
+    } finally {
+      setSupervisorBulkScheduling(false)
     }
   }
 
@@ -1388,7 +1588,7 @@ export default function ShiftsPage() {
                 {nextScheduledShift ? (
                   <div className="space-y-2 text-sm text-slate-700">
                     <p>
-                      <span className="font-semibold">{t("ID restaurante:", "Restaurant ID:")}</span> #{nextScheduledShift.restaurant_id}
+                      <span className="font-semibold">{t("Restaurante:", "Restaurant:")}</span> {getRestaurantLabelById(nextScheduledShift.restaurant_id)}
                     </p>
                     <p>
                       <span className="font-semibold">{t("Inicio:", "Start:")}</span> {formatDateTime(nextScheduledShift.scheduled_start)}
@@ -1454,7 +1654,7 @@ export default function ShiftsPage() {
                     <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
                     {presenceRestaurants.map(restaurant => (
                       <option key={restaurant.id} value={restaurant.id}>
-                        {restaurant.name}
+                        {formatRestaurantLabel(knownRestaurantsById.get(restaurant.id)) || restaurant.name}
                       </option>
                     ))}
                   </select>
@@ -1801,7 +2001,7 @@ export default function ShiftsPage() {
                             overlayLines={[
                               `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
                               `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Restaurante", "Restaurant")}: ${selectedTask?.restaurant_id ?? "-"}`,
+                              `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
                               `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
                               `${t("Tarea", "Task")}: ${selectedTaskId}`,
                               `${t("Toma", "Shot")}: close_up`,
@@ -1819,7 +2019,7 @@ export default function ShiftsPage() {
                             overlayLines={[
                               `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
                               `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Restaurante", "Restaurant")}: ${selectedTask?.restaurant_id ?? "-"}`,
+                              `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
                               `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
                               `${t("Tarea", "Task")}: ${selectedTaskId}`,
                               `${t("Toma", "Shot")}: mid_range`,
@@ -1837,7 +2037,7 @@ export default function ShiftsPage() {
                             overlayLines={[
                               `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
                               `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Restaurante", "Restaurant")}: ${selectedTask?.restaurant_id ?? "-"}`,
+                              `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
                               `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
                               `${t("Tarea", "Task")}: ${selectedTaskId}`,
                               `${t("Toma", "Shot")}: wide_general`,
@@ -2040,7 +2240,7 @@ export default function ShiftsPage() {
                   <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
                   {staffRestaurants.map(item => (
                     <option key={item.id} value={item.id}>
-                      {item.name}
+                      {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
                     </option>
                   ))}
                 </select>
@@ -2107,7 +2307,7 @@ export default function ShiftsPage() {
                   <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
                   {staffRestaurants.map(item => (
                     <option key={item.id} value={item.id}>
-                      {item.name}
+                      {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
                     </option>
                   ))}
                 </select>
@@ -2141,6 +2341,131 @@ export default function ShiftsPage() {
                   {supervisorScheduling ? t("Programando...", "Scheduling...") : t("Programar turno", "Schedule shift")}
                 </Button>
               </div>
+
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
+                <p className="text-xs text-slate-500">
+                  {t("Genera turnos por rango y dias de semana, o agrega bloques manuales.", "Generate shifts by date range and weekdays, or add manual blocks.")}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("day")}>
+                    {t("1 dia (hoy)", "1 day (today)")}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("week")}>
+                    {t("1 semana", "1 week")}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("month")}>
+                    {t("1 mes", "1 month")}
+                  </Button>
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <input
+                    type="date"
+                    value={supervisorBulkRangeStart}
+                    onChange={event => setSupervisorBulkRangeStart(event.target.value)}
+                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  />
+                  <input
+                    type="date"
+                    value={supervisorBulkRangeEnd}
+                    onChange={event => setSupervisorBulkRangeEnd(event.target.value)}
+                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  />
+                  <input
+                    type="time"
+                    value={supervisorBulkStartTime}
+                    onChange={event => setSupervisorBulkStartTime(event.target.value)}
+                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  />
+                  <input
+                    type="time"
+                    value={supervisorBulkEndTime}
+                    onChange={event => setSupervisorBulkEndTime(event.target.value)}
+                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {weekdayOptions.map(day => {
+                    const active = supervisorBulkWeekdays.includes(day.value)
+                    return (
+                      <Button
+                        key={day.value}
+                        size="sm"
+                        variant={active ? "secondary" : "ghost"}
+                        onClick={() => handleToggleSupervisorBulkWeekday(day.value)}
+                      >
+                        {day.label}
+                      </Button>
+                    )
+                  })}
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" onClick={handleGenerateSupervisorScheduleBlocks}>
+                    {t("Generar por rango", "Generate by range")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setSupervisorScheduleBlocks(prev => [
+                        ...prev,
+                        { id: Date.now() + Math.floor(Math.random() * 1000), start: "", end: "" },
+                      ])
+                    }
+                  >
+                    {t("Agregar bloque manual", "Add manual block")}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={handleClearSupervisorScheduleBlocks}>
+                    {t("Limpiar bloques", "Clear blocks")}
+                  </Button>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {supervisorScheduleBlocks.length === 0 ? (
+                    <p className="text-xs text-slate-500">{t("No hay bloques agregados.", "No blocks added.")}</p>
+                  ) : (
+                    supervisorScheduleBlocks.map(block => (
+                      <div key={block.id} className="grid gap-2 sm:grid-cols-3">
+                        <input
+                          type="datetime-local"
+                          value={block.start}
+                          onChange={event =>
+                            setSupervisorScheduleBlocks(prev =>
+                              prev.map(item => (item.id === block.id ? { ...item, start: event.target.value } : item))
+                            )
+                          }
+                          className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                        />
+                        <input
+                          type="datetime-local"
+                          value={block.end}
+                          onChange={event =>
+                            setSupervisorScheduleBlocks(prev =>
+                              prev.map(item => (item.id === block.id ? { ...item, end: event.target.value } : item))
+                            )
+                          }
+                          className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                        />
+                        <Button size="sm" variant="ghost" onClick={() => handleRemoveSupervisorScheduleBlock(block.id)}>
+                          {t("Quitar", "Remove")}
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-500">
+                    {t("Bloques listos", "Ready blocks")}: {supervisorScheduleBlocks.length}
+                  </span>
+                  <Button size="sm" onClick={() => void handleScheduleSupervisorShiftBulk()} disabled={supervisorBulkScheduling}>
+                    {supervisorBulkScheduling ? t("Guardando lote...", "Saving bulk...") : t("Programar lote", "Schedule bulk")}
+                  </Button>
+                </div>
+              </div>
             </Card>
 
             {isSupervisora && (
@@ -2155,7 +2480,7 @@ export default function ShiftsPage() {
                       <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
                       {presenceRestaurants.map(restaurant => (
                         <option key={restaurant.id} value={restaurant.id}>
-                          {restaurant.name}
+                          {formatRestaurantLabel(knownRestaurantsById.get(restaurant.id)) || restaurant.name}
                         </option>
                       ))}
                     </select>
@@ -2203,7 +2528,7 @@ export default function ShiftsPage() {
                       overlayLines={[
                         `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
                         `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                        `${t("Restaurante", "Restaurant")}: ${presenceRestaurantId ?? "-"}`,
+                        `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(presenceRestaurantId)}`,
                         `${t("Turno", "Shift")}: ${t("supervision", "supervision")}-${presencePhase}`,
                         `${t("Fase de supervision", "Supervisor phase")}: ${presencePhase}`,
                         presenceCoords
@@ -2229,7 +2554,7 @@ export default function ShiftsPage() {
                     <ul className="space-y-1 text-slate-600">
                       {supervisorPresence.slice(0, 6).map(item => (
                         <li key={item.id}>
-                          {formatDateTime(item.recorded_at)} | {t("Restaurante", "Restaurant")} #{item.restaurant_id} | {t("Fase", "Phase")}: {item.phase}
+                          {formatDateTime(item.recorded_at)} | {t("Restaurante", "Restaurant")}: {getRestaurantLabelById(item.restaurant_id)} | {t("Fase", "Phase")}: {item.phase}
                         </li>
                       ))}
                     </ul>
@@ -2283,7 +2608,7 @@ export default function ShiftsPage() {
                     const editing = editingSupervisionScheduledId === item.id
                     return (
                       <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm">
-                        <p className="font-medium text-slate-800">#{item.id} | {t("Empleado", "Employee")}: {item.employee_id.slice(0, 8)} | {t("Restaurante", "Restaurant")}: {item.restaurant_id}</p>
+                        <p className="font-medium text-slate-800">#{item.id} | {t("Empleado", "Employee")}: {item.employee_id.slice(0, 8)} | {t("Restaurante", "Restaurant")}: {getRestaurantLabelById(item.restaurant_id)}</p>
                         {!editing ? (
                           <>
                             <p className="text-slate-600">

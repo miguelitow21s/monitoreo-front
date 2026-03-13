@@ -50,11 +50,6 @@ export default function AdminPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
         <section className="space-y-4">
-          <Card
-            title={t("Centro de administracion", "Administration center")}
-            subtitle={t("Vista ejecutiva para super_admin.", "Executive view for super_admin.")}
-          />
-
           {loading ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {Array.from({ length: 4 }).map((_, index) => (
@@ -71,7 +66,6 @@ export default function AdminPage() {
 
           <Card
             title={t("Acciones administrativas", "Administrative actions")}
-            subtitle={t("Atajos para funciones criticas de super_admin.", "Shortcuts for critical super_admin flows.")}
           >
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {actions.map(action => (

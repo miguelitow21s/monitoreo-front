@@ -29,6 +29,11 @@ import {
 import { useI18n } from "@/hooks/useI18n"
 import { ROLES, Role } from "@/utils/permissions"
 import { normalizePhoneForOtp } from "@/utils/phone"
+import {
+  generateScheduleBlocksFromRange,
+  getSchedulePresetRange,
+  ScheduleQuickPreset,
+} from "@/utils/scheduling"
 
 const roleOptions: Role[] = [ROLES.EMPLEADO, ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]
 const roleLabels: Record<Role, { es: string; en: string }> = {
@@ -43,6 +48,39 @@ function roleRequiresOtpPhone(role: Role | null | undefined) {
 
 function escapeCsvValue(value: string) {
   return `"${value.replaceAll('"', '""')}"`
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function daysFromToday(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return toDateInputValue(date)
+}
+
+function formatRestaurantAddress(restaurant: Restaurant | null | undefined) {
+  if (!restaurant) return ""
+  return [
+    restaurant.address_line,
+    restaurant.city,
+    restaurant.state,
+    restaurant.postal_code,
+    restaurant.country,
+  ]
+    .map(item => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean)
+    .join(", ")
+}
+
+function formatRestaurantLabel(restaurant: Restaurant | null | undefined) {
+  if (!restaurant) return ""
+  const address = formatRestaurantAddress(restaurant)
+  return address ? `${restaurant.name} - ${address}` : restaurant.name
 }
 
 export default function UsersPage() {
@@ -61,6 +99,11 @@ export default function UsersPage() {
   const [scheduleNotes, setScheduleNotes] = useState("")
   const [scheduledLimit, setScheduledLimit] = useState(40)
   const [scheduleBlocks, setScheduleBlocks] = useState<Array<{ id: number; start: string; end: string }>>([])
+  const [bulkRangeStart, setBulkRangeStart] = useState("")
+  const [bulkRangeEnd, setBulkRangeEnd] = useState("")
+  const [bulkStartTime, setBulkStartTime] = useState("08:00")
+  const [bulkEndTime, setBulkEndTime] = useState("16:00")
+  const [bulkWeekdays, setBulkWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
   const [savingBulk, setSavingBulk] = useState(false)
   const [editingScheduledId, setEditingScheduledId] = useState<number | null>(null)
   const [editScheduledStart, setEditScheduledStart] = useState("")
@@ -99,6 +142,11 @@ export default function UsersPage() {
     if (!isAuthenticated || !session?.access_token) return
     void loadData()
   }, [authLoading, isAuthenticated, session?.access_token, loadData])
+
+  useEffect(() => {
+    if (!bulkRangeStart) setBulkRangeStart(daysFromToday(0))
+    if (!bulkRangeEnd) setBulkRangeEnd(daysFromToday(30))
+  }, [bulkRangeStart, bulkRangeEnd])
 
   const handleRoleChange = async (id: string, role: Role) => {
     try {
@@ -220,6 +268,82 @@ export default function UsersPage() {
     setScheduleBlocks(prev => prev.filter(item => item.id !== blockId))
   }
 
+  const handleToggleBulkWeekday = (day: number) => {
+    setBulkWeekdays(prev => {
+      if (prev.includes(day)) return prev.filter(item => item !== day)
+      return [...prev, day].sort((a, b) => a - b)
+    })
+  }
+
+  const appendGeneratedScheduleBlocks = (generated: Array<{ startLocal: string; endLocal: string }>) => {
+    if (generated.length === 0) {
+      showToast("info", t("No se pudieron generar bloques con esos criterios.", "Could not generate schedule blocks with those criteria."))
+      return
+    }
+
+    let addedCount = 0
+    setScheduleBlocks(prev => {
+      const seen = new Set(prev.map(item => `${item.start}|${item.end}`))
+      const next = [...prev]
+
+      for (const item of generated) {
+        const key = `${item.startLocal}|${item.endLocal}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        next.push({
+          id: Date.now() + next.length + Math.floor(Math.random() * 1000),
+          start: item.startLocal,
+          end: item.endLocal,
+        })
+        addedCount += 1
+      }
+
+      return next
+    })
+
+    if (addedCount === 0) {
+      showToast("info", t("Los bloques ya existian en la lista.", "Those blocks already exist in the list."))
+      return
+    }
+
+    showToast("success", t(`${addedCount} bloque(s) agregados.`, `${addedCount} block(s) added.`))
+  }
+
+  const handleGenerateBlocksFromRange = () => {
+    const generated = generateScheduleBlocksFromRange({
+      startDate: bulkRangeStart,
+      endDate: bulkRangeEnd,
+      startTime: bulkStartTime,
+      endTime: bulkEndTime,
+      weekdays: bulkWeekdays,
+      maxEntries: 200,
+    })
+
+    appendGeneratedScheduleBlocks(generated)
+  }
+
+  const handleApplyBulkPreset = (preset: ScheduleQuickPreset) => {
+    const range = getSchedulePresetRange(preset)
+    setBulkRangeStart(range.startDate)
+    setBulkRangeEnd(range.endDate)
+    setBulkWeekdays(range.weekdays)
+
+    const generated = generateScheduleBlocksFromRange({
+      startDate: range.startDate,
+      endDate: range.endDate,
+      startTime: bulkStartTime,
+      endTime: bulkEndTime,
+      weekdays: range.weekdays,
+      maxEntries: 200,
+    })
+
+    appendGeneratedScheduleBlocks(generated)
+  }
+
+  const handleClearScheduleBlocks = () => {
+    setScheduleBlocks([])
+  }
+
   const handleAssignScheduledShiftBulk = async () => {
     if (!scheduleEmployeeId || !scheduleRestaurantId) {
       showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
@@ -235,6 +359,10 @@ export default function UsersPage() {
 
     if (validBlocks.length === 0) {
       showToast("info", t("Agrega al menos un bloque de fecha/hora valido.", "Add at least one valid date/time block."))
+      return
+    }
+    if (validBlocks.length > 200) {
+      showToast("info", t("El lote permite maximo 200 turnos por envio.", "Bulk scheduling allows a maximum of 200 shifts per request."))
       return
     }
 
@@ -311,6 +439,15 @@ export default function UsersPage() {
 
   const usersById = new Map(rows.map(item => [item.id, item]))
   const restaurantsById = new Map(restaurants.map(item => [String(item.id), item]))
+  const weekdayOptions = [
+    { value: 1, label: t("Lun", "Mon") },
+    { value: 2, label: t("Mar", "Tue") },
+    { value: 3, label: t("Mie", "Wed") },
+    { value: 4, label: t("Jue", "Thu") },
+    { value: 5, label: t("Vie", "Fri") },
+    { value: 6, label: t("Sab", "Sat") },
+    { value: 0, label: t("Dom", "Sun") },
+  ]
   const otpPhoneMissingRows = rows.filter(item => {
     if (!roleRequiresOtpPhone(item.role)) return false
     return !item.phone_number?.trim()
@@ -588,7 +725,7 @@ export default function UsersPage() {
                   >
                     {restaurants.map(item => (
                       <option key={item.id} value={item.id}>
-                        {item.name}
+                        {formatRestaurantLabel(item)}
                       </option>
                     ))}
                   </select>
@@ -622,7 +759,73 @@ export default function UsersPage() {
 
                 <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
-                  <p className="text-xs text-slate-500">{t("Agrega varios bloques para distintos dias u horas.", "Add multiple blocks for different days or hours.")}</p>
+                  <p className="text-xs text-slate-500">{t("Genera turnos por rango y dias de semana, o agrega bloques manuales.", "Generate shifts by date range and weekdays, or add manual blocks.")}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => handleApplyBulkPreset("day")}>
+                      {t("1 dia (hoy)", "1 day (today)")}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleApplyBulkPreset("week")}>
+                      {t("1 semana", "1 week")}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleApplyBulkPreset("month")}>
+                      {t("1 mes", "1 month")}
+                    </Button>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <input
+                      type="date"
+                      value={bulkRangeStart}
+                      onChange={event => setBulkRangeStart(event.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    />
+                    <input
+                      type="date"
+                      value={bulkRangeEnd}
+                      onChange={event => setBulkRangeEnd(event.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    />
+                    <input
+                      type="time"
+                      value={bulkStartTime}
+                      onChange={event => setBulkStartTime(event.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    />
+                    <input
+                      type="time"
+                      value={bulkEndTime}
+                      onChange={event => setBulkEndTime(event.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    />
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {weekdayOptions.map(day => {
+                      const active = bulkWeekdays.includes(day.value)
+                      return (
+                        <Button
+                          key={day.value}
+                          size="sm"
+                          variant={active ? "secondary" : "ghost"}
+                          onClick={() => handleToggleBulkWeekday(day.value)}
+                        >
+                          {day.label}
+                        </Button>
+                      )
+                    })}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="secondary" onClick={handleGenerateBlocksFromRange}>
+                      {t("Generar por rango", "Generate by range")}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleAddScheduleBlock}>
+                      {t("Agregar bloque manual", "Add manual block")}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleClearScheduleBlocks}>
+                      {t("Limpiar bloques", "Clear blocks")}
+                    </Button>
+                  </div>
 
                   <div className="mt-2 space-y-2">
                     {scheduleBlocks.length === 0 && (
@@ -649,10 +852,10 @@ export default function UsersPage() {
                     ))}
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" variant="secondary" onClick={handleAddScheduleBlock}>
-                      {t("Agregar bloque", "Add block")}
-                    </Button>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-slate-500">
+                      {t("Bloques listos", "Ready blocks")}: {scheduleBlocks.length}
+                    </span>
                     <Button size="sm" onClick={() => void handleAssignScheduledShiftBulk()} disabled={savingBulk}>
                       {savingBulk ? t("Guardando lote...", "Saving bulk...") : t("Programar lote", "Schedule bulk")}
                     </Button>
@@ -672,7 +875,7 @@ export default function UsersPage() {
                         return (
                           <div key={item.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
                             <p className="font-medium text-slate-800">
-                              {employee?.full_name ?? employee?.email ?? item.employee_id} - {restaurant?.name ?? `#${item.restaurant_id}`}
+                              {employee?.full_name ?? employee?.email ?? item.employee_id} - {formatRestaurantLabel(restaurant) || `#${item.restaurant_id}`}
                             </p>
                             {!editing ? (
                               <>

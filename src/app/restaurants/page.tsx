@@ -87,6 +87,20 @@ function parseNullableNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function buildRestaurantAddressLabel(restaurant: Pick<Restaurant, "address_line" | "city" | "state" | "postal_code" | "country">) {
+  const parts = [
+    restaurant.address_line,
+    restaurant.city,
+    restaurant.state,
+    restaurant.postal_code,
+    restaurant.country,
+  ]
+    .map(item => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean)
+
+  return parts.join(", ")
+}
+
 function buildMapPreviewUrl(lat: number, lng: number) {
   const delta = 0.005
   const left = lng - delta
@@ -1210,42 +1224,47 @@ export default function RestaurantsPage() {
                   />
                 ) : (
                   <div className="space-y-3">
-                    {rows.map(item => (
-                      <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-slate-900">{item.name}</p>
-                            <p className="text-sm text-slate-600">
-                              Lat: {item.lat ?? "-"} | Lng: {item.lng ?? "-"} | {t("Radio", "Radius")}:{" "}
-                              {item.geofence_radius_m ?? "-"} m
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {t("Estado", "Status")}: {item.is_active === false ? t("Inactivo", "Inactive") : t("Activo", "Active")}
-                            </p>
+                    {rows.map(item => {
+                      const addressLabel = buildRestaurantAddressLabel(item)
+                      return (
+                        <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-slate-900">{item.name}</p>
+                              <p className="text-sm text-slate-600">
+                                {addressLabel || t("Direccion pendiente por definir.", "Address pending definition.")}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {t("Radio", "Radius")}: {item.geofence_radius_m ?? "-"} m
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {t("Estado", "Status")}: {item.is_active === false ? t("Inactivo", "Inactive") : t("Activo", "Active")}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                defaultValue={String(item.geofence_radius_m ?? 100)}
+                                className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                                onBlur={event => void handleRadiusUpdate(item, event.target.value)}
+                              />
+                              <span className="text-xs text-slate-500">m</span>
+                              <Button
+                                size="sm"
+                                variant={item.is_active === false ? "secondary" : "ghost"}
+                                onClick={() => void handleToggleRestaurantActive(item)}
+                              >
+                                {item.is_active === false ? t("Activar", "Enable") : t("Desactivar", "Disable")}
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <input
-                              defaultValue={String(item.geofence_radius_m ?? 100)}
-                              className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                              onBlur={event => void handleRadiusUpdate(item, event.target.value)}
-                            />
-                            <span className="text-xs text-slate-500">m</span>
-                            <Button
-                              size="sm"
-                              variant={item.is_active === false ? "secondary" : "ghost"}
-                              onClick={() => void handleToggleRestaurantActive(item)}
-                            >
-                              {item.is_active === false ? t("Activar", "Enable") : t("Desactivar", "Disable")}
-                            </Button>
-                          </div>
+                          {(assignments[item.id] ?? []).length > 0 && (
+                            <p className="mt-2 text-xs text-slate-500">
+                              {t("Empleados asignados", "Assigned employees")}: {(assignments[item.id] ?? []).length}
+                            </p>
+                          )}
                         </div>
-                        {(assignments[item.id] ?? []).length > 0 && (
-                          <p className="mt-2 text-xs text-slate-500">
-                            {t("Empleados asignados", "Assigned employees")}: {(assignments[item.id] ?? []).length}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </Card>

@@ -10,11 +10,6 @@ import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
 import { AuditEvent, DashboardMetric, fetchAuditEvents, fetchDashboardMetrics } from "@/services/dashboard.service"
 import { EmployeeDashboardData, getEmployeeSelfDashboard } from "@/services/employeeSelfService.service"
-import {
-  IntegrationCheckResult,
-  runBackendIntegrationChecks,
-} from "@/services/integrationChecks.service"
-import Badge from "@/components/ui/Badge"
 import Button from "@/components/ui/Button"
 import Card from "@/components/ui/Card"
 import EmptyState from "@/components/ui/EmptyState"
@@ -30,9 +25,6 @@ export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetric[]>([])
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   const [loadingData, setLoadingData] = useState(true)
-  const [runningChecks, setRunningChecks] = useState(false)
-  const [checkResults, setCheckResults] = useState<IntegrationCheckResult[]>([])
-  const [lastChecksAt, setLastChecksAt] = useState<string | null>(null)
   const [employeeHome, setEmployeeHome] = useState<EmployeeDashboardData | null>(null)
 
   const roleSummary = isSuperAdmin
@@ -84,25 +76,6 @@ export default function DashboardPage() {
     if (!isAuthenticated || !session?.access_token) return
     void loadData()
   }, [loading, authLoading, isAuthenticated, session?.access_token, loadData])
-
-  const runChecks = useCallback(async () => {
-    setRunningChecks(true)
-    try {
-      const results = await runBackendIntegrationChecks()
-      setCheckResults(results)
-      setLastChecksAt(new Date().toISOString())
-      const failures = results.filter(item => item.status === "fail").length
-      if (failures > 0) {
-        showToast("error", t(`${failures} validaciones de backend fallaron.`, `${failures} backend validations failed.`))
-      } else {
-        showToast("success", t("Validaciones de backend completadas.", "Backend validations completed."))
-      }
-    } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : t("No se pudieron ejecutar las validaciones.", "Could not run validations."))
-    } finally {
-      setRunningChecks(false)
-    }
-  }, [showToast, t])
 
   const localizedMetrics = useMemo(
     () =>
@@ -218,48 +191,6 @@ export default function DashboardPage() {
                     <p className="font-semibold text-slate-800">#{employeeHome.active_shift?.id ?? "-"}</p>
                   </div>
                 </div>
-              </Card>
-            )}
-
-            {(isSuperAdmin || isSupervisora) && (
-              <Card
-                title={t("Validacion de integracion backend", "Backend integration validation")}
-                subtitle={t("Validacion en tiempo real de contratos Edge antes de liberar.", "Real-time validation of Edge contracts before release.")}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button onClick={() => void runChecks()} disabled={runningChecks} variant="secondary">
-                    {runningChecks ? t("Ejecutando...", "Running...") : t("Ejecutar validaciones", "Run validations")}
-                  </Button>
-                  {checkResults.length > 0 && lastChecksAt && (
-                    <span className="text-xs text-slate-500">
-                      {t("Ultima ejecucion", "Last run")}: {formatDateTime(lastChecksAt)}
-                    </span>
-                  )}
-                </div>
-
-                {checkResults.length > 0 && (
-                  <ul className="mt-4 space-y-2 text-sm">
-                    {checkResults.map(item => (
-                      <li key={item.endpoint} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                        <div>
-                          <p className="font-medium text-slate-800">{item.endpoint}</p>
-                          <p className="text-xs text-slate-500">{item.detail}</p>
-                        </div>
-                        <Badge
-                          variant={
-                            item.status === "pass"
-                              ? "success"
-                              : item.status === "warn"
-                                ? "warning"
-                                : "danger"
-                          }
-                        >
-                          {item.status === "pass" ? "OK" : item.status === "warn" ? t("ALERTA", "WARN") : t("FALLO", "FAIL")}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </Card>
             )}
 
