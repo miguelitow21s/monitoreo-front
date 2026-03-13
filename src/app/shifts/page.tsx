@@ -1425,7 +1425,10 @@ export default function ShiftsPage() {
     } catch (error: unknown) {
       const message = extractErrorMessage(error, "")
       const normalized = message.toLowerCase()
-      if (normalized.includes("409") || normalized.includes("conflict")) {
+      const status = typeof (error as { status?: unknown }).status === "number" ? (error as { status?: number }).status : undefined
+      const code =
+        typeof (error as { code?: unknown }).code === "string" ? (error as { code?: string }).code : undefined
+      if (status === 409 || code === "409" || normalized.includes("409") || normalized.includes("conflict")) {
         // Treat as already registered on backend.
         setLocalStartEvidenceShiftId(activeShift.id)
         setStartRecoveryPhoto(null)
