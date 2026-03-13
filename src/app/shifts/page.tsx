@@ -1424,7 +1424,19 @@ export default function ShiftsPage() {
       await loadEmployeeSelfServiceDashboard()
     } catch (error: unknown) {
       const message = extractErrorMessage(error, "")
-      if (message.toLowerCase().includes("otp")) {
+      const normalized = message.toLowerCase()
+      if (normalized.includes("409") || normalized.includes("conflict")) {
+        // Treat as already registered on backend.
+        setLocalStartEvidenceShiftId(activeShift.id)
+        setStartRecoveryPhoto(null)
+        setStartEvidenceUploadError(null)
+        showToast(
+          "success",
+          t("Evidencia de inicio ya estaba registrada.", "Start evidence was already registered.")
+        )
+        return
+      }
+      if (normalized.includes("otp")) {
         setShiftOtpReady(false)
         showToast(
           "error",
