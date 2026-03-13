@@ -50,7 +50,6 @@ export function useRole() {
 
   useEffect(() => {
     let mounted = true
-    let roleChannel: ReturnType<typeof supabase.channel> | null = null
 
     const loadRoleFromProfile = async () => {
       if (!user?.id) {
@@ -80,44 +79,19 @@ export function useRole() {
         setProfileRole(null)
       }
       setLoadingRole(false)
-
-      roleChannel = supabase
-        .channel(`role-profile-${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "profiles",
-            filter: `id=eq.${user.id}`,
-          },
-          payload => {
-            if (!mounted) return
-            if ((payload.new as { is_active?: unknown } | null)?.is_active === false) {
-              setProfileRole(null)
-              void supabase.auth.signOut()
-              return
-            }
-            const nextRole = normalizeRole((payload.new as { role?: unknown } | null)?.role)
-            setProfileRole(nextRole ?? null)
-          }
-        )
-        .subscribe()
     }
 
     void loadRoleFromProfile()
 
     return () => {
       mounted = false
-      if (roleChannel) {
-        void supabase.removeChannel(roleChannel)
-      }
     }
   }, [user?.id])
 
   const metadataRole = normalizeRole(user?.user_metadata?.role)
-  // Source of truth is profiles.role (updated by admin flows). Metadata is fallback only.
-  const role = profileRole ?? metadataRole ?? undefined
+  // Source of truth is always profiles.role for authenticated users.
+  // Metadata fallback is only used when there is no authenticated user yet.
+  const role = user?.id ? (profileRole ?? undefined) : metadataRole ?? undefined
 
   return {
     role,

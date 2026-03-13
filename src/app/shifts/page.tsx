@@ -93,6 +93,13 @@ const TASK_SHOT_ORDER: Record<string, number> = {
 }
 
 type TaskEvidenceShotKey = "close_up" | "mid_range" | "wide_general"
+type ScheduleTaskDraft = {
+  id: number
+  title: string
+  description: string
+  priority: TaskPriority
+  dueAt: string
+}
 
 function formatDuration(start: string, end: string | null) {
   const startDate = new Date(start).getTime()
@@ -203,7 +210,7 @@ function formatRestaurantLabel(restaurant: Restaurant | null | undefined) {
 }
 
 export default function ShiftsPage() {
-  const { isEmpleado, isSupervisora, isSuperAdmin } = useRole()
+  const { loading: roleLoading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
   const { formatDateTime: formatDateTimeI18n, t } = useI18n()
   const { showToast } = useToast()
 
@@ -301,6 +308,7 @@ export default function ShiftsPage() {
   const [supervisorBulkEndTime, setSupervisorBulkEndTime] = useState("16:00")
   const [supervisorBulkWeekdays, setSupervisorBulkWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
   const [supervisorBulkScheduling, setSupervisorBulkScheduling] = useState(false)
+  const [supervisorScheduleTaskDrafts, setSupervisorScheduleTaskDrafts] = useState<ScheduleTaskDraft[]>([])
 
   const healthAnswered = activeShift ? endFitForWork !== null : startFitForWork !== null
   const healthDeclarationRequired =
@@ -312,20 +320,18 @@ export default function ShiftsPage() {
   const startChecklistComplete = startPpeReady !== null && startNoSymptoms !== null
   const endChecklistComplete = endIncidentsOccurred !== null && endAreaDelivered !== null
 
-  const supervisorRestaurantSelected = !isSupervisora || !!supervisorShiftRestaurantId
   const canSubmit =
     !!coords &&
     !!photo &&
     !processing &&
     shiftOtpReady &&
     healthAnswered &&
-    supervisorRestaurantSelected &&
     (!healthDeclarationRequired || healthDeclarationProvided) &&
     (activeShift ? endChecklistComplete : startChecklistComplete)
 
-  const canOperateEmployee = isEmpleado
-  const canOperateShift = isEmpleado || isSupervisora
-  const canOperateSupervisor = isSupervisora || isSuperAdmin
+  const canOperateEmployee = !roleLoading && isEmpleado
+  const canOperateShift = !roleLoading && (isEmpleado || isSupervisora)
+  const canOperateSupervisor = !roleLoading && (isSupervisora || isSuperAdmin)
   const canOperateOtp = canOperateShift || canOperateSupervisor
   const weekdayOptions = [
     { value: 1, label: t("Lun", "Mon") },
@@ -397,11 +403,6 @@ export default function ShiftsPage() {
     return knownRestaurants.find(item => Number(item.id) === Number(currentRestaurantId)) ?? null
   }, [knownRestaurants, scheduledShifts])
 
-  const supervisorSelectedRestaurant = useMemo(() => {
-    if (!supervisorShiftRestaurantId) return null
-    return knownRestaurants.find(item => Number(item.id) === Number(supervisorShiftRestaurantId)) ?? null
-  }, [knownRestaurants, supervisorShiftRestaurantId])
-
   const knownRestaurantsById = useMemo(
     () => new Map(knownRestaurants.map(item => [Number(item.id), item])),
     [knownRestaurants]
@@ -449,7 +450,27 @@ export default function ShiftsPage() {
     [knownRestaurantsById]
   )
 
-  const geofenceTarget = isSupervisora ? supervisorSelectedRestaurant : currentScheduledRestaurant
+  const expectedRestaurantId = useMemo(() => {
+    if (currentScheduledRestaurant?.id) return Number(currentScheduledRestaurant.id)
+    if (nextScheduledShift?.restaurant_id) return Number(nextScheduledShift.restaurant_id)
+    if (isSupervisora && presenceRestaurantId) return presenceRestaurantId
+    if (isSupervisora && supervisorShiftRestaurantId) return supervisorShiftRestaurantId
+    return null
+  }, [
+    currentScheduledRestaurant,
+    isSupervisora,
+    nextScheduledShift,
+    presenceRestaurantId,
+    supervisorShiftRestaurantId,
+  ])
+
+  const geofenceTarget = useMemo(() => {
+    if (isSupervisora) {
+      if (!expectedRestaurantId) return null
+      return knownRestaurantsById.get(Number(expectedRestaurantId)) ?? null
+    }
+    return currentScheduledRestaurant
+  }, [currentScheduledRestaurant, expectedRestaurantId, isSupervisora, knownRestaurantsById])
 
   const geofenceValidation = useMemo(() => {
     if (
@@ -475,13 +496,6 @@ export default function ShiftsPage() {
     }
   }, [coords, geofenceTarget])
 
-  const expectedRestaurantId = useMemo(() => {
-    if (isSupervisora && supervisorShiftRestaurantId) return supervisorShiftRestaurantId
-    if (currentScheduledRestaurant?.id) return Number(currentScheduledRestaurant.id)
-    if (nextScheduledShift?.restaurant_id) return Number(nextScheduledShift.restaurant_id)
-    return null
-  }, [currentScheduledRestaurant, isSupervisora, nextScheduledShift, supervisorShiftRestaurantId])
-
   const selectedTask = useMemo(
     () => employeeTasks.find(task => task.id === selectedTaskId) ?? null,
     [employeeTasks, selectedTaskId]
@@ -491,9 +505,12 @@ export default function ShiftsPage() {
     const blockers: string[] = []
     if (!coords) blockers.push(t("Debes capturar la ubicacion GPS.", "You must capture GPS location."))
     if (coords?.isMocked) blockers.push(t("Se detecto una fuente GPS sospechosa. Desactiva ubicacion simulada antes de registrar.", "Suspicious GPS source detected. Disable simulated location before registering."))
-    if (isSupervisora && !supervisorShiftRestaurantId) {
+    if (isSupervisora && !expectedRestaurantId) {
       blockers.push(
-        t("Selecciona un restaurante para tu turno.", "Select a restaurant for your shift.")
+        t(
+          "No se encontro restaurante programado para tu turno. Valida la asignacion en programacion.",
+          "No scheduled restaurant was found for your shift. Check schedule assignment."
+        )
       )
     }
     if (typeof coords?.accuracyMeters === "number" && coords.accuracyMeters > MAX_GPS_ACCURACY_METERS) {
@@ -565,7 +582,7 @@ export default function ShiftsPage() {
     endChecklistComplete,
     geofenceValidation,
     isSupervisora,
-    supervisorShiftRestaurantId,
+    expectedRestaurantId,
     t,
   ])
 
@@ -665,37 +682,43 @@ export default function ShiftsPage() {
   }, [canOperateSupervisor, isSuperAdmin, showToast, t])
 
   useEffect(() => {
+    if (roleLoading) return
     if (!canOperateShift) return
     void loadEmployeeData(historyPage, { includeSchedule: isEmpleado })
-  }, [historyPage, canOperateShift, isEmpleado, loadEmployeeData])
+  }, [historyPage, canOperateShift, isEmpleado, loadEmployeeData, roleLoading])
 
   useEffect(() => {
+    if (roleLoading) return
     if (!canOperateOtp) return
     getOrCreateDeviceFingerprint()
     setShiftOtpReady(Boolean(getShiftOtpToken()))
-  }, [canOperateOtp])
+  }, [canOperateOtp, roleLoading])
 
   useEffect(() => {
+    if (roleLoading) return
     if (!canOperateSupervisor) return
     void loadSupervisorData()
-  }, [canOperateSupervisor, loadSupervisorData])
+  }, [canOperateSupervisor, loadSupervisorData, roleLoading])
 
   useEffect(() => {
+    if (roleLoading) return
     if (!canOperateSupervisor) return
     void loadSupervisionScheduledShifts()
-  }, [canOperateSupervisor, loadSupervisionScheduledShifts])
+  }, [canOperateSupervisor, loadSupervisionScheduledShifts, roleLoading])
 
   useEffect(() => {
+    if (roleLoading) return
     if (!canOperateSupervisor) return
     void loadPresenceRestaurants()
-  }, [canOperateSupervisor, loadPresenceRestaurants])
+  }, [canOperateSupervisor, loadPresenceRestaurants, roleLoading])
 
   useEffect(() => {
     if (!isSupervisora) return
-    if (supervisorShiftRestaurantId) return
-    if (presenceRestaurants.length === 0) return
-    setSupervisorShiftRestaurantId(presenceRestaurants[0].id)
-  }, [isSupervisora, presenceRestaurants, supervisorShiftRestaurantId])
+    const autoRestaurantId =
+      Number(currentScheduledRestaurant?.id ?? nextScheduledShift?.restaurant_id ?? presenceRestaurants[0]?.id ?? 0) || null
+    if (!autoRestaurantId) return
+    setSupervisorShiftRestaurantId(prev => (prev === autoRestaurantId ? prev : autoRestaurantId))
+  }, [currentScheduledRestaurant?.id, isSupervisora, nextScheduledShift?.restaurant_id, presenceRestaurants])
 
   useEffect(() => {
     if (!supervisorBulkRangeStart) setSupervisorBulkRangeStart(daysFromToday(0))
@@ -703,8 +726,9 @@ export default function ShiftsPage() {
   }, [supervisorBulkRangeStart, supervisorBulkRangeEnd])
 
   useEffect(() => {
+    if (roleLoading) return
     void loadKnownRestaurants()
-  }, [loadKnownRestaurants])
+  }, [loadKnownRestaurants, roleLoading])
 
   useEffect(() => {
     let mounted = true
@@ -722,6 +746,7 @@ export default function ShiftsPage() {
   }, [])
 
   const loadTasks = useCallback(async () => {
+    if (roleLoading) return
     setLoadingTasks(true)
     try {
       if (canOperateEmployee) {
@@ -742,9 +767,10 @@ export default function ShiftsPage() {
     } finally {
       setLoadingTasks(false)
     }
-  }, [canOperateEmployee, canOperateSupervisor, presenceRestaurants, showToast, staffRestaurantId, t])
+  }, [canOperateEmployee, canOperateSupervisor, presenceRestaurants, roleLoading, showToast, staffRestaurantId, t])
 
   const loadEmployeeSelfServiceDashboard = useCallback(async () => {
+    if (roleLoading) return
     if (!canOperateEmployee) return
     try {
       const payload = await getEmployeeSelfDashboard()
@@ -752,7 +778,7 @@ export default function ShiftsPage() {
     } catch {
       // Keep UX resilient while backend rollout converges.
     }
-  }, [canOperateEmployee])
+  }, [canOperateEmployee, roleLoading])
 
   const loadPresenceLogs = useCallback(async () => {
     if (!canOperateSupervisor) return
@@ -824,8 +850,9 @@ export default function ShiftsPage() {
   }, [canOperateSupervisor, showToast, supervisorScheduleRestaurantId, t])
 
   useEffect(() => {
+    if (roleLoading) return
     void loadTasks()
-  }, [loadTasks])
+  }, [loadTasks, roleLoading])
 
   useEffect(() => {
     if (!selectedTaskId) return
@@ -839,20 +866,24 @@ export default function ShiftsPage() {
   }, [employeeTasks, selectedTaskId])
 
   useEffect(() => {
+    if (roleLoading) return
     void loadPresenceLogs()
-  }, [loadPresenceLogs])
+  }, [loadPresenceLogs, roleLoading])
 
   useEffect(() => {
+    if (roleLoading) return
     void loadStaffAssignmentContext()
-  }, [loadStaffAssignmentContext])
+  }, [loadStaffAssignmentContext, roleLoading])
 
   useEffect(() => {
+    if (roleLoading) return
     void loadStaffAssignments()
-  }, [loadStaffAssignments])
+  }, [loadStaffAssignments, roleLoading])
 
   useEffect(() => {
+    if (roleLoading) return
     void loadSupervisorScheduleAssignments()
-  }, [loadSupervisorScheduleAssignments])
+  }, [loadSupervisorScheduleAssignments, roleLoading])
 
   useEffect(() => {
     if (!supervisorScheduleRestaurantId) {
@@ -871,8 +902,9 @@ export default function ShiftsPage() {
   }, [supervisorScheduleEligibleUsers, supervisorScheduleRestaurantId])
 
   useEffect(() => {
+    if (roleLoading) return
     void loadEmployeeSelfServiceDashboard()
-  }, [loadEmployeeSelfServiceDashboard])
+  }, [loadEmployeeSelfServiceDashboard, roleLoading])
 
   const uploadEvidence = async (
     prefix: string,
@@ -1444,6 +1476,32 @@ export default function ShiftsPage() {
     setSupervisorScheduleBlocks([])
   }
 
+  const handleAddSupervisorScheduleTaskDraft = () => {
+    setSupervisorScheduleTaskDrafts(prev => [
+      ...prev,
+      {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        title: "",
+        description: "",
+        priority: "normal",
+        dueAt: "",
+      },
+    ])
+  }
+
+  const handleRemoveSupervisorScheduleTaskDraft = (draftId: number) => {
+    setSupervisorScheduleTaskDrafts(prev => prev.filter(item => item.id !== draftId))
+  }
+
+  const handleUpdateSupervisorScheduleTaskDraft = (
+    draftId: number,
+    changes: Partial<Omit<ScheduleTaskDraft, "id">>
+  ) => {
+    setSupervisorScheduleTaskDrafts(prev =>
+      prev.map(item => (item.id === draftId ? { ...item, ...changes } : item))
+    )
+  }
+
   const handleScheduleSupervisorShiftBulk = async () => {
     if (!supervisorScheduleEmployeeId || !supervisorScheduleRestaurantId) {
       showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
@@ -1492,6 +1550,26 @@ export default function ShiftsPage() {
       return
     }
 
+    const optionalTaskDrafts = supervisorScheduleTaskDrafts
+      .map(item => ({
+        ...item,
+        title: item.title.trim(),
+        description: item.description.trim(),
+      }))
+      .filter(item => item.title || item.description)
+
+    const hasInvalidOptionalTask = optionalTaskDrafts.some(item => !item.title || !item.description)
+    if (hasInvalidOptionalTask) {
+      showToast(
+        "info",
+        t(
+          "Cada tarea opcional debe tener titulo y descripcion, o quedar totalmente vacia.",
+          "Each optional task must include title and description, or remain fully empty."
+        )
+      )
+      return
+    }
+
     setSupervisorBulkScheduling(true)
     try {
       await assignScheduledShiftsBulk({
@@ -1501,7 +1579,65 @@ export default function ShiftsPage() {
         notes: supervisorScheduleNotes.trim() || undefined,
       })
       showToast("success", t("Turnos en lote programados correctamente.", "Bulk shifts scheduled successfully."))
+
+      if (optionalTaskDrafts.length > 0) {
+        const activeRow = supervisorRows.find(
+          row =>
+            row.employee_id === supervisorScheduleEmployeeId &&
+            Number(row.restaurant_id) === Number(supervisorScheduleRestaurantId)
+        )
+
+        if (!activeRow) {
+          showToast(
+            "info",
+            t(
+              "No se crearon tareas aun porque el empleado no tiene turno activo en este momento. Puedes crearlas cuando inicie su turno.",
+              "Optional tasks were not created yet because the employee has no active shift right now. You can create them once the shift starts."
+            )
+          )
+        } else {
+          let createdTasks = 0
+          let failedTasks = 0
+          for (const draft of optionalTaskDrafts) {
+            try {
+              await createOperationalTask({
+                shiftId: Number(activeRow.id),
+                restaurantId: Number(supervisorScheduleRestaurantId),
+                assignedEmployeeId: supervisorScheduleEmployeeId,
+                title: draft.title,
+                description: draft.description,
+                priority: draft.priority,
+                dueAt: draft.dueAt ? new Date(draft.dueAt).toISOString() : null,
+              })
+              createdTasks += 1
+            } catch {
+              failedTasks += 1
+            }
+          }
+          if (createdTasks > 0) {
+            showToast(
+              "success",
+              t(
+                `${createdTasks} tarea(s) opcional(es) creadas para el turno activo.`,
+                `${createdTasks} optional task(s) created for the active shift.`
+              )
+            )
+            await loadTasks()
+          }
+          if (failedTasks > 0) {
+            showToast(
+              "info",
+              t(
+                `${failedTasks} tarea(s) opcional(es) no se pudieron crear automaticamente.`,
+                `${failedTasks} optional task(s) could not be created automatically.`
+              )
+            )
+          }
+        }
+      }
+
       setSupervisorScheduleBlocks([])
+      setSupervisorScheduleTaskDrafts([])
       await loadSupervisionScheduledShifts()
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudieron programar turnos en lote.", "Could not schedule bulk shifts.")))
@@ -1692,68 +1828,6 @@ export default function ShiftsPage() {
           </>
         )}
 
-            {isSupervisora && (
-              <Card
-                title={t("Restaurante para turno propio", "Restaurant for your shift")}
-                subtitle={t("Selecciona un restaurante autorizado antes de registrar tu turno.", "Select an authorized restaurant before registering your shift.")}
-              >
-                <div className="space-y-2">
-                  <select
-                    value={supervisorShiftRestaurantId ?? ""}
-                    onChange={event => setSupervisorShiftRestaurantId(Number(event.target.value) || null)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
-                    {presenceRestaurants.map(restaurant => (
-                      <option key={restaurant.id} value={restaurant.id}>
-                        {formatRestaurantLabel(knownRestaurantsById.get(restaurant.id)) || restaurant.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  {presenceRestaurants.length === 0 && (
-                    <p className="text-xs text-amber-700">
-                      {t("No hay restaurantes asignados para tu turno.", "No assigned restaurants for your shift.")}
-                    </p>
-                  )}
-
-                  {supervisorSelectedRestaurant?.geofence_radius_m !== null && supervisorSelectedRestaurant && (
-                    <p className="text-xs text-slate-600">
-                      {t("Radio de geocerca permitido", "Allowed geofence radius")}:{" "}
-                      {Math.round(Number(supervisorSelectedRestaurant.geofence_radius_m))}m
-                    </p>
-                  )}
-
-                  {coords && (
-                    <p className="text-xs text-slate-600">
-                      {t("Precision GPS", "GPS accuracy")}:{" "}
-                      {typeof coords.accuracyMeters === "number"
-                        ? `${Math.round(coords.accuracyMeters)}m`
-                        : t("No reportada por el dispositivo", "Not reported by device")}
-                    </p>
-                  )}
-
-                  {geofenceValidation && (
-                    <p className={`text-xs ${geofenceValidation.withinGeofence ? "text-emerald-700" : "text-rose-700"}`}>
-                      {geofenceValidation.withinGeofence
-                        ? t(
-                            `Dentro del area permitida (${Math.round(geofenceValidation.distanceMeters)}m del punto).`,
-                            `Within allowed area (${Math.round(geofenceValidation.distanceMeters)}m from site).`
-                          )
-                        : t(
-                            `Fuera del area permitida (${Math.round(geofenceValidation.distanceMeters)}m del punto, maximo ${Math.round(
-                              geofenceValidation.allowedMeters
-                            )}m).`,
-                            `Outside allowed area (${Math.round(geofenceValidation.distanceMeters)}m from site, max ${Math.round(
-                              geofenceValidation.allowedMeters
-                            )}m).`
-                          )}
-                    </p>
-                  )}
-                </div>
-              </Card>
-            )}
-
             <Card title={t("Ubicacion GPS", "GPS location")} subtitle={t("Debes tener coordenadas validas para ejecutar acciones.", "You must have valid coordinates to execute actions.")}>
               <div className="mt-3">
                 <GPSGuard onLocation={setCoords} />
@@ -1927,7 +2001,7 @@ export default function ShiftsPage() {
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {!activeShift ? (
                   <Button
-                    onClick={() => void handleStart(isSupervisora ? supervisorShiftRestaurantId : undefined)}
+                    onClick={() => void handleStart(isSupervisora ? expectedRestaurantId : undefined)}
                     disabled={!canSubmit}
                     variant="primary"
                   >
@@ -2503,6 +2577,86 @@ export default function ShiftsPage() {
                   placeholder={t("Notas para el turno (opcional)", "Shift notes (optional)")}
                 />
 
+                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        {t("Tareas opcionales al programar", "Optional tasks while scheduling")}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {t(
+                          "Puedes agregar cero, una o varias tareas. Se intentan crear automaticamente si ya existe turno activo.",
+                          "You can add zero, one, or many tasks. They are auto-created only when an active shift already exists."
+                        )}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={handleAddSupervisorScheduleTaskDraft}>
+                      {t("Agregar tarea opcional", "Add optional task")}
+                    </Button>
+                  </div>
+
+                  {supervisorScheduleTaskDrafts.length === 0 ? (
+                    <p className="mt-2 text-xs text-slate-500">
+                      {t("Sin tareas opcionales.", "No optional tasks.")}
+                    </p>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      {supervisorScheduleTaskDrafts.map(draft => (
+                        <div key={draft.id} className="space-y-2 rounded-lg border border-slate-200 p-2">
+                          <input
+                            value={draft.title}
+                            onChange={event =>
+                              handleUpdateSupervisorScheduleTaskDraft(draft.id, { title: event.target.value })
+                            }
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            placeholder={t("Titulo de tarea (opcional)", "Task title (optional)")}
+                          />
+                          <textarea
+                            rows={2}
+                            value={draft.description}
+                            onChange={event =>
+                              handleUpdateSupervisorScheduleTaskDraft(draft.id, { description: event.target.value })
+                            }
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            placeholder={t("Descripcion (opcional)", "Description (optional)")}
+                          />
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <input
+                              type="datetime-local"
+                              value={draft.dueAt}
+                              onChange={event =>
+                                handleUpdateSupervisorScheduleTaskDraft(draft.id, { dueAt: event.target.value })
+                              }
+                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            />
+                            <select
+                              value={draft.priority}
+                              onChange={event =>
+                                handleUpdateSupervisorScheduleTaskDraft(draft.id, {
+                                  priority: event.target.value as TaskPriority,
+                                })
+                              }
+                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            >
+                              <option value="low">{t("Baja", "Low")}</option>
+                              <option value="normal">{t("Normal", "Normal")}</option>
+                              <option value="high">{t("Alta", "High")}</option>
+                              <option value="critical">{t("Critica", "Critical")}</option>
+                            </select>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleRemoveSupervisorScheduleTaskDraft(draft.id)}
+                            >
+                              {t("Quitar tarea", "Remove task")}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-slate-500">
                     {t("Bloques listos", "Ready blocks")}: {supervisorScheduleBlocks.length}
@@ -2521,7 +2675,7 @@ export default function ShiftsPage() {
             </Card>
 
             {isSupervisora && (
-              <Card title={t("Entrada/salida de supervision", "Supervisor entry/exit")} subtitle={t("Registro obligatorio por restaurante con GPS + evidencia.", "Mandatory record by restaurant with GPS + evidence.")}>
+              <Card title={t("Entrada/salida de supervision", "Supervisor entry/exit")}>
                 <div className="grid gap-3 lg:grid-cols-2">
                   <div className="space-y-2">
                     <select
