@@ -48,6 +48,39 @@ function extractVerificationToken(payload: unknown) {
   return typeof token === "string" && token.trim().length > 0 ? token.trim() : null
 }
 
+function sanitizePhoneForLogs(value: unknown) {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (trimmed.includes("*")) return trimmed
+  // Mask anything that looks like a full phone number.
+  const digits = trimmed.replace(/\D/g, "")
+  if (digits.length >= 7) {
+    const prefix = trimmed.slice(0, 2)
+    const suffix = trimmed.slice(-2)
+    return `${prefix}***${suffix}`
+  }
+  return "[redacted]"
+}
+
+function extractOtpSendMeta(payload: unknown) {
+  if (!payload || typeof payload !== "object") return null
+  const candidate = payload as {
+    otp_id?: unknown
+    expires_at?: unknown
+    masked_phone?: unknown
+    phone?: unknown
+    delivery_status?: unknown
+  }
+
+  return {
+    otpId: typeof candidate.otp_id === "number" ? candidate.otp_id : null,
+    expiresAt: typeof candidate.expires_at === "string" ? candidate.expires_at : null,
+    maskedPhone: sanitizePhoneForLogs(candidate.masked_phone ?? candidate.phone),
+    deliveryStatus: typeof candidate.delivery_status === "string" ? candidate.delivery_status : null,
+  }
+}
+
 function toErrorSnapshot(error: unknown) {
   if (!error || typeof error !== "object") return { message: String(error ?? "") }
   const candidate = error as { message?: unknown; code?: unknown; status?: unknown; details?: unknown; hint?: unknown }
@@ -72,7 +105,14 @@ export async function sendShiftPhoneOtp() {
       },
       body: { device_fingerprint: fingerprint },
     })
-    debugLog("otp.send.success", { fingerprint: fingerprint ? "set" : null })
+    const meta = extractOtpSendMeta(response)
+    debugLog("otp.send.success", {
+      fingerprint: fingerprint ? "set" : null,
+      maskedPhone: meta?.maskedPhone ?? null,
+      otpId: meta?.otpId ?? null,
+      expiresAt: meta?.expiresAt ?? null,
+      deliveryStatus: meta?.deliveryStatus ?? null,
+    })
     return response
   } catch (error: unknown) {
     debugLog("otp.send.error", { error: toErrorSnapshot(error) })
