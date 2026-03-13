@@ -1368,6 +1368,31 @@ export default function ShiftsPage() {
     } catch (error: unknown) {
       const fallback = t("No se pudo finalizar el turno.", "Could not end shift.")
       const exact = formatErrorDetails(error, fallback)
+      const normalized = extractErrorMessage(error, "").toLowerCase()
+      const status = typeof (error as { status?: unknown }).status === "number" ? (error as { status?: number }).status : undefined
+      const code =
+        typeof (error as { code?: unknown }).code === "string" ? (error as { code?: string }).code : undefined
+      if (status === 409 || code === "409" || normalized.includes("409") || normalized.includes("conflict")) {
+        setEndShiftError(exact)
+        showToast(
+          "info",
+          t(`Respuesta 409: ${exact}. Actualizando estado...`, `409 response: ${exact}. Refreshing state...`)
+        )
+        resetEvidenceAndLocation()
+        setLocalStartEvidenceShiftId(null)
+        setEndObservation("")
+        setEndFitForWork(null)
+        setEndIncidentsOccurred(null)
+        setEndAreaDelivered(null)
+        setEndHealthDeclaration("")
+        setEndEarlyReason("")
+        setHistoryPage(1)
+        await loadEmployeeData(1)
+        await loadEmployeeSelfServiceDashboard()
+        await loadTasks()
+        await loadSupervisorData()
+        return
+      }
       setEndShiftError(exact)
       if (isConsentPendingError(error)) {
         showToast("error", t("Consentimiento pendiente: acepta terminos de tratamiento de datos para operar turnos.", "Consent pending: accept data processing terms to operate shifts."))
