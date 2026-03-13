@@ -66,6 +66,72 @@ function toError(message: string, status?: number, code?: string, requestId?: st
   return err
 }
 
+function extractErrorContext(error: unknown) {
+  const fallbackMessage = "Edge Function request failed."
+  if (!error || typeof error !== "object") {
+    return { message: fallbackMessage } as {
+      message: string
+      status?: number
+      code?: string
+      requestId?: string
+    }
+  }
+
+  const err = error as {
+    message?: string
+    status?: unknown
+    context?: { status?: unknown; body?: unknown; headers?: Record<string, string> }
+    body?: unknown
+  }
+
+  let status =
+    typeof err.status === "number"
+      ? err.status
+      : typeof err.context?.status === "number"
+        ? err.context?.status
+        : undefined
+  let message = err.message ?? fallbackMessage
+  let code: string | undefined
+  let requestId: string | undefined
+
+  const rawBody = err.context?.body ?? err.body
+  if (rawBody) {
+    try {
+      const parsed =
+        typeof rawBody === "string"
+          ? (JSON.parse(rawBody) as Record<string, unknown>)
+          : (rawBody as Record<string, unknown>)
+      const envelopeError = parsed?.error as Record<string, unknown> | undefined
+      const envelopeRequestId = parsed?.request_id as string | undefined
+      const envelopeMessage = envelopeError?.message as string | undefined
+      const envelopeCode = envelopeError?.code as string | number | undefined
+      if (envelopeMessage) {
+        message = envelopeMessage
+      }
+      if (envelopeRequestId) {
+        requestId = envelopeRequestId
+      }
+      if (typeof envelopeCode === "number") {
+        code = String(envelopeCode)
+        status = status ?? envelopeCode
+      } else if (typeof envelopeCode === "string") {
+        code = envelopeCode
+        if (/^\d{3}$/.test(envelopeCode)) {
+          status = status ?? Number(envelopeCode)
+        }
+      }
+      const directMessage = parsed?.message as string | undefined
+      if (!envelopeMessage && directMessage) {
+        message = directMessage
+      }
+    } catch {
+      // Keep original message if parsing fails.
+    }
+  }
+
+  return { message, status, code, requestId }
+}
+
 function shouldDebugEndpoint(fn: string) {
   return isDebugEnabled() && (isDebugAllEnabled() || DEBUG_ENDPOINTS.has(fn))
 }
@@ -195,17 +261,23 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
   })
 
   if (error) {
-    const status = (error as { status?: unknown }).status
+    const extracted = extractErrorContext(error)
+    const status = extracted.status ?? (error as { status?: unknown }).status
     if (isNetworkOrCorsFailure(error.message ?? "", status)) {
       markEdgeTemporarilyUnavailable()
     }
     if (shouldDebugEndpoint(fn)) {
       debugGroup(`edge.error ${fn}`, {
-        message: error.message ?? "Edge Function request failed.",
+        message: extracted.message ?? error.message ?? "Edge Function request failed.",
         status: typeof status === "number" ? status : null,
       })
     }
-    throw toError(error.message ?? "Edge Function request failed.", typeof status === "number" ? status : undefined)
+    throw toError(
+      extracted.message ?? error.message ?? "Edge Function request failed.",
+      typeof status === "number" ? status : undefined,
+      extracted.code,
+      extracted.requestId
+    )
   }
 
   const envelope = (data ?? null) as BackendEnvelope<T> | null
