@@ -290,6 +290,8 @@ export default function ShiftsPage() {
   const [loadingData, setLoadingData] = useState(true)
   const [processing, setProcessing] = useState(false)
   const [uploadingStartEvidence, setUploadingStartEvidence] = useState(false)
+  const [localStartEvidenceShiftId, setLocalStartEvidenceShiftId] = useState<string | number | null>(null)
+  const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
   const [sendingOtp, setSendingOtp] = useState(false)
   const [verifyingOtp, setVerifyingOtp] = useState(false)
   const [otpCode, setOtpCode] = useState("")
@@ -407,7 +409,11 @@ export default function ShiftsPage() {
       .filter(Boolean)
   }, [employeeDashboard])
 
-  const hasStartEvidence = activeShiftUploadedEvidenceTypes.includes("inicio")
+  const localHasStartEvidence = useMemo(() => {
+    if (!activeShift?.id || localStartEvidenceShiftId === null) return false
+    return String(activeShift.id) === String(localStartEvidenceShiftId)
+  }, [activeShift?.id, localStartEvidenceShiftId])
+  const hasStartEvidence = activeShiftUploadedEvidenceTypes.includes("inicio") || localHasStartEvidence
   const activeShiftId = useMemo(
     () => activeShift?.id ?? employeeDashboard?.active_shift?.id ?? null,
     [activeShift?.id, employeeDashboard?.active_shift?.id]
@@ -837,6 +843,12 @@ export default function ShiftsPage() {
   }, [historyPage, canOperateShift, loadEmployeeData, roleLoading])
 
   useEffect(() => {
+    if (!activeShift) {
+      setLocalStartEvidenceShiftId(null)
+    }
+  }, [activeShift])
+
+  useEffect(() => {
     if (roleLoading) return
     if (!canOperateOtp) return
     getOrCreateDeviceFingerprint()
@@ -1104,6 +1116,7 @@ export default function ShiftsPage() {
   const resetEvidenceAndLocation = () => {
     setCoords(null)
     setPhoto(null)
+    setStartRecoveryPhoto(null)
   }
 
   const resetTaskEvidenceCapture = () => {
@@ -1231,6 +1244,7 @@ export default function ShiftsPage() {
         lng: coords.lng,
         accuracy: coords.accuracyMeters,
       })
+      setLocalStartEvidenceShiftId(shiftId)
 
       if (startObservation.trim()) {
         await createShiftIncident(String(shiftId), `[INGRESO] ${startObservation.trim()}`)
@@ -1315,6 +1329,7 @@ export default function ShiftsPage() {
 
       showToast("success", t("Turno finalizado correctamente.", "Shift ended successfully."))
       resetEvidenceAndLocation()
+      setLocalStartEvidenceShiftId(null)
       setEndObservation("")
       setEndFitForWork(null)
       setEndIncidentsOccurred(null)
@@ -1339,7 +1354,7 @@ export default function ShiftsPage() {
 
   const handleUploadMissingStartEvidence = async () => {
     if (!activeShift) return
-    if (!coords || !photo) {
+    if (!coords || !startRecoveryPhoto) {
       showToast(
         "info",
         t("Debes capturar GPS y evidencia fotografica de inicio.", "You must capture GPS and start photo evidence.")
@@ -1370,11 +1385,13 @@ export default function ShiftsPage() {
       await uploadShiftEvidence({
         shiftId: Number(activeShift.id),
         type: "inicio",
-        file: photo,
+        file: startRecoveryPhoto,
         lat: coords.lat,
         lng: coords.lng,
         accuracy: coords.accuracyMeters,
       })
+      setLocalStartEvidenceShiftId(activeShift.id)
+      setStartRecoveryPhoto(null)
       showToast("success", t("Evidencia de inicio cargada.", "Start evidence uploaded."))
       resetEvidenceAndLocation()
       setHistoryPage(1)
@@ -2256,42 +2273,53 @@ export default function ShiftsPage() {
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-slate-700">
-                        {hasStartEvidence
-                          ? t("Evidencia fotografica de salida", "End photo evidence")
-                          : t("Evidencia fotografica de inicio (pendiente)", "Start photo evidence (pending)")}
-                      </p>
+                      <p className="text-xs font-semibold text-slate-700">{t("Evidencia fotografica de salida", "End photo evidence")}</p>
                       <div className="mt-2">
                         <CameraCapture onCapture={setPhoto} overlayLines={shiftOverlayLines} />
                       </div>
                     </div>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
-                    <span>{t("GPS", "GPS")}: {coords ? t("Listo", "Ready") : t("Pendiente", "Pending")}</span>
-                    <span>
-                      {hasStartEvidence ? t("Foto de salida", "End photo") : t("Foto de inicio", "Start photo")}:{" "}
-                      {photo ? t("Lista", "Ready") : t("Pendiente", "Pending")}
-                    </span>
-                    <span>{t("Evidencia inicio", "Start evidence")}: {hasStartEvidence ? "OK" : t("Pendiente", "Pending")}</span>
-                  </div>
+
                   {!hasStartEvidence && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void handleUploadMissingStartEvidence()}
-                        disabled={uploadingStartEvidence || !coords || !photo}
-                      >
-                        {uploadingStartEvidence ? t("Subiendo...", "Uploading...") : t("Subir evidencia de inicio", "Upload start evidence")}
-                      </Button>
-                      <span className="text-xs text-slate-500">
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      <p className="font-semibold">
+                        {t("Evidencia de inicio pendiente", "Start evidence pending")}
+                      </p>
+                      <p className="mt-1 text-xs text-amber-800">
                         {t(
-                          "Debes subir la evidencia de inicio antes de finalizar el turno.",
-                          "You must upload start evidence before ending the shift."
+                          "Sube la foto de inicio faltante. Luego toma la foto de salida.",
+                          "Upload the missing start photo. Then take the end photo."
                         )}
-                      </span>
+                      </p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div>
+                          <p className="text-xs font-semibold text-amber-800">{t("Foto de inicio", "Start photo")}</p>
+                          <div className="mt-2">
+                            <CameraCapture onCapture={setStartRecoveryPhoto} overlayLines={shiftOverlayLines} />
+                          </div>
+                        </div>
+                        <div className="flex flex-col justify-between gap-2">
+                          <div className="text-xs text-amber-800">
+                            {t("Foto de inicio", "Start photo")}: {startRecoveryPhoto ? t("Lista", "Ready") : t("Pendiente", "Pending")}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void handleUploadMissingStartEvidence()}
+                            disabled={uploadingStartEvidence || !coords || !startRecoveryPhoto}
+                          >
+                            {uploadingStartEvidence ? t("Subiendo...", "Uploading...") : t("Subir evidencia de inicio", "Upload start evidence")}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   )}
+
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
+                    <span>{t("GPS", "GPS")}: {coords ? t("Listo", "Ready") : t("Pendiente", "Pending")}</span>
+                    <span>{t("Foto de salida", "End photo")}: {photo ? t("Lista", "Ready") : t("Pendiente", "Pending")}</span>
+                    <span>{t("Evidencia inicio", "Start evidence")}: {hasStartEvidence ? "OK" : t("Pendiente", "Pending")}</span>
+                  </div>
                 </div>
               )}
 
