@@ -12,7 +12,6 @@ import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 import { listRestaurants, Restaurant } from "@/services/restaurants.service"
 import {
-  assignScheduledShift,
   assignScheduledShiftsBulk,
   cancelScheduledShift,
   listScheduledShifts,
@@ -91,11 +90,8 @@ export default function UsersPage() {
   const [rows, setRows] = useState<UserProfile[]>([])
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [scheduled, setScheduled] = useState<ScheduledShift[]>([])
-  const [assigning, setAssigning] = useState(false)
   const [scheduleEmployeeId, setScheduleEmployeeId] = useState("")
   const [scheduleRestaurantId, setScheduleRestaurantId] = useState("")
-  const [scheduleStart, setScheduleStart] = useState("")
-  const [scheduleEnd, setScheduleEnd] = useState("")
   const [scheduleNotes, setScheduleNotes] = useState("")
   const [scheduledLimit, setScheduledLimit] = useState(40)
   const [scheduleBlocks, setScheduleBlocks] = useState<Array<{ id: number; start: string; end: string }>>([])
@@ -220,39 +216,6 @@ export default function UsersPage() {
       showToast("success", t("Estado de usuario actualizado.", "User status updated."))
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudo actualizar el estado.", "Could not update status."))
-    }
-  }
-
-  const handleAssignScheduledShift = async () => {
-    if (!scheduleEmployeeId || !scheduleRestaurantId || !scheduleStart || !scheduleEnd) {
-      showToast("info", t("Completa empleado, restaurante, inicio y fin.", "Complete employee, restaurant, start, and end."))
-      return
-    }
-
-    const startIso = new Date(scheduleStart).toISOString()
-    const endIso = new Date(scheduleEnd).toISOString()
-
-    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
-      showToast("info", t("La hora de fin debe ser posterior a la hora de inicio.", "End time must be after start time."))
-      return
-    }
-
-    setAssigning(true)
-    try {
-      await assignScheduledShift({
-        employeeId: scheduleEmployeeId,
-        restaurantId: scheduleRestaurantId,
-        scheduledStartIso: startIso,
-        scheduledEndIso: endIso,
-        notes: scheduleNotes.trim() || undefined,
-      })
-      showToast("success", t("Turno programado correctamente.", "Shift scheduled successfully."))
-      setScheduleNotes("")
-      await loadData()
-    } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : t("No se pudo programar el turno.", "Could not schedule shift."))
-    } finally {
-      setAssigning(false)
     }
   }
 
@@ -713,64 +676,39 @@ export default function UsersPage() {
                 )}
               </Card>
 
-              <Card title={t("Programar turno", "Schedule shift")} subtitle={t("Fecha, hora y restaurante.", "Date, time, and restaurant.")}>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                  <select
-                    value={scheduleEmployeeId}
-                    onChange={event => setScheduleEmployeeId(event.target.value)}
-                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  >
-                    {rows
-                      .filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false)
-                      .map(item => (
-                        <option key={item.id} value={item.id}>
-                          {item.full_name ?? item.email ?? item.id}
-                        </option>
-                      ))}
-                  </select>
-
-                  <select
-                    value={scheduleRestaurantId}
-                    onChange={event => setScheduleRestaurantId(event.target.value)}
-                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  >
-                    {restaurants.map(item => (
-                      <option key={item.id} value={item.id}>
-                        {formatRestaurantLabel(item)}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="datetime-local"
-                    value={scheduleStart}
-                    onChange={event => setScheduleStart(event.target.value)}
-                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  />
-
-                  <input
-                    type="datetime-local"
-                    value={scheduleEnd}
-                    onChange={event => setScheduleEnd(event.target.value)}
-                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  />
-
-                  <Button onClick={() => void handleAssignScheduledShift()} disabled={assigning}>
-                    {assigning ? t("Programando...", "Scheduling...") : t("Programar", "Schedule")}
-                  </Button>
-                </div>
-
-                <textarea
-                  value={scheduleNotes}
-                  onChange={event => setScheduleNotes(event.target.value)}
-                  rows={2}
-                  placeholder={t("Notas del turno (opcional)", "Shift notes (optional)")}
-                  className="mt-2 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
-                />
-
+              <Card title={t("Programar turno", "Schedule shift")} subtitle={t("Usa programacion multiple para crear uno o varios turnos.", "Use bulk scheduling to create one or multiple shifts.")}>
                 <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
                   <p className="text-xs text-slate-500">{t("Genera turnos por rango y dias de semana, o agrega bloques manuales.", "Generate shifts by date range and weekdays, or add manual blocks.")}</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <select
+                      value={scheduleEmployeeId}
+                      onChange={event => setScheduleEmployeeId(event.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    >
+                      <option value="">{t("Seleccionar empleado", "Select employee")}</option>
+                      {rows
+                        .filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false)
+                        .map(item => (
+                          <option key={item.id} value={item.id}>
+                            {item.full_name ?? item.email ?? item.id}
+                          </option>
+                        ))}
+                    </select>
+
+                    <select
+                      value={scheduleRestaurantId}
+                      onChange={event => setScheduleRestaurantId(event.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    >
+                      <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
+                      {restaurants.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {formatRestaurantLabel(item)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
                     <p>
                       <span className="font-semibold">{t("Empleado seleccionado", "Selected employee")}:</span> {selectedScheduleEmployeeLabel}
@@ -871,12 +809,26 @@ export default function UsersPage() {
                     ))}
                   </div>
 
+                  <textarea
+                    value={scheduleNotes}
+                    onChange={event => setScheduleNotes(event.target.value)}
+                    rows={2}
+                    placeholder={t("Notas del turno (opcional)", "Shift notes (optional)")}
+                    className="mt-3 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
+                  />
+
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span className="text-xs text-slate-500">
                       {t("Bloques listos", "Ready blocks")}: {scheduleBlocks.length}
                     </span>
                     <Button size="sm" onClick={() => void handleAssignScheduledShiftBulk()} disabled={savingBulk}>
-                      {savingBulk ? t("Guardando lote...", "Saving bulk...") : t("Programar lote", "Schedule bulk")}
+                      {savingBulk
+                        ? scheduleBlocks.length === 1
+                          ? t("Guardando turno...", "Saving shift...")
+                          : t("Guardando turnos...", "Saving shifts...")
+                        : scheduleBlocks.length === 1
+                          ? t("Programar turno", "Schedule shift")
+                          : t("Programar turnos", "Schedule shifts")}
                     </Button>
                   </div>
                 </div>

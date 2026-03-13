@@ -40,7 +40,6 @@ import {
   SupervisorPresenceLog,
 } from "@/services/supervisorPresence.service"
 import {
-  assignScheduledShift,
   assignScheduledShiftsBulk,
   cancelScheduledShift,
   listMyScheduledShifts,
@@ -293,10 +292,7 @@ export default function ShiftsPage() {
   const [supervisorShiftRestaurantId, setSupervisorShiftRestaurantId] = useState<number | null>(null)
   const [supervisorScheduleEmployeeId, setSupervisorScheduleEmployeeId] = useState("")
   const [supervisorScheduleRestaurantId, setSupervisorScheduleRestaurantId] = useState<number | null>(null)
-  const [supervisorScheduleStart, setSupervisorScheduleStart] = useState("")
-  const [supervisorScheduleEnd, setSupervisorScheduleEnd] = useState("")
   const [supervisorScheduleNotes, setSupervisorScheduleNotes] = useState("")
-  const [supervisorScheduling, setSupervisorScheduling] = useState(false)
   const [supervisorScheduleBlocks, setSupervisorScheduleBlocks] = useState<Array<{ id: number; start: string; end: string }>>([])
   const [supervisorBulkRangeStart, setSupervisorBulkRangeStart] = useState("")
   const [supervisorBulkRangeEnd, setSupervisorBulkRangeEnd] = useState("")
@@ -1402,38 +1398,6 @@ export default function ShiftsPage() {
     setSupervisorScheduleBlocks([])
   }
 
-  const handleScheduleSupervisorShift = async () => {
-    if (!supervisorScheduleEmployeeId || !supervisorScheduleRestaurantId || !supervisorScheduleStart || !supervisorScheduleEnd) {
-      showToast("info", t("Completa empleado, restaurante, inicio y fin.", "Complete employee, restaurant, start, and end."))
-      return
-    }
-
-    const startIso = new Date(supervisorScheduleStart).toISOString()
-    const endIso = new Date(supervisorScheduleEnd).toISOString()
-    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
-      showToast("info", t("La hora de fin debe ser posterior a la hora de inicio.", "End time must be after start time."))
-      return
-    }
-
-    setSupervisorScheduling(true)
-    try {
-      await assignScheduledShift({
-        employeeId: supervisorScheduleEmployeeId,
-        restaurantId: String(supervisorScheduleRestaurantId),
-        scheduledStartIso: startIso,
-        scheduledEndIso: endIso,
-        notes: supervisorScheduleNotes.trim() || undefined,
-      })
-      showToast("success", t("Turno programado correctamente.", "Shift scheduled successfully."))
-      setSupervisorScheduleNotes("")
-      await loadSupervisionScheduledShifts()
-    } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, t("No se pudo programar el turno.", "Could not schedule shift.")))
-    } finally {
-      setSupervisorScheduling(false)
-    }
-  }
-
   const handleScheduleSupervisorShiftBulk = async () => {
     if (!supervisorScheduleEmployeeId || !supervisorScheduleRestaurantId) {
       showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
@@ -2308,69 +2272,39 @@ export default function ShiftsPage() {
 
             <Card
               title={t("Programar turno", "Schedule shift")}
-              subtitle={t("Agenda turnos para empleados bajo supervision.", "Schedule shifts for supervised employees.")}
+              subtitle={t("Usa programacion multiple para crear uno o varios turnos bajo supervision.", "Use bulk scheduling to create one or multiple supervised shifts.")}
             >
-              <div className="grid gap-2 lg:grid-cols-2">
-                <select
-                  value={supervisorScheduleEmployeeId}
-                  onChange={event => setSupervisorScheduleEmployeeId(event.target.value)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">{t("Seleccionar empleado", "Select employee")}</option>
-                  {staffUsers.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.full_name ?? item.email ?? item.id}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={supervisorScheduleRestaurantId ?? ""}
-                  onChange={event => setSupervisorScheduleRestaurantId(Number(event.target.value) || null)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
-                  {staffRestaurants.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="datetime-local"
-                  value={supervisorScheduleStart}
-                  onChange={event => setSupervisorScheduleStart(event.target.value)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-                <input
-                  type="datetime-local"
-                  value={supervisorScheduleEnd}
-                  onChange={event => setSupervisorScheduleEnd(event.target.value)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-                <textarea
-                  rows={2}
-                  value={supervisorScheduleNotes}
-                  onChange={event => setSupervisorScheduleNotes(event.target.value)}
-                  className="lg:col-span-2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder={t("Notas para el turno (opcional)", "Shift notes (optional)")}
-                />
-              </div>
-
-              <div className="mt-3">
-                <Button
-                  variant="secondary"
-                  disabled={supervisorScheduling}
-                  onClick={() => void handleScheduleSupervisorShift()}
-                >
-                  {supervisorScheduling ? t("Programando...", "Scheduling...") : t("Programar turno", "Schedule shift")}
-                </Button>
-              </div>
-
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
                 <p className="text-xs text-slate-500">
                   {t("Genera turnos por rango y dias de semana, o agrega bloques manuales.", "Generate shifts by date range and weekdays, or add manual blocks.")}
                 </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <select
+                    value={supervisorScheduleEmployeeId}
+                    onChange={event => setSupervisorScheduleEmployeeId(event.target.value)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">{t("Seleccionar empleado", "Select employee")}</option>
+                    {staffUsers.map(item => (
+                      <option key={item.id} value={item.id}>
+                        {item.full_name ?? item.email ?? item.id}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={supervisorScheduleRestaurantId ?? ""}
+                    onChange={event => setSupervisorScheduleRestaurantId(Number(event.target.value) || null)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
+                    {staffRestaurants.map(item => (
+                      <option key={item.id} value={item.id}>
+                        {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
                   <p>
                     <span className="font-semibold">{t("Empleado seleccionado", "Selected employee")}:</span> {selectedSupervisorScheduleEmployeeLabel}
@@ -2489,12 +2423,26 @@ export default function ShiftsPage() {
                   )}
                 </div>
 
+                <textarea
+                  rows={2}
+                  value={supervisorScheduleNotes}
+                  onChange={event => setSupervisorScheduleNotes(event.target.value)}
+                  className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  placeholder={t("Notas para el turno (opcional)", "Shift notes (optional)")}
+                />
+
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-slate-500">
                     {t("Bloques listos", "Ready blocks")}: {supervisorScheduleBlocks.length}
                   </span>
                   <Button size="sm" onClick={() => void handleScheduleSupervisorShiftBulk()} disabled={supervisorBulkScheduling}>
-                    {supervisorBulkScheduling ? t("Guardando lote...", "Saving bulk...") : t("Programar lote", "Schedule bulk")}
+                    {supervisorBulkScheduling
+                      ? supervisorScheduleBlocks.length === 1
+                        ? t("Guardando turno...", "Saving shift...")
+                        : t("Guardando turnos...", "Saving shifts...")
+                      : supervisorScheduleBlocks.length === 1
+                        ? t("Programar turno", "Schedule shift")
+                        : t("Programar turnos", "Schedule shifts")}
                   </Button>
                 </div>
               </div>
