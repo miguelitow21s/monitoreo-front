@@ -292,6 +292,8 @@ export default function ShiftsPage() {
   const [uploadingStartEvidence, setUploadingStartEvidence] = useState(false)
   const [localStartEvidenceShiftId, setLocalStartEvidenceShiftId] = useState<string | number | null>(null)
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
+  const [startEvidenceUploadError, setStartEvidenceUploadError] = useState<string | null>(null)
+  const [endEvidenceUploadError, setEndEvidenceUploadError] = useState<string | null>(null)
   const [sendingOtp, setSendingOtp] = useState(false)
   const [verifyingOtp, setVerifyingOtp] = useState(false)
   const [otpCode, setOtpCode] = useState("")
@@ -1117,6 +1119,8 @@ export default function ShiftsPage() {
     setCoords(null)
     setPhoto(null)
     setStartRecoveryPhoto(null)
+    setStartEvidenceUploadError(null)
+    setEndEvidenceUploadError(null)
   }
 
   const resetTaskEvidenceCapture = () => {
@@ -1306,14 +1310,21 @@ export default function ShiftsPage() {
       }
 
       if (!photo) throw new Error(t("Debes capturar evidencia fotografica.", "You must capture photo evidence."))
-      await uploadShiftEvidence({
-        shiftId: Number(activeShift.id),
-        type: "fin",
-        file: photo,
-        lat: coords.lat,
-        lng: coords.lng,
-        accuracy: coords.accuracyMeters,
-      })
+      setEndEvidenceUploadError(null)
+      try {
+        await uploadShiftEvidence({
+          shiftId: Number(activeShift.id),
+          type: "fin",
+          file: photo,
+          lat: coords.lat,
+          lng: coords.lng,
+          accuracy: coords.accuracyMeters,
+        })
+      } catch (error: unknown) {
+        const exact = extractErrorMessage(error, t("No se pudo subir la evidencia de salida.", "Could not upload end evidence."))
+        setEndEvidenceUploadError(exact)
+        throw error
+      }
       await endShift({
         shiftId: activeShift.id,
         lat: coords.lat,
@@ -1354,6 +1365,7 @@ export default function ShiftsPage() {
 
   const handleUploadMissingStartEvidence = async () => {
     if (!activeShift) return
+    setStartEvidenceUploadError(null)
     if (!coords || !startRecoveryPhoto) {
       showToast(
         "info",
@@ -1392,6 +1404,7 @@ export default function ShiftsPage() {
       })
       setLocalStartEvidenceShiftId(activeShift.id)
       setStartRecoveryPhoto(null)
+      setStartEvidenceUploadError(null)
       showToast("success", t("Evidencia de inicio cargada.", "Start evidence uploaded."))
       resetEvidenceAndLocation()
       setHistoryPage(1)
@@ -1408,8 +1421,12 @@ export default function ShiftsPage() {
             "Invalid or expired OTP. Verify again to upload evidence."
           )
         )
+        setStartEvidenceUploadError(message)
       } else {
-        showToast("error", extractErrorMessage(error, t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence.")))
+        const fallback = t("No se pudo subir la evidencia de inicio.", "Could not upload start evidence.")
+        const exact = extractErrorMessage(error, fallback)
+        setStartEvidenceUploadError(exact)
+        showToast("error", exact)
       }
     } finally {
       setUploadingStartEvidence(false)
@@ -2312,6 +2329,11 @@ export default function ShiftsPage() {
                           </Button>
                         </div>
                       </div>
+                      {startEvidenceUploadError && (
+                        <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                          {startEvidenceUploadError}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -2320,6 +2342,11 @@ export default function ShiftsPage() {
                     <span>{t("Foto de salida", "End photo")}: {photo ? t("Lista", "Ready") : t("Pendiente", "Pending")}</span>
                     <span>{t("Evidencia inicio", "Start evidence")}: {hasStartEvidence ? "OK" : t("Pendiente", "Pending")}</span>
                   </div>
+                  {endEvidenceUploadError && (
+                    <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                      {endEvidenceUploadError}
+                    </div>
+                  )}
                 </div>
               )}
 
