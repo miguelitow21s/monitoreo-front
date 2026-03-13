@@ -439,6 +439,17 @@ export default function UsersPage() {
 
   const usersById = new Map(rows.map(item => [item.id, item]))
   const restaurantsById = new Map(restaurants.map(item => [String(item.id), item]))
+  const selectedScheduleEmployee = usersById.get(scheduleEmployeeId)
+  const selectedScheduleRestaurant = restaurantsById.get(String(scheduleRestaurantId))
+  const selectedScheduleEmployeeLabel =
+    selectedScheduleEmployee?.full_name ??
+    selectedScheduleEmployee?.email ??
+    selectedScheduleEmployee?.id ??
+    t("Sin empleado seleccionado", "No employee selected")
+  const selectedScheduleRestaurantLabel =
+    formatRestaurantLabel(selectedScheduleRestaurant) ||
+    selectedScheduleRestaurant?.name ||
+    t("Sin restaurante seleccionado", "No restaurant selected")
   const weekdayOptions = [
     { value: 1, label: t("Lun", "Mon") },
     { value: 2, label: t("Mar", "Tue") },
@@ -760,6 +771,14 @@ export default function UsersPage() {
                 <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
                   <p className="text-xs text-slate-500">{t("Genera turnos por rango y dias de semana, o agrega bloques manuales.", "Generate shifts by date range and weekdays, or add manual blocks.")}</p>
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                    <p>
+                      <span className="font-semibold">{t("Empleado seleccionado", "Selected employee")}:</span> {selectedScheduleEmployeeLabel}
+                    </p>
+                    <p className="mt-1">
+                      <span className="font-semibold">{t("Restaurante seleccionado", "Selected restaurant")}:</span> {selectedScheduleRestaurantLabel}
+                    </p>
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button size="sm" variant="ghost" onClick={() => handleApplyBulkPreset("day")}>
                       {t("1 dia (hoy)", "1 day (today)")}

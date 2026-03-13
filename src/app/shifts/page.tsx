@@ -410,6 +410,30 @@ export default function ShiftsPage() {
     [knownRestaurants]
   )
 
+  const selectedSupervisorScheduleEmployeeLabel = useMemo(() => {
+    const selected = staffUsers.find(item => item.id === supervisorScheduleEmployeeId)
+    return (
+      selected?.full_name ??
+      selected?.email ??
+      selected?.id ??
+      t("Sin empleado seleccionado", "No employee selected")
+    )
+  }, [staffUsers, supervisorScheduleEmployeeId, t])
+
+  const selectedSupervisorScheduleRestaurantLabel = useMemo(() => {
+    if (!supervisorScheduleRestaurantId) {
+      return t("Sin restaurante seleccionado", "No restaurant selected")
+    }
+
+    const known = knownRestaurantsById.get(supervisorScheduleRestaurantId)
+    if (known) {
+      return formatRestaurantLabel(known) || known.name || `#${supervisorScheduleRestaurantId}`
+    }
+
+    const scoped = staffRestaurants.find(item => item.id === supervisorScheduleRestaurantId)
+    return scoped?.name ?? `#${supervisorScheduleRestaurantId}`
+  }, [knownRestaurantsById, staffRestaurants, supervisorScheduleRestaurantId, t])
+
   const getRestaurantLabelById = useCallback(
     (restaurantId: number | null | undefined) => {
       if (!restaurantId) return "-"
@@ -2347,6 +2371,14 @@ export default function ShiftsPage() {
                 <p className="text-xs text-slate-500">
                   {t("Genera turnos por rango y dias de semana, o agrega bloques manuales.", "Generate shifts by date range and weekdays, or add manual blocks.")}
                 </p>
+                <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                  <p>
+                    <span className="font-semibold">{t("Empleado seleccionado", "Selected employee")}:</span> {selectedSupervisorScheduleEmployeeLabel}
+                  </p>
+                  <p className="mt-1">
+                    <span className="font-semibold">{t("Restaurante seleccionado", "Selected restaurant")}:</span> {selectedSupervisorScheduleRestaurantLabel}
+                  </p>
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("day")}>
                     {t("1 dia (hoy)", "1 day (today)")}
