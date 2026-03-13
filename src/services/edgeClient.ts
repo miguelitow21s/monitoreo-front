@@ -133,7 +133,13 @@ function extractErrorContext(error: unknown) {
         message = directMessage
       }
     } catch {
-      // Keep original message if parsing fails.
+      if (typeof rawBody === "string") {
+        const trimmed = rawBody.trim()
+        if (trimmed) {
+          const match = trimmed.match(/\"message\"\s*:\s*\"([^\"]+)\"/)
+          message = match?.[1] ?? trimmed
+        }
+      }
     }
   }
 
