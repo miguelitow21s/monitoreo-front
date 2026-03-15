@@ -355,7 +355,6 @@ export default function ReportsPage() {
 
           <Card
             title={t("Filtros del reporte", "Report filters")}
-            subtitle={t("Selecciona periodo y aplica.", "Choose period and apply.")}
           >
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               <input
@@ -464,7 +463,7 @@ export default function ReportsPage() {
             </div>
           </Card>
 
-          <Card title={t("Resumen", "Summary")} subtitle={t("Indicadores del filtro actual.", "Indicators for current filter.")}>
+          <Card title={t("Resumen", "Summary")}>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Turnos totales", "Total shifts")}: {rows.length}</div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Finalizados", "Completed")}: {totalCompleted}</div>
@@ -473,7 +472,7 @@ export default function ReportsPage() {
             </div>
           </Card>
 
-          <Card title={t("Resultados del reporte", "Report results")} subtitle={t("Detalle con columnas seleccionadas.", "Detail with selected columns.")}>
+          <Card title={t("Resultados del reporte", "Report results")}>
             {loading || authLoading ? (
               <Skeleton className="h-28" />
             ) : rows.length === 0 ? (
@@ -558,7 +557,7 @@ export default function ReportsPage() {
             )}
           </Card>
 
-          <Card title={t("Historial de informes generados", "Generated reports history")} subtitle={t("Registros historicos y enlace de solo lectura compartible.", "Historical records and shareable read-only link.")}>
+          <Card title={t("Historial de informes generados", "Generated reports history")}>
             {loadingHistory ? (
               <Skeleton className="h-24" />
             ) : reportHistory.length === 0 ? (

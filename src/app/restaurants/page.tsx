@@ -1000,7 +1000,7 @@ export default function RestaurantsPage() {
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title={t("Crear restaurante", "Create restaurant")} subtitle={t("Completa direccion, radio y guarda.", "Complete address, radius, and save.")}>
+              <Card title={t("Crear restaurante", "Create restaurant")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1142,7 +1142,7 @@ export default function RestaurantsPage() {
                 ) : null}
               </Card>
 
-              <Card title={t("Asignaciones", "Assignments")} subtitle={t("Asigna empleados o supervisoras por restaurante.", "Assign employees or supervisors by restaurant.")}>
+              <Card title={t("Asignaciones", "Assignments")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1214,7 +1214,7 @@ export default function RestaurantsPage() {
                 )}
               </Card>
 
-              <Card title={t("Restaurantes", "Restaurants")} subtitle={t("Configuracion operativa.", "Operational setup.")}>
+              <Card title={t("Restaurantes", "Restaurants")}>
                 {rows.length === 0 ? (
                   <EmptyState
                     title={t("Sin restaurantes", "No restaurants")}

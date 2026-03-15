@@ -2331,7 +2331,6 @@ export default function ShiftsPage() {
 
             <Card
               title={t("Accion principal", "Main action")}
-              subtitle={activeShift ? t("Finalizar turno activo", "End active shift") : t("Iniciar nuevo turno", "Start new shift")}
             >
               {(!activeShift || !shiftOtpReady) && (
                 <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
@@ -3584,7 +3583,6 @@ export default function ShiftsPage() {
                     <Card
                       key={row.id}
                       title={`${t("Turno", "Shift")} ${String(row.id).slice(0, 8)}`}
-                      subtitle={`${t("Inicio", "Start")}: ${formatDateTime(row.start_time)} | ${t("Estado", "Status")}: ${row.status}`}
                     >
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="rounded-lg border border-slate-200 p-3 text-sm">

@@ -73,7 +73,7 @@ export default function AccountPasswordPage() {
   return (
     <ProtectedRoute>
       <div className="mx-auto w-full max-w-xl">
-        <Card title={t("Cambiar contrasena", "Change password")} subtitle={t("Actualiza las credenciales de tu cuenta actual.", "Update your current account credentials.")}>
+        <Card title={t("Cambiar contrasena", "Change password")}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <div className="relative">
               <input

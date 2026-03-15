@@ -94,10 +94,7 @@ export default function AccountHoursPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.EMPLEADO]}>
         <section className="space-y-4">
-          <Card
-            title={t("Historial de horas", "Hours history")}
-            subtitle={t("Consulta tus horas trabajadas por rango de fechas.", "Check your worked hours by date range.")}
-          >
+          <Card title={t("Historial de horas", "Hours history")}>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <input
                 type="date"
@@ -121,7 +118,7 @@ export default function AccountHoursPage() {
             </p>
           </Card>
 
-          <Card title={t("Detalle", "Details")} subtitle={t("Registros de turnos del periodo.", "Shift records in selected period.")}>
+          <Card title={t("Detalle", "Details")}>
             {loading ? (
               <div className="space-y-2">
                 {Array.from({ length: 5 }).map((_, index) => (

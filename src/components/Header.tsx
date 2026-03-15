@@ -62,9 +62,6 @@ export default function Header({
           <h1 className="max-w-[170px] truncate text-sm font-semibold text-slate-900 md:max-w-none md:text-[15px]">
             {t("Plataforma de Control Operativo", "Operations Control Platform")}
           </h1>
-          <p className="hidden text-xs text-slate-500 lg:block">
-            {t("Trazabilidad de turnos y supervision en campo", "Shift traceability and field supervision")}
-          </p>
         </div>
       </div>
 
