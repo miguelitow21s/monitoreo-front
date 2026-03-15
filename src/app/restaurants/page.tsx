@@ -1226,28 +1226,48 @@ export default function RestaurantsPage() {
                   <div className="space-y-3">
                     {rows.map(item => {
                       const addressLabel = buildRestaurantAddressLabel(item)
+                      const lat = typeof item.lat === "number" ? item.lat : null
+                      const lng = typeof item.lng === "number" ? item.lng : null
+                      const hasMap = typeof lat === "number" && Number.isFinite(lat) && typeof lng === "number" && Number.isFinite(lng)
+                      const assignedCount = (assignments[item.id] ?? []).length
                       return (
-                        <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="font-semibold text-slate-900">{item.name}</p>
-                              <p className="text-sm text-slate-600">
+                        <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-base font-semibold text-slate-900">{item.name}</p>
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                                    item.is_active === false
+                                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  }`}
+                                >
+                                  {item.is_active === false ? t("Inactivo", "Inactive") : t("Activo", "Active")}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-sm text-slate-600">
                                 {addressLabel || t("Direccion pendiente por definir.", "Address pending definition.")}
                               </p>
-                              <p className="text-xs text-slate-500">
-                                {t("Radio", "Radius")}: {item.geofence_radius_m ?? "-"} m
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {t("Estado", "Status")}: {item.is_active === false ? t("Inactivo", "Inactive") : t("Activo", "Active")}
-                              </p>
+                              <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                                <span>
+                                  {t("Radio", "Radius")}: {item.geofence_radius_m ?? "-"} m
+                                </span>
+                                <span>
+                                  {t("Asignados", "Assigned")}: {assignedCount}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <input
-                                defaultValue={String(item.geofence_radius_m ?? 100)}
-                                className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                                onBlur={event => void handleRadiusUpdate(item, event.target.value)}
-                              />
-                              <span className="text-xs text-slate-500">m</span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                                <span className="text-xs text-slate-500">{t("Radio", "Radius")}</span>
+                                <input
+                                  defaultValue={String(item.geofence_radius_m ?? 100)}
+                                  className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+                                  onBlur={event => void handleRadiusUpdate(item, event.target.value)}
+                                />
+                                <span className="text-xs text-slate-500">m</span>
+                              </div>
                               <Button
                                 size="sm"
                                 variant={item.is_active === false ? "secondary" : "ghost"}
@@ -1257,11 +1277,47 @@ export default function RestaurantsPage() {
                               </Button>
                             </div>
                           </div>
-                          {(assignments[item.id] ?? []).length > 0 && (
-                            <p className="mt-2 text-xs text-slate-500">
-                              {t("Empleados asignados", "Assigned employees")}: {(assignments[item.id] ?? []).length}
-                            </p>
-                          )}
+
+                          <div className="mt-4 grid gap-3 md:grid-cols-[1.1fr_0.9fr]">
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                {t("Resumen", "Summary")}
+                              </p>
+                              <div className="mt-2 grid gap-2 text-sm">
+                                <div>
+                                  <span className="text-xs text-slate-500">{t("Direccion", "Address")}: </span>
+                                  <span className="font-medium text-slate-700">
+                                    {addressLabel || t("Pendiente", "Pending")}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-xs text-slate-500">{t("Radio", "Radius")}: </span>
+                                  <span className="font-medium text-slate-700">
+                                    {item.geofence_radius_m ?? "-"} m
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-xs text-slate-500">{t("Asignados", "Assigned")}: </span>
+                                  <span className="font-medium text-slate-700">{assignedCount}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                              {hasMap ? (
+                                <iframe
+                                  title={t("Mapa del restaurante", "Restaurant map")}
+                                  src={buildMapPreviewUrl(lat as number, lng as number)}
+                                  className="h-40 w-full"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="flex h-40 items-center justify-center text-xs text-slate-500">
+                                  {t("Mapa pendiente", "Map pending")}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       )
                     })}

@@ -484,30 +484,47 @@ export default function ReportsPage() {
               />
             ) : (
               <div className="space-y-3">
+                <div className="hidden md:flex md:items-center md:justify-between md:rounded-lg md:border md:border-slate-200 md:bg-slate-50 md:px-3 md:py-2">
+                  <p className="text-xs text-slate-600">
+                    {t("Mostrando", "Showing")} {rows.length} {t("filas", "rows")}
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                    {visibleColumns.map(column => (
+                      <span key={column.key} className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                        {column.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="space-y-2 md:hidden">
                   {rows.map(item => (
-                    <div key={item.id} className="rounded-lg border border-slate-200 p-3">
+                    <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                       {visibleColumns.map(column => (
-                        <p key={`${item.id}-${column.key}`} className="mt-1 text-sm text-slate-700">
-                          <span className="font-medium">{column.label}:</span>{" "}
-                          {column.key === "start_evidence" || column.key === "end_evidence" ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() =>
-                                void openEvidenceReadonly(
-                                  column.key === "start_evidence" ? item.start_evidence_path : item.end_evidence_path
-                                )
-                              }
-                            >
-                              {column.key === "start_evidence"
-                                ? t("Ver foto inicial", "View start photo")
-                                : t("Ver foto final", "View end photo")}
-                            </Button>
-                          ) : (
-                            getDisplayValue(item, column.key)
-                          )}
-                        </p>
+                        <div key={`${item.id}-${column.key}`} className="mt-2 flex items-start justify-between gap-3 text-sm">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {column.label}
+                          </span>
+                          <div className="text-right text-sm text-slate-700">
+                            {column.key === "start_evidence" || column.key === "end_evidence" ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  void openEvidenceReadonly(
+                                    column.key === "start_evidence" ? item.start_evidence_path : item.end_evidence_path
+                                  )
+                                }
+                              >
+                                {column.key === "start_evidence"
+                                  ? t("Ver foto inicial", "View start photo")
+                                  : t("Ver foto final", "View end photo")}
+                              </Button>
+                            ) : (
+                              getDisplayValue(item, column.key)
+                            )}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ))}
@@ -515,10 +532,10 @@ export default function ReportsPage() {
 
                 <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
                   <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left text-slate-500">
+                    <thead className="bg-slate-50">
+                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                         {visibleColumns.map(column => (
-                          <th key={column.key} className="pb-2 pr-3">
+                          <th key={column.key} className="px-3 py-2">
                             {column.label}
                           </th>
                         ))}
@@ -528,7 +545,7 @@ export default function ReportsPage() {
                       {rows.map(item => (
                         <tr key={item.id} className="border-b border-slate-100">
                           {visibleColumns.map(column => (
-                            <td key={`${item.id}-${column.key}`} className="py-2 pr-3">
+                            <td key={`${item.id}-${column.key}`} className="px-3 py-2 align-top">
                               {column.key === "start_evidence" || column.key === "end_evidence" ? (
                                 <Button
                                   size="sm"
