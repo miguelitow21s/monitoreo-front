@@ -3712,6 +3712,7 @@ export default function ShiftsPage() {
                   </div>
                 </div>
               ) : (
+                <>
                 <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                   <p className="font-semibold text-slate-800">
                     {t("Requisitos para finalizar", "End requirements")}
@@ -3891,6 +3892,7 @@ export default function ShiftsPage() {
                     </div>
                   </>
                 )}
+                </>
               )}
 
               {activeShift && hasStartEvidence ? (
@@ -4035,6 +4037,7 @@ export default function ShiftsPage() {
                 </ul>
               )}
             </Card>
+          )}
 
             {isEmpleado && activeShift && (
               <Card title={t("Registrar incidente", "Register incident")}>
