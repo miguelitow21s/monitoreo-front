@@ -14,6 +14,7 @@ export interface ShiftRecord {
   start_time: string
   end_time: string | null
   status: ShiftStatus
+  restaurant_id?: number | null
 }
 
 interface StartShiftPayload {

@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Manrope } from "next/font/google"
 
@@ -296,7 +296,7 @@ function formatRestaurantLabel(restaurant: Restaurant | null | undefined) {
   return address ? `${restaurant.name} - ${address}` : restaurant.name
 }
 
-export default function ShiftsPage() {
+function ShiftsPageContent() {
   const { loading: roleLoading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
   const { formatDateTime: formatDateTimeI18n, t } = useI18n()
   const { user, logout } = useAuth()
@@ -565,18 +565,6 @@ export default function ShiftsPage() {
     () => activeShift?.id ?? employeeDashboard?.active_shift?.id ?? null,
     [activeShift?.id, employeeDashboard?.active_shift?.id]
   )
-  const activeRestaurantLabel = useMemo(() => {
-    const restaurantId =
-      activeShift?.restaurant_id ?? employeeDashboard?.active_shift?.restaurant_id ?? expectedRestaurantId
-    if (!restaurantId) return t("Restaurante", "Restaurant")
-    return getRestaurantLabelById(restaurantId)
-  }, [
-    activeShift?.restaurant_id,
-    employeeDashboard?.active_shift?.restaurant_id,
-    expectedRestaurantId,
-    getRestaurantLabelById,
-    t,
-  ])
   const elapsedShiftMs = useMemo(() => {
     if (!activeShift?.start_time) return 0
     const startMs = new Date(activeShift.start_time).getTime()
@@ -835,6 +823,19 @@ export default function ShiftsPage() {
     nextScheduledShift,
     presenceRestaurantId,
     supervisorShiftRestaurantId,
+  ])
+
+  const activeRestaurantLabel = useMemo(() => {
+    const restaurantId =
+      activeShift?.restaurant_id ?? employeeDashboard?.active_shift?.restaurant_id ?? expectedRestaurantId
+    if (!restaurantId) return t("Restaurante", "Restaurant")
+    return getRestaurantLabelById(restaurantId)
+  }, [
+    activeShift?.restaurant_id,
+    employeeDashboard?.active_shift?.restaurant_id,
+    expectedRestaurantId,
+    getRestaurantLabelById,
+    t,
   ])
 
   const geofenceTarget = useMemo(() => {
@@ -1455,7 +1456,8 @@ export default function ShiftsPage() {
   }
 
   const handleCaptureStartPhoto = useCallback(
-    (file: Blob) => {
+    (file: Blob | null) => {
+      if (!file) return
       if (!isAreaComplete(startAreaKey, startAreaDetail, startSubareaKey)) {
         showToast("info", t("Selecciona el area antes de tomar la foto.", "Select the area before taking the photo."))
         return
@@ -1475,7 +1477,8 @@ export default function ShiftsPage() {
   )
 
   const handleCaptureEndPhoto = useCallback(
-    (file: Blob) => {
+    (file: Blob | null) => {
+      if (!file) return
       if (!isAreaComplete(endAreaKey, endAreaDetail, endSubareaKey)) {
         showToast("info", t("Selecciona el area antes de tomar la foto.", "Select the area before taking the photo."))
         return
@@ -1780,13 +1783,13 @@ export default function ShiftsPage() {
       setEndShiftError(exact)
       if (isConsentPendingError(error)) {
         showToast("error", t("Consentimiento pendiente: acepta terminos de tratamiento de datos para operar turnos.", "Consent pending: accept data processing terms to operate shifts."))
-      return
+        return
+      }
+      showToast("error", exact)
+    } finally {
+      setProcessing(false)
     }
-    showToast("error", exact)
-  } finally {
-    setProcessing(false)
   }
-}
 
   const handleCloseSuccess = useCallback(() => {
     setShiftSuccess(null)
@@ -4572,7 +4575,6 @@ export default function ShiftsPage() {
                 </div>
               )}
               </Card>
-            )}
 
             <Card title={t("Programar turno", "Schedule shift")}>
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -5335,6 +5337,14 @@ export default function ShiftsPage() {
         </Modal>
       </div>
     </ProtectedRoute>
+  )
+}
+
+export default function ShiftsPage() {
+  return (
+    <Suspense fallback={<div className={manrope.className} />}>
+      <ShiftsPageContent />
+    </Suspense>
   )
 }
 
