@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import Header from "@/components/Header"
 import Sidebar from "@/components/Sidebar"
 import Footer from "@/components/Footer"
+import { useRole } from "@/hooks/useRole"
 
 type LayoutShellProps = {
   children: React.ReactNode
@@ -13,6 +14,7 @@ type LayoutShellProps = {
 
 export default function LayoutShell({ children }: LayoutShellProps) {
   const pathname = usePathname()
+  const { loading: roleLoading, isEmpleado } = useRole()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -24,6 +26,14 @@ export default function LayoutShell({ children }: LayoutShellProps) {
 
   if (standalonePage) {
     return <>{children}</>
+  }
+
+  if (!roleLoading && isEmpleado) {
+    return (
+      <main className="min-h-screen px-3 pb-6 pt-6 sm:px-5 lg:px-6">
+        <div className="mx-auto w-full max-w-[1240px]">{children}</div>
+      </main>
+    )
   }
 
   const desktopOffset = collapsed ? "md:ml-20" : "md:ml-64"
