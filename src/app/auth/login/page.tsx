@@ -10,11 +10,6 @@ import { useAuth } from "@/hooks/useAuth"
 import { acceptLegalConsent, getLegalConsentStatus, LegalConsentStatus } from "@/services/compliance.service"
 import { supabase } from "@/services/supabaseClient"
 
-const defaultLegalText: Record<"es" | "en", string> = {
-  es: "Al iniciar sesion y operar en la plataforma aceptas el tratamiento de datos personales para control operativo, trazabilidad contractual, auditoria y cumplimiento legal del servicio prestado.",
-  en: "By signing in and using this platform, you accept personal data processing for operational control, contractual traceability, auditing, and legal compliance of the provided service.",
-}
-
 export default function LoginPage() {
   const router = useRouter()
   const { session, loading } = useAuth()
@@ -23,14 +18,13 @@ export default function LoginPage() {
   const t = (es: string, en: string) => (language === "en" ? en : es)
 
   const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const [pin, setPin] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [acceptedDataTreatment, setAcceptedDataTreatment] = useState(false)
   const [legalStatus, setLegalStatus] = useState<LegalConsentStatus | null>(null)
   const [loadingLegalStatus, setLoadingLegalStatus] = useState(false)
-  const [showLegalContent, setShowLegalContent] = useState(false)
   const [needsBackendConsent, setNeedsBackendConsent] = useState(false)
   const [processingBackendConsent, setProcessingBackendConsent] = useState(false)
   const [pendingAccessToken, setPendingAccessToken] = useState<string | null>(null)
@@ -70,10 +64,19 @@ export default function LoginPage() {
       return
     }
 
+    const normalizedPin = pin.trim()
+    if (!/^\d{6}$/.test(normalizedPin)) {
+      setError(t("El PIN debe tener 6 digitos.", "PIN must be 6 digits."))
+      return
+    }
+
     setSubmitting(true)
     setBlockAutoRedirect(true)
 
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password: normalizedPin,
+    })
 
     if (signInError) {
       setError(t("Credenciales invalidas", "Invalid credentials"))
@@ -109,7 +112,6 @@ export default function LoginPage() {
       if (!status.accepted) {
         setNeedsBackendConsent(true)
         setPendingAccessToken(accessToken)
-        setShowLegalContent(true)
         setError(
           t(
             "Debes leer y aceptar los terminos y condiciones para continuar.",
@@ -204,8 +206,6 @@ export default function LoginPage() {
     }
   }
 
-  const legalContent = legalStatus?.active_term?.content?.trim() || defaultLegalText[language]
-
   if (loading || (!blockAutoRedirect && session)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
@@ -238,10 +238,10 @@ export default function LoginPage() {
 
         <div className="mt-6 space-y-3">
           <input
-            type="email"
+            type="text"
             required
-            autoComplete="email"
-            placeholder={t("Correo electronico", "Email address")}
+            autoComplete="username"
+            placeholder={t("Correo o usuario", "Email or username")}
             value={email}
             onChange={e => {
               setEmail(e.target.value)
@@ -250,15 +250,25 @@ export default function LoginPage() {
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 caret-slate-900 outline-none transition focus:border-slate-800"
           />
 
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {t("PIN de 6 digitos", "6-digit PIN")}
+            </span>
+          </div>
+
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
               required
-              autoComplete="current-password"
-              placeholder={t("Contrasena", "Password")}
-              value={password}
+              autoComplete="one-time-code"
+              placeholder={t("PIN de 6 digitos", "6-digit PIN")}
+              inputMode="numeric"
+              pattern="\\d*"
+              maxLength={6}
+              value={pin}
               onChange={e => {
-                setPassword(e.target.value)
+                const next = e.target.value.replace(/\D/g, "").slice(0, 6)
+                setPin(next)
                 if (error) setError(null)
               }}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-11 text-sm text-slate-800 caret-slate-900 outline-none transition focus:border-slate-800"
@@ -266,8 +276,8 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPassword(prev => !prev)}
-              aria-label={showPassword ? t("Ocultar contrasena", "Hide password") : t("Mostrar contrasena", "Show password")}
-              title={showPassword ? t("Ocultar contrasena", "Hide password") : t("Mostrar contrasena", "Show password")}
+              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
+              title={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
               className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
             >
               {showPassword ? (
@@ -306,47 +316,6 @@ export default function LoginPage() {
               )}
             </label>
           </div>
-
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="min-w-0 break-words text-[10px] leading-4 text-slate-500 sm:text-[11px]">
-              {loadingLegalStatus
-                ? t("Cargando terminos legales...", "Loading legal terms...")
-                : legalStatus?.active_term
-                  ? `${legalStatus.active_term.title ?? t("Terminos legales activos", "Active legal terms")} (v${legalStatus.active_term.version ?? "-"})`
-                  : t(
-                      "Puedes leer los terminos base. La version legal activa se validara despues del inicio de sesion.",
-                      "You can read base terms now. Active legal version is validated after sign in."
-                    )}
-            </p>
-            <button
-              type="button"
-              className="self-start text-[10px] font-semibold text-slate-700 underline sm:self-auto sm:text-[11px]"
-              onClick={() => setShowLegalContent(prev => !prev)}
-            >
-              {showLegalContent ? t("Ocultar terminos", "Hide terms") : t("Ver terminos", "View terms")}
-            </button>
-          </div>
-
-          {showLegalContent && (
-            <div className="mt-2 max-h-52 space-y-2 overflow-auto rounded border border-slate-200 bg-white p-2.5 text-[10px] text-slate-600 sm:max-h-64 sm:p-3 sm:text-[11px]">
-              {legalStatus?.active_term ? (
-                <p>
-                  <span className="font-semibold">{t("Codigo", "Code")}:</span> {legalStatus.active_term.code ?? "-"} |{" "}
-                  <span className="font-semibold">{t("Titulo", "Title")}:</span> {legalStatus.active_term.title ?? "-"} |{" "}
-                  <span className="font-semibold">{t("Version", "Version")}:</span> {legalStatus.active_term.version ?? "-"}
-                </p>
-              ) : (
-                <p>
-                  <span className="font-semibold">{t("Documento", "Document")}:</span>{" "}
-                  {t("Terminos y condiciones base", "Base terms and conditions")}
-                </p>
-              )}
-
-              <div className="whitespace-pre-wrap break-words rounded border border-slate-100 bg-slate-50 p-2 text-[11px] leading-5 text-slate-700">
-                {legalContent}
-              </div>
-            </div>
-          )}
 
           {needsBackendConsent && (
             <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
@@ -391,9 +360,6 @@ export default function LoginPage() {
         <div className="mt-4 flex items-center justify-between text-xs">
           <Link href="/auth/forgot-password" className="text-slate-600 underline hover:text-slate-900">
             {t("Olvide mi contrasena", "Forgot password")}
-          </Link>
-          <Link href="/auth/register" className="text-slate-600 underline hover:text-slate-900">
-            {t("Registrarme", "Register")}
           </Link>
         </div>
       </form>

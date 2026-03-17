@@ -19,7 +19,8 @@ export default function LayoutShell({ children }: LayoutShellProps) {
   const standalonePage =
     pathname === "/" ||
     pathname.startsWith("/auth") ||
-    pathname.startsWith("/unauthorized")
+    pathname.startsWith("/unauthorized") ||
+    pathname.startsWith("/clean-control")
 
   if (standalonePage) {
     return <>{children}</>

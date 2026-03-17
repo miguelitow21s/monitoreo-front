@@ -19,7 +19,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const { showToast } = useToast()
   const { formatDateTime, t } = useI18n()
-  const { loading: authLoading, isAuthenticated, session } = useAuth()
+  const { loading: authLoading, isAuthenticated, session, user, logout } = useAuth()
   const { loading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
 
   const [metrics, setMetrics] = useState<DashboardMetric[]>([])
@@ -27,11 +27,7 @@ export default function DashboardPage() {
   const [loadingData, setLoadingData] = useState(true)
   const [employeeHome, setEmployeeHome] = useState<EmployeeDashboardData | null>(null)
 
-  const roleSummary = isSuperAdmin
-    ? t("Vista completa del sistema para administracion global.", "Full system view for global administration.")
-    : isSupervisora
-      ? t("Supervision en tiempo real de turnos e insumos.", "Real-time supervision of shifts and supplies.")
-      : t("Control personal de asistencia y evidencia de turnos.", "Personal attendance control and shift evidence.")
+  const roleSummary = t("Vista completa del sistema para administracion global.", "Full system view for global administration.")
 
   const quickActions = useMemo(
     () => [
@@ -41,11 +37,9 @@ export default function DashboardPage() {
         onClick: () => router.push("/shifts"),
         variant: "secondary" as const,
       },
-      ...(isSuperAdmin
-        ? [{ label: t("Gestionar usuarios", "Manage users"), onClick: () => router.push("/users"), variant: "ghost" as const }]
-        : []),
+      { label: t("Gestionar usuarios", "Manage users"), onClick: () => router.push("/users"), variant: "ghost" as const },
     ],
-    [isSuperAdmin, router, t]
+    [router, t]
   )
 
   const loadData = useCallback(async () => {
@@ -74,7 +68,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (loading || authLoading) return
     if (!isAuthenticated || !session?.access_token) return
-    void loadData()
+    if (isSuperAdmin) {
+      void loadData()
+    } else {
+      setLoadingData(false)
+    }
   }, [loading, authLoading, isAuthenticated, session?.access_token, loadData])
 
   const localizedMetrics = useMemo(
@@ -105,6 +103,51 @@ export default function DashboardPage() {
       }),
     [metrics, t]
   )
+
+  if (loading || authLoading || (isSuperAdmin && loadingData)) {
+    return (
+      <ProtectedRoute>
+        <section className="space-y-4">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-44" />
+        </section>
+      </ProtectedRoute>
+    )
+  }
+
+  const displayName = (() => {
+    const metadata = user?.user_metadata as { full_name?: string; name?: string } | undefined
+    return metadata?.full_name ?? metadata?.name ?? user?.email?.split("@")[0] ?? t("usuario", "user")
+  })()
+
+  if (!isSuperAdmin) {
+    return (
+      <ProtectedRoute>
+        <section className="flex min-h-[60vh] items-start justify-center px-3">
+          <div className="w-full max-w-sm space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+              <p className="text-sm font-semibold text-slate-900">
+                {t("Hola", "Hi")}, {displayName}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700">
+                {t("En linea • Listo para trabajar", "Online • Ready to work")}
+              </p>
+            </div>
+
+            <Button variant="primary" fullWidth onClick={() => router.push("/shifts?view=start")}>
+              {t("Iniciar turno", "Start shift")}
+            </Button>
+            <Button variant="secondary" fullWidth onClick={() => router.push("/shifts?view=profile")}>
+              {t("Ver mi perfil", "View profile")}
+            </Button>
+            <Button variant="ghost" fullWidth onClick={logout}>
+              {t("Cerrar sesión", "Sign out")}
+            </Button>
+          </div>
+        </section>
+      </ProtectedRoute>
+    )
+  }
 
   return (
     <ProtectedRoute>
