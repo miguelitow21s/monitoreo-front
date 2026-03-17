@@ -34,11 +34,10 @@ import {
   sendShiftPhoneOtp,
   ShiftRecord,
   startShift,
-  getOtpPhoneE164Status,
   verifyShiftPhoneOtp,
 } from "@/services/shifts.service"
 import { clearShiftOtpToken, getShiftOtpToken, getOrCreateDeviceFingerprint } from "@/services/securityContext.service"
-import { uploadShiftEvidence } from "@/services/evidence.service"
+import { EvidenceMeta, uploadShiftEvidence } from "@/services/evidence.service"
 import {
   listMySupervisorPresence,
   registerSupervisorPresence,
@@ -303,7 +302,6 @@ function ShiftsPageContent() {
   const { showToast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const otpDebugEnabled = process.env.NEXT_PUBLIC_OTP_DEBUG === "true"
 
   const formatDateTime = useCallback(
     (value: string | null) =>
@@ -338,6 +336,7 @@ function ShiftsPageContent() {
   const [uploadingEndEvidence, setUploadingEndEvidence] = useState(false)
   const [localStartEvidenceShiftId, setLocalStartEvidenceShiftId] = useState<string | number | null>(null)
   const [endEvidenceUploadedShiftId, setEndEvidenceUploadedShiftId] = useState<string | number | null>(null)
+  const [startEvidencePhotoCount, setStartEvidencePhotoCount] = useState(0)
   const [endEvidencePhotoCount, setEndEvidencePhotoCount] = useState(0)
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
   const [endEvidenceUploadError, setEndEvidenceUploadError] = useState<string | null>(null)
@@ -352,7 +351,6 @@ function ShiftsPageContent() {
   const [otpCode, setOtpCode] = useState("")
   const [shiftOtpReady, setShiftOtpReady] = useState(false)
   const [otpVerifiedAt, setOtpVerifiedAt] = useState<string | null>(null)
-  const [otpPhoneMissingDemo, setOtpPhoneMissingDemo] = useState(false)
   const [otpDebugCode, setOtpDebugCode] = useState<string | null>(null)
   const [otpDebugMaskedPhone, setOtpDebugMaskedPhone] = useState<string | null>(null)
   const [otpDebugExpiresAt, setOtpDebugExpiresAt] = useState<string | null>(null)
@@ -508,6 +506,29 @@ function ShiftsPageContent() {
     () => getAreaLabel(endAreaKey, endAreaDetail, endSubareaKey),
     [getAreaLabel, endAreaDetail, endAreaKey, endSubareaKey]
   )
+  const buildEvidenceMeta = useCallback(
+    (areaKey: string, areaDetail?: string, subKey?: string): EvidenceMeta | undefined => {
+      if (!areaKey) return undefined
+      const areaLabel = areaLabelByKey.get(areaKey) ?? areaKey
+      const payload: EvidenceMeta = {
+        area_key: areaKey,
+        area_label: areaLabel,
+      }
+
+      if (areaKey === "otro" && areaDetail && areaDetail.trim().length > 0) {
+        payload.area_detail = areaDetail.trim()
+      }
+
+      if (subKey) {
+        const subLabel = subareaLabelByArea.get(areaKey)?.get(subKey) ?? subKey
+        payload.subarea_key = subKey
+        payload.subarea_label = subLabel
+      }
+
+      return payload
+    },
+    [areaLabelByKey, subareaLabelByArea]
+  )
   const isAreaComplete = useCallback((areaKey: string, detail?: string, subKey?: string) => {
     if (!areaKey) return false
     if (areaKey !== "otro") {
@@ -582,6 +603,8 @@ function ShiftsPageContent() {
     }
     return endPhotoCaptures.length
   }, [endEvidenceUploaded, endEvidencePhotoCount, endPhotoCaptures.length])
+  const expectedEndPhotoCount = startEvidencePhotoCount > 0 ? startEvidencePhotoCount : null
+  const endPhotosMeetExpected = expectedEndPhotoCount ? endPhotoCaptures.length >= expectedEndPhotoCount : true
   const gpsReady = !!coords
   const startCameraReady = startPhotoCaptures.length > 0
 
@@ -912,6 +935,13 @@ function ShiftsPageContent() {
     if (activeShift && hasStartEvidence && !endEvidenceUploaded) {
       if (endPhotoCaptures.length === 0) {
         blockers.push(t("Debes capturar fotos de salida.", "You must capture exit photos."))
+      } else if (expectedEndPhotoCount && endPhotoCaptures.length < expectedEndPhotoCount) {
+        blockers.push(
+          t(
+            `Debes tomar al menos ${expectedEndPhotoCount} fotos de salida (las mismas del inicio).`,
+            `You must take at least ${expectedEndPhotoCount} exit photos (same as start).`
+          )
+        )
       } else if (!endPhotosReady) {
         blockers.push(t("Selecciona el area y subarea en cada foto de salida.", "Select area and subarea for each exit photo."))
       } else {
@@ -921,8 +951,8 @@ function ShiftsPageContent() {
     if (!shiftOtpReady) {
       blockers.push(
         t(
-          "Debes validar OTP del telefono para iniciar/finalizar turno.",
-          "Phone OTP verification is required to start/end shift."
+          "Debes validar OTP para iniciar/finalizar turno.",
+          "OTP verification is required to start/end shift."
         )
       )
     }
@@ -994,6 +1024,7 @@ function ShiftsPageContent() {
     endPhotoCaptures.length,
     endPhotosReady,
     endEvidenceUploaded,
+    expectedEndPhotoCount,
     t,
   ])
 
@@ -1120,29 +1151,6 @@ function ShiftsPageContent() {
     getOrCreateDeviceFingerprint()
     setShiftOtpReady(Boolean(getShiftOtpToken()))
   }, [canOperateOtp, roleLoading])
-
-  useEffect(() => {
-    if (!otpDebugEnabled) {
-      setOtpPhoneMissingDemo(false)
-      return
-    }
-    if (roleLoading || !canOperateOtp) return
-    let mounted = true
-    const checkPhone = async () => {
-      try {
-        const status = await getOtpPhoneE164Status()
-        if (!mounted) return
-        setOtpPhoneMissingDemo(!status.isValid)
-      } catch {
-        if (!mounted) return
-        setOtpPhoneMissingDemo(true)
-      }
-    }
-    void checkPhone()
-    return () => {
-      mounted = false
-    }
-  }, [canOperateOtp, otpDebugEnabled, roleLoading])
 
   useEffect(() => {
     if (roleLoading) return
@@ -1385,7 +1393,7 @@ function ShiftsPageContent() {
     return { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes }
   }
 
-  const resetEvidenceAndLocation = () => {
+  const resetEvidenceAndLocation = (options?: { keepStartEvidenceCount?: boolean }) => {
     setCoords(null)
     setStartRecoveryPhoto(null)
     setEndEvidenceUploadError(null)
@@ -1400,6 +1408,9 @@ function ShiftsPageContent() {
     setEndSubareaKey("")
     setEndEvidenceUploadedShiftId(null)
     setEndEvidencePhotoCount(0)
+    if (!options?.keepStartEvidenceCount) {
+      setStartEvidencePhotoCount(0)
+    }
   }
 
   const resetTaskEvidenceCapture = () => {
@@ -1417,34 +1428,25 @@ function ShiftsPageContent() {
       const result = await sendShiftPhoneOtp()
       const maskedPhone = result?.maskedPhone
       const deliveryStatus = result?.deliveryStatus
-      const debugCode = otpDebugEnabled ? result?.debugCode : null
-      debugLog("otp.send.result", { deliveryStatus, maskedPhone, debugCode: otpDebugEnabled ? debugCode : null })
-      if (otpDebugEnabled) {
-        setOtpDebugCode(debugCode ?? null)
-        setOtpDebugMaskedPhone(maskedPhone ?? null)
-        setOtpDebugExpiresAt(result?.expiresAt ?? null)
-      }
-      if (otpDebugEnabled && result?.phoneMissing) {
-        setOtpPhoneMissingDemo(true)
-      }
-      const debugSuffix =
-        deliveryStatus === "debug"
-          ? t(" (modo debug: SMS no enviado)", " (debug mode: SMS not sent)")
+      const debugCode = result?.debugCode ?? null
+      debugLog("otp.send.result", { deliveryStatus, maskedPhone, debugCode })
+      setOtpDebugCode(debugCode)
+      setOtpDebugMaskedPhone(maskedPhone ?? null)
+      setOtpDebugExpiresAt(result?.expiresAt ?? null)
+      const deliveryLabel =
+        deliveryStatus === "screen" || deliveryStatus === "debug"
+          ? t("Codigo visible en pantalla.", "Code visible on screen.")
           : ""
-      const phoneLabel = maskedPhone ? ` ${maskedPhone}` : ""
-      const debugCodeLabel = debugCode
-        ? t(` Codigo demo: ${debugCode}`, ` Demo code: ${debugCode}`)
-        : ""
       showToast(
         "success",
-        maskedPhone
+        debugCode
           ? t(
-              `Codigo OTP enviado a${phoneLabel}.${debugSuffix}${debugCodeLabel}`,
-              `OTP sent to${phoneLabel}.${debugSuffix}${debugCodeLabel}`
+              `Codigo OTP listo: ${debugCode}. ${deliveryLabel}`,
+              `OTP code ready: ${debugCode}. ${deliveryLabel}`
             )
           : t(
-              `Codigo OTP enviado. Revisa tu telefono.${debugSuffix}${debugCodeLabel}`,
-              `OTP code sent. Check your phone.${debugSuffix}${debugCodeLabel}`
+              `Codigo OTP generado. ${deliveryLabel}`,
+              `OTP generated. ${deliveryLabel}`
             )
       )
     } catch (error: unknown) {
@@ -1519,7 +1521,7 @@ function ShiftsPageContent() {
       setOtpVerifiedAt(new Date().toISOString())
       setOtpCode("")
       debugLog("otp.verify.success")
-      showToast("success", t("Telefono verificado. Ya puedes operar turnos.", "Phone verified. You can now operate shifts."))
+      showToast("success", t("OTP verificado. Ya puedes operar turnos.", "OTP verified. You can now operate shifts."))
     } catch (error: unknown) {
       setShiftOtpReady(false)
       debugLog("otp.verify.error", { message: extractErrorMessage(error, "otp verify failed") })
@@ -1534,6 +1536,9 @@ function ShiftsPageContent() {
     setShiftOtpReady(false)
     setOtpVerifiedAt(null)
     setOtpCode("")
+    setOtpDebugCode(null)
+    setOtpDebugMaskedPhone(null)
+    setOtpDebugExpiresAt(null)
     showToast("info", t("Verificacion OTP reiniciada para este dispositivo/sesion.", "OTP verification reset for this device/session."))
   }
 
@@ -1599,6 +1604,7 @@ function ShiftsPageContent() {
         setActiveScheduledMeta({ shiftId, scheduledEndMs: null, restaurantId: currentRestaurantId })
       }
 
+      const startPhotoCount = startPhotoCaptures.length
       for (const capture of startPhotoCaptures) {
         await uploadShiftEvidence({
           shiftId,
@@ -1607,18 +1613,20 @@ function ShiftsPageContent() {
           lat: coords.lat,
           lng: coords.lng,
           accuracy: coords.accuracyMeters,
+          meta: buildEvidenceMeta(capture.areaKey, capture.areaDetail, capture.subareaKey),
         })
       }
       debugLog("shift.start.evidence.success", { shiftId, type: "inicio" })
       setLocalStartEvidenceShiftId(shiftId)
       setStartPhotoCaptures([])
+      setStartEvidencePhotoCount(startPhotoCount)
 
       if (startObservation.trim()) {
         await createShiftIncident(String(shiftId), `[INGRESO] ${startObservation.trim()}`)
       }
 
       showToast("success", t("Turno iniciado correctamente.", "Shift started successfully."))
-      resetEvidenceAndLocation()
+      resetEvidenceAndLocation({ keepStartEvidenceCount: true })
       setStartObservation("")
       setStartFitForWork(null)
       setStartHealthDeclaration("")
@@ -1686,6 +1694,14 @@ function ShiftsPageContent() {
         if (endPhotoCaptures.length === 0) {
           throw new Error(t("Debes capturar fotos de salida.", "You must capture exit photos."))
         }
+        if (expectedEndPhotoCount && endPhotoCaptures.length < expectedEndPhotoCount) {
+          throw new Error(
+            t(
+              `Debes tomar al menos ${expectedEndPhotoCount} fotos de salida (las mismas del inicio).`,
+              `You must take at least ${expectedEndPhotoCount} exit photos (same as start).`
+            )
+          )
+        }
         if (!endPhotosReady) {
           throw new Error(t("Selecciona el area y subarea en cada foto de salida.", "Select area and subarea for each exit photo."))
         }
@@ -1700,6 +1716,7 @@ function ShiftsPageContent() {
               lat: coords.lat,
               lng: coords.lng,
               accuracy: coords.accuracyMeters,
+              meta: buildEvidenceMeta(capture.areaKey, capture.areaDetail, capture.subareaKey),
             })
           }
           debugLog("shift.end.evidence.success", { shiftId: activeShift.id })
@@ -1835,12 +1852,14 @@ function ShiftsPageContent() {
         lat: coords.lat,
         lng: coords.lng,
         accuracy: coords.accuracyMeters,
+        meta: buildEvidenceMeta(startAreaKey, startAreaDetail, startSubareaKey),
       })
       debugLog("shift.start_evidence.recover.success", { shiftId: activeShift.id })
       setLocalStartEvidenceShiftId(activeShift.id)
+      setStartEvidencePhotoCount(1)
       setStartRecoveryPhoto(null)
       showToast("success", t("Evidencia de inicio cargada.", "Start evidence uploaded."))
-      resetEvidenceAndLocation()
+      resetEvidenceAndLocation({ keepStartEvidenceCount: true })
       setHistoryPage(1)
       await loadEmployeeData(1)
       await loadEmployeeSelfServiceDashboard()
@@ -1853,6 +1872,7 @@ function ShiftsPageContent() {
       if (status === 409 || code === "409" || normalized.includes("409") || normalized.includes("conflict")) {
         // Treat as already registered on backend.
         setLocalStartEvidenceShiftId(activeShift.id)
+        setStartEvidencePhotoCount(1)
         setStartRecoveryPhoto(null)
         debugLog("shift.start_evidence.recover.already", { shiftId: activeShift.id })
         showToast(
@@ -1894,6 +1914,16 @@ function ShiftsPageContent() {
       showToast("info", t("Debes capturar fotos de salida.", "You must capture exit photos."))
       return
     }
+    if (expectedEndPhotoCount && endPhotoCaptures.length < expectedEndPhotoCount) {
+      showToast(
+        "info",
+        t(
+          `Debes tomar al menos ${expectedEndPhotoCount} fotos de salida (las mismas del inicio).`,
+          `You must take at least ${expectedEndPhotoCount} exit photos (same as start).`
+        )
+      )
+      return
+    }
     if (!endPhotosReady) {
       showToast("info", t("Selecciona el area en cada foto de salida.", "Select the area for each exit photo."))
       return
@@ -1911,6 +1941,7 @@ function ShiftsPageContent() {
           lat: coords.lat,
           lng: coords.lng,
           accuracy: coords.accuracyMeters,
+          meta: buildEvidenceMeta(capture.areaKey, capture.areaDetail, capture.subareaKey),
         })
       }
       setEndEvidenceUploadedShiftId(activeShift.id)
@@ -2535,81 +2566,87 @@ function ShiftsPageContent() {
     }
   }
 
-  const otpPanel = (!shiftOtpReady || otpDebugEnabled) && (
-    <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={shiftOtpReady ? "success" : "warning"}>
-          {shiftOtpReady ? t("OTP verificado", "OTP verified") : t("OTP pendiente", "OTP pending")}
-        </Badge>
-        {otpVerifiedAt && (
-          <span className="text-xs text-slate-600">
-            {t("Validado", "Verified")}: {formatDateTime(otpVerifiedAt)}
-          </span>
-        )}
-      </div>
-
-      <p className="mt-2 text-xs text-slate-700">
-        {activeShift
-          ? t(
-              "Completa OTP para finalizar turno en este dispositivo.",
-              "Complete OTP to end shift on this device."
-            )
-          : t(
-              "Debes completar OTP de telefono para iniciar turno en este dispositivo.",
-              "Phone OTP must be completed to start shift on this device."
-            )}
-      </p>
-      {otpDebugEnabled && otpPhoneMissingDemo && (
-        <p className="mt-2 text-xs text-amber-700">
-          {t("Telefono no configurado (demo).", "Phone not configured (demo).")}
+  const otpPanel = !shiftOtpReady && (
+    <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+      <div className="bg-gradient-to-br from-indigo-500 to-blue-600 px-6 py-5 text-white">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-100">
+          {t("Seguridad OTP", "OTP security")}
         </p>
-      )}
-      {otpDebugEnabled && otpDebugCode && (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">{t("Codigo OTP (demo)", "OTP code (demo)")}</span>
-            <span className="rounded bg-white px-2 py-1 font-mono text-sm text-amber-900">
-              {otpDebugCode}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Badge variant={shiftOtpReady ? "success" : "warning"}>
+            {shiftOtpReady ? t("OTP verificado", "OTP verified") : t("OTP pendiente", "OTP pending")}
+          </Badge>
+          {otpVerifiedAt && (
+            <span className="text-xs text-indigo-100">
+              {t("Validado", "Verified")}: {formatDateTime(otpVerifiedAt)}
             </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-                  void navigator.clipboard.writeText(otpDebugCode)
-                }
-                showToast("success", t("Codigo copiado.", "Code copied."))
-              }}
-            >
-              {t("Copiar", "Copy")}
-            </Button>
-          </div>
-          <div className="mt-1 text-[11px] text-amber-800">
-            {otpDebugMaskedPhone ? `${t("Enviado a", "Sent to")}: ${otpDebugMaskedPhone}. ` : ""}
-            {otpDebugExpiresAt ? `${t("Expira", "Expires")}: ${formatDateTime(otpDebugExpiresAt)}` : ""}
-          </div>
+          )}
         </div>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
-          {sendingOtp ? t("Enviando OTP...", "Sending OTP...") : t("Enviar OTP", "Send OTP")}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
-          {t("Reiniciar OTP", "Reset OTP")}
-        </Button>
+        <p className="mt-2 text-sm text-indigo-100">
+          {activeShift
+            ? t(
+                "Completa el codigo para finalizar el turno.",
+                "Complete the code to end the shift."
+              )
+            : t(
+                "Completa el codigo para iniciar el turno.",
+                "Complete the code to start the shift."
+              )}
+        </p>
       </div>
 
-      <div className="mt-3 grid gap-2 lg:grid-cols-[1fr_auto]">
-        <input
-          value={otpCode}
-          onChange={event => setOtpCode(event.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          placeholder={t("Codigo OTP", "OTP code")}
-        />
-        <Button size="sm" variant="primary" onClick={() => void handleVerifyShiftOtp()} disabled={verifyingOtp}>
-          {verifyingOtp ? t("Verificando...", "Verifying...") : t("Verificar OTP", "Verify OTP")}
-        </Button>
+      <div className="space-y-4 px-6 py-5 text-sm">
+        {otpDebugCode && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+              {t("Codigo en pantalla", "On-screen code")}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <span className="rounded-2xl bg-white px-3 py-2 font-mono text-lg font-bold text-emerald-900">
+                {otpDebugCode}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                    void navigator.clipboard.writeText(otpDebugCode)
+                  }
+                  showToast("success", t("Codigo copiado.", "Code copied."))
+                }}
+              >
+                {t("Copiar", "Copy")}
+              </Button>
+            </div>
+            <div className="mt-2 text-[11px] text-emerald-700">
+              {otpDebugMaskedPhone ? `${t("Referencia", "Reference")}: ${otpDebugMaskedPhone}. ` : ""}
+              {otpDebugExpiresAt ? `${t("Expira", "Expires")}: ${formatDateTime(otpDebugExpiresAt)}` : ""}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
+          <input
+            value={otpCode}
+            onChange={event => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            maxLength={6}
+            className="h-11 w-full rounded-2xl border-2 border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-indigo-400"
+            placeholder={t("Ingresa el codigo OTP", "Enter OTP code")}
+          />
+          <Button size="sm" variant="primary" onClick={() => void handleVerifyShiftOtp()} disabled={verifyingOtp}>
+            {verifyingOtp ? t("Verificando...", "Verifying...") : t("Verificar OTP", "Verify OTP")}
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
+            {sendingOtp ? t("Generando codigo...", "Generating code...") : t("Generar codigo", "Generate code")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
+            {t("Reiniciar OTP", "Reset OTP")}
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -2698,14 +2735,9 @@ function ShiftsPageContent() {
         )}
         {canOperateShift && (
           <section className={`space-y-5 ${manrope.className}`}>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {t("Operacion de empleado", "Employee operations")}
-            </h2>
-
+            {otpPanel}
             {isEmpleado && (
               <div className={`space-y-6 ${manrope.className}`}>
-                {otpPanel}
-
                 {isEmployeeStartView && !activeShift && (
                   <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                     <div className="border-b border-slate-200 bg-white px-6 pb-4 pt-6">
@@ -2848,25 +2880,34 @@ function ShiftsPageContent() {
                             rows={2}
                             value={startHealthDeclaration}
                             onChange={event => setStartHealthDeclaration(event.target.value)}
-                            className="mt-3 w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
+                            className="mt-3 w-full rounded-2xl border-2 border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
                             placeholder={t("Describe condicion de salud o incidente.", "Describe health condition or incident.")}
                           />
                         )}
                       </div>
 
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="text-xs uppercase tracking-wider text-slate-500">
                               {t("Paso 1 de 4", "Step 1 of 4")}
                             </p>
                             <p className="text-lg font-semibold text-slate-900">
-                              {t("Fotos de ingreso", "Entry photos")}
+                              {t("Fotos de ingreso (antes)", "Entry photos (before)")}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {t(
+                                "Toma varias fotos del antes. Luego repetirás las mismas en la salida.",
+                                "Take multiple before photos. You will repeat the same shots at the end."
+                              )}
                             </p>
                           </div>
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            {startPhotoCaptures.length} {t("fotos", "photos")}
+                          </span>
                         </div>
 
-                        <div className="mt-3 space-y-3">
+                        <div className="mt-4 space-y-3">
                           <label className="text-xs font-medium text-slate-600">
                             {t("Area", "Area")}
                           </label>
@@ -2878,7 +2919,7 @@ function ShiftsPageContent() {
                               setStartSubareaKey("")
                               if (value !== "otro") setStartAreaDetail("")
                             }}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
                           >
                             <option value="">{t("Selecciona un area", "Select an area")}</option>
                             {shiftAreaOptions.map(option => (
@@ -2891,7 +2932,7 @@ function ShiftsPageContent() {
                             <input
                               value={startAreaDetail}
                               onChange={event => setStartAreaDetail(event.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
                               placeholder={t("Describe el area", "Describe the area")}
                             />
                           )}
@@ -2899,7 +2940,7 @@ function ShiftsPageContent() {
                             <select
                               value={startSubareaKey}
                               onChange={event => setStartSubareaKey(event.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
                             >
                               <option value="">{t("Selecciona una subarea", "Select a subarea")}</option>
                               {(subareaOptionsByArea.get(startAreaKey) ?? []).map(option => (
@@ -2909,13 +2950,16 @@ function ShiftsPageContent() {
                               ))}
                             </select>
                           )}
+                          <p className="text-xs text-slate-500">
+                            {t("Toca la camara para agregar otra foto.", "Tap the camera to add another photo.")}
+                          </p>
                           <CameraCapture onCapture={handleCaptureStartPhoto} overlayLines={startOverlayLines} />
 
                           <div className="flex gap-2 overflow-x-auto pb-2">
-                            {startPhotoCaptures.map((item, index) => (
+                            {startPhotoCaptures.map(item => (
                               <div
                                 key={item.id}
-                                className="relative flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-emerald-500 text-[10px] font-semibold text-white"
+                                className="relative flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-emerald-500 text-[10px] font-semibold text-white"
                               >
                                 <span>✓</span>
                                 <span className="px-1 text-center">{getAreaLabel(item.areaKey, item.areaDetail, item.subareaKey)}</span>
@@ -2927,7 +2971,7 @@ function ShiftsPageContent() {
                                 </button>
                               </div>
                             ))}
-                            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-lg text-slate-400">
+                            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-400">
                               +
                             </div>
                           </div>
@@ -2942,7 +2986,7 @@ function ShiftsPageContent() {
                           rows={3}
                           value={startObservation}
                           onChange={event => setStartObservation(event.target.value)}
-                          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                          className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
                           placeholder={t("Escribe una nota si es necesario.", "Write a note if needed.")}
                         />
                       </div>
@@ -2994,6 +3038,45 @@ function ShiftsPageContent() {
                   </div>
                 )}
 
+                {isEmpleado && isEmployeeProfileView && (
+                  <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          {t("Mi cuenta", "My account")}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {t(
+                            "Acceso rapido a tu informacion y seguridad.",
+                            "Quick access to your info and security."
+                          )}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+                        {user?.email ?? t("Sin correo", "No email")}
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <Button
+                        variant="secondary"
+                        fullWidth
+                        className="h-12 rounded-2xl text-sm"
+                        onClick={() => router.push("/account/hours")}
+                      >
+                        🕒 {t("Historial de horas", "Hours history")}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        fullWidth
+                        className="h-12 rounded-2xl text-sm"
+                        onClick={() => router.push("/account/password")}
+                      >
+                        🔐 {t("Restablecer contraseña", "Reset password")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {loadingData ? <Skeleton className="h-24" /> : null}
 
                 {activeShift && (
@@ -3038,7 +3121,7 @@ function ShiftsPageContent() {
                             setStartSubareaKey("")
                             if (value !== "otro") setStartAreaDetail("")
                           }}
-                          className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
+                          className="w-full rounded-2xl border-2 border-amber-200 bg-white px-3 py-2 text-sm"
                         >
                           <option value="">{t("Selecciona un area", "Select an area")}</option>
                           {shiftAreaOptions.map(option => (
@@ -3051,7 +3134,7 @@ function ShiftsPageContent() {
                           <input
                             value={startAreaDetail}
                             onChange={event => setStartAreaDetail(event.target.value)}
-                            className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
+                            className="w-full rounded-2xl border-2 border-amber-200 bg-white px-3 py-2 text-sm"
                             placeholder={t("Describe el area", "Describe the area")}
                           />
                         )}
@@ -3059,7 +3142,7 @@ function ShiftsPageContent() {
                           <select
                             value={startSubareaKey}
                             onChange={event => setStartSubareaKey(event.target.value)}
-                            className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
+                            className="w-full rounded-2xl border-2 border-amber-200 bg-white px-3 py-2 text-sm"
                           >
                             <option value="">{t("Selecciona una subarea", "Select a subarea")}</option>
                             {(subareaOptionsByArea.get(startAreaKey) ?? []).map(option => (
@@ -3158,10 +3241,29 @@ function ShiftsPageContent() {
                       </div>
 
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          {t("Fotos de salida", "Exit photos")}
-                        </p>
-                        <div className="mt-3 space-y-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                              {t("Fotos de salida (despues)", "Exit photos (after)")}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {expectedEndPhotoCount
+                                ? t(
+                                    `Toma al menos ${expectedEndPhotoCount} fotos para comparar con el inicio.`,
+                                    `Take at least ${expectedEndPhotoCount} photos to match the start.`
+                                  )
+                                : t(
+                                    "Repite las mismas areas que fotografiaste al inicio.",
+                                    "Repeat the same areas you photographed at the start."
+                                  )}
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            {endPhotoCaptures.length} {t("fotos", "photos")}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 space-y-3">
                           <label className="text-xs font-medium text-slate-600">
                             {t("Area", "Area")}
                           </label>
@@ -3173,7 +3275,7 @@ function ShiftsPageContent() {
                               setEndSubareaKey("")
                               if (value !== "otro") setEndAreaDetail("")
                             }}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
                           >
                             <option value="">{t("Selecciona un area", "Select an area")}</option>
                             {shiftAreaOptions.map(option => (
@@ -3186,7 +3288,7 @@ function ShiftsPageContent() {
                             <input
                               value={endAreaDetail}
                               onChange={event => setEndAreaDetail(event.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
                               placeholder={t("Describe el area", "Describe the area")}
                             />
                           )}
@@ -3194,7 +3296,7 @@ function ShiftsPageContent() {
                             <select
                               value={endSubareaKey}
                               onChange={event => setEndSubareaKey(event.target.value)}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
                             >
                               <option value="">{t("Selecciona una subarea", "Select a subarea")}</option>
                               {(subareaOptionsByArea.get(endAreaKey) ?? []).map(option => (
@@ -3204,13 +3306,16 @@ function ShiftsPageContent() {
                               ))}
                             </select>
                           )}
+                          <p className="text-xs text-slate-500">
+                            {t("Toca la camara para agregar otra foto.", "Tap the camera to add another photo.")}
+                          </p>
                           <CameraCapture onCapture={handleCaptureEndPhoto} overlayLines={endOverlayLines} />
 
                           <div className="flex gap-2 overflow-x-auto pb-2">
                             {endPhotoCaptures.map(item => (
                               <div
                                 key={item.id}
-                                className="relative flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-emerald-500 text-[10px] font-semibold text-white"
+                                className="relative flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-emerald-500 text-[10px] font-semibold text-white"
                               >
                                 <span>✓</span>
                                 <span className="px-1 text-center">{getAreaLabel(item.areaKey, item.areaDetail, item.subareaKey)}</span>
@@ -3222,7 +3327,7 @@ function ShiftsPageContent() {
                                 </button>
                               </div>
                             ))}
-                            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-lg text-slate-400">
+                            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-400">
                               +
                             </div>
                           </div>
@@ -3237,6 +3342,11 @@ function ShiftsPageContent() {
                                   ? `${endPhotoCaptures.length} ${t("listas", "ready")}`
                                   : t("Pendiente", "Pending")}
                             </span>
+                            {expectedEndPhotoCount && (
+                              <span>
+                                {t("Requeridas", "Required")}: {expectedEndPhotoCount}
+                              </span>
+                            )}
                           </div>
 
                           {!endEvidenceUploaded ? (
@@ -3244,7 +3354,7 @@ function ShiftsPageContent() {
                               size="sm"
                               variant="secondary"
                               onClick={() => void handleUploadEndEvidence()}
-                              disabled={uploadingEndEvidence || !coords || !endPhotosReady}
+                              disabled={uploadingEndEvidence || !coords || !endPhotosReady || !endPhotosMeetExpected}
                             >
                               {uploadingEndEvidence
                                 ? t("Almacenando datos...", "Saving data...")
@@ -3322,7 +3432,7 @@ function ShiftsPageContent() {
                             rows={2}
                             value={endHealthDeclaration}
                             onChange={event => setEndHealthDeclaration(event.target.value)}
-                            className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                            className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
                             placeholder={t("Describe condicion de salud o incidente.", "Describe health condition or incident.")}
                           />
                         )}
@@ -3337,7 +3447,7 @@ function ShiftsPageContent() {
                             rows={2}
                             value={endEarlyReason}
                             onChange={event => setEndEarlyReason(event.target.value)}
-                            className="mt-2 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500"
+                            className="mt-2 w-full rounded-2xl border-2 border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500"
                             placeholder={t("Ej: Termine tareas antes de la hora.", "Example: Finished tasks before scheduled end.")}
                           />
                         </div>
@@ -3349,7 +3459,7 @@ function ShiftsPageContent() {
                           rows={3}
                           value={endObservation}
                           onChange={event => setEndObservation(event.target.value)}
-                          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-600"
+                          className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
                           placeholder={t("Observaciones de la tarea especial", "Special task notes")}
                         />
                       </div>
@@ -3452,90 +3562,6 @@ function ShiftsPageContent() {
                     : t("Iniciar turno", "Start shift")
                 }
               >
-              {(!activeShift || !shiftOtpReady) && (
-                <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={shiftOtpReady ? "success" : "warning"}>
-                      {shiftOtpReady ? t("OTP verificado", "OTP verified") : t("OTP pendiente", "OTP pending")}
-                    </Badge>
-                    {otpVerifiedAt && (
-                      <span className="text-xs text-slate-600">
-                        {t("Validado", "Verified")}: {formatDateTime(otpVerifiedAt)}
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="mt-2 text-xs text-slate-700">
-                    {activeShift
-                      ? t(
-                          "Completa OTP para finalizar turno en este dispositivo.",
-                          "Complete OTP to end shift on this device."
-                        )
-                      : t(
-                          "Debes completar OTP de telefono para iniciar turno en este dispositivo.",
-                          "Phone OTP must be completed to start shift on this device."
-                        )}
-                  </p>
-                  {otpDebugEnabled && otpPhoneMissingDemo && (
-                    <p className="mt-2 text-xs text-amber-700">
-                      {t(
-                        "Telefono no configurado (demo).",
-                        "Phone not configured (demo)."
-                      )}
-                    </p>
-                  )}
-                  {otpDebugEnabled && otpDebugCode && (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold">{t("Codigo OTP (demo)", "OTP code (demo)")}</span>
-                        <span className="rounded bg-white px-2 py-1 font-mono text-sm text-amber-900">
-                          {otpDebugCode}
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-                              void navigator.clipboard.writeText(otpDebugCode)
-                            }
-                            showToast("success", t("Codigo copiado.", "Code copied."))
-                          }}
-                        >
-                          {t("Copiar", "Copy")}
-                        </Button>
-                      </div>
-                      <div className="mt-1 text-[11px] text-amber-800">
-                        {otpDebugMaskedPhone ? `${t("Enviado a", "Sent to")}: ${otpDebugMaskedPhone}. ` : ""}
-                        {otpDebugExpiresAt
-                          ? `${t("Expira", "Expires")}: ${formatDateTime(otpDebugExpiresAt)}`
-                          : ""}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => void handleSendShiftOtp()} disabled={sendingOtp}>
-                      {sendingOtp ? t("Enviando OTP...", "Sending OTP...") : t("Enviar OTP", "Send OTP")}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={handleResetShiftOtp}>
-                      {t("Reiniciar OTP", "Reset OTP")}
-                    </Button>
-                  </div>
-
-                  <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">
-                    <input
-                      value={otpCode}
-                      onChange={event => setOtpCode(event.target.value)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      placeholder={t("Codigo OTP", "OTP code")}
-                    />
-                    <Button size="sm" variant="primary" onClick={() => void handleVerifyShiftOtp()} disabled={verifyingOtp}>
-                      {verifyingOtp ? t("Verificando...", "Verifying...") : t("Verificar OTP", "Verify OTP")}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               {!activeShift ? (
                 <div id="shift-end" className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                   <p className="font-semibold text-slate-800">
@@ -5347,5 +5373,3 @@ export default function ShiftsPage() {
     </Suspense>
   )
 }
-
-

@@ -132,13 +132,9 @@ export default function DashboardPage() {
         <ProtectedRoute>
           <section className={`flex min-h-[70vh] items-start justify-center px-3 ${manrope.className}`}>
             <div className="w-full max-w-sm space-y-4">
-              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                 <div className="bg-gradient-to-br from-blue-600 to-blue-700 px-6 py-6 text-white">
-                  <div className="flex items-center justify-between text-xs text-blue-100">
-                    <span>9:41</span>
-                    <span>📶 5G 🔋</span>
-                  </div>
-                  <p className="mt-4 text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
+                  <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
                   <div className="mt-2 flex items-center gap-2 text-sm text-blue-100">
                     <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
                     <span>{t("En linea • Listo para trabajar", "Online • Ready to work")}</span>

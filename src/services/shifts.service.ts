@@ -75,23 +75,6 @@ function isValidE164(value: string) {
   return /^\+\d{7,15}$/.test(value)
 }
 
-async function getOtpPhoneE164(options?: { allowMissing?: boolean }) {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
-
-  if (error) throw error
-  const phone = normalizeOtpPhone(user?.phone)
-
-  if (!phone || !isValidE164(phone)) {
-    if (options?.allowMissing) return null
-    throw new Error("Phone number for OTP is missing or invalid. Please set users.phone_e164 in E.164 format.")
-  }
-
-  return phone
-}
-
 export async function getOtpPhoneE164Status() {
   const {
     data: { user },
@@ -141,9 +124,6 @@ function toErrorSnapshot(error: unknown) {
 }
 
 export async function sendShiftPhoneOtp() {
-  const otpDebugEnabled = process.env.NEXT_PUBLIC_OTP_DEBUG === "true"
-  const phone = await getOtpPhoneE164({ allowMissing: otpDebugEnabled })
-  const phoneMissing = !phone
   const { fingerprint } = await ensureTrustedDeviceReady()
   debugLog("otp.send.request", { fingerprint: fingerprint ? "set" : null })
 
@@ -170,7 +150,6 @@ export async function sendShiftPhoneOtp() {
       expiresAt: meta?.expiresAt ?? null,
       deliveryStatus: meta?.deliveryStatus ?? null,
       debugCode: meta?.debugCode ?? null,
-      phoneMissing,
     }
   } catch (error: unknown) {
     debugLog("otp.send.error", { error: toErrorSnapshot(error) })

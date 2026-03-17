@@ -16,11 +16,6 @@ export default function CleanControlPage() {
         <div className={styles.phoneLabel}>PANTALLA 1: LOGIN</div>
         <div className={styles.phone}>
           <div className={`${styles.screen} ${styles.loginScreen}`}>
-            <div className={styles.statusBar}>
-              <span>9:41</span>
-              <span>📶 5G 🔋</span>
-            </div>
-
             <div className={styles.logoContainer}>
               <div className={styles.logoIcon}>🧼✨</div>
               <div className={styles.logoText}>CLEAN CONTROL</div>
@@ -55,10 +50,6 @@ export default function CleanControlPage() {
         <div className={styles.phone}>
           <div className={styles.screen}>
             <div className={styles.hubHeader}>
-              <div className={styles.statusBar} style={{ color: "#ffffff", padding: 0, marginBottom: 20 }}>
-                <span>9:41</span>
-                <span>📶 5G 🔋</span>
-              </div>
               <div className={styles.userGreeting}>👋 Hola, María</div>
               <div className={styles.userStatus}>
                 <span className={styles.statusDot} />
@@ -95,10 +86,6 @@ export default function CleanControlPage() {
         <div className={styles.phone}>
           <div className={styles.screen}>
             <div className={styles.screenHeader}>
-              <div className={styles.statusBar} style={{ padding: 0, marginBottom: 15 }}>
-                <span>9:41</span>
-                <span>📶 5G 🔋</span>
-              </div>
               <div className={styles.headerNav}>
                 <a href="#" className={styles.backBtn}>
                   ←
@@ -165,10 +152,6 @@ export default function CleanControlPage() {
         <div className={styles.phone}>
           <div className={styles.screen}>
             <div className={styles.progressHeader}>
-              <div className={styles.statusBar} style={{ padding: 0, marginBottom: 15 }}>
-                <span>9:41</span>
-                <span>📶 5G 🔋</span>
-              </div>
               <div className={styles.headerNav} style={{ marginBottom: 15 }}>
                 <a href="#" className={styles.backBtn}>
                   ←
@@ -226,14 +209,6 @@ export default function CleanControlPage() {
         <div className={styles.phoneLabel}>PANTALLA 5: EN LIMPIEZA</div>
         <div className={styles.phone}>
           <div className={`${styles.screen} ${styles.cleaningScreen}`}>
-            <div
-              className={styles.statusBar}
-              style={{ position: "absolute", top: 0, left: 0, right: 0, color: "#ffffff" }}
-            >
-              <span>9:41</span>
-              <span>📶 5G 🔋</span>
-            </div>
-
             <div className={styles.cleaningEmoji}>🧽✨🧹</div>
             <div className={styles.cleaningTitle}>¡LIMPIANDO!</div>
             <div className={styles.cleaningLocation}>"El Buen Sabor"</div>
@@ -255,10 +230,6 @@ export default function CleanControlPage() {
         <div className={styles.phone}>
           <div className={styles.screen}>
             <div className={styles.progressHeader}>
-              <div className={styles.statusBar} style={{ padding: 0, marginBottom: 15 }}>
-                <span>9:41</span>
-                <span>📶 5G 🔋</span>
-              </div>
               <div className={styles.headerNav} style={{ marginBottom: 15 }}>
                 <a href="#" className={styles.backBtn}>
                   ←
@@ -321,14 +292,6 @@ export default function CleanControlPage() {
         <div className={styles.phoneLabel}>PANTALLA 7: ÉXITO</div>
         <div className={styles.phone}>
           <div className={`${styles.screen} ${styles.successScreen}`}>
-            <div
-              className={styles.statusBar}
-              style={{ position: "absolute", top: 0, left: 0, right: 0, color: "#ffffff" }}
-            >
-              <span>9:41</span>
-              <span>📶 5G 🔋</span>
-            </div>
-
             <div className={styles.successIcon}>✓</div>
 
             <div className={styles.successTitle}>

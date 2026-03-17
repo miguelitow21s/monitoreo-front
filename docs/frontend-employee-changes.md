@@ -90,7 +90,7 @@ El frontend ahora exige **etiquetar cada foto** con:
 - `subarea` (ej: Campana, Pisos, Esquinas, etc)
 
 Se envía en el `meta` de la evidencia.
-Backend debe aceptar y guardar:
+Backend acepta y guarda:
 ```
 meta: {
   area_key: "cocina",
@@ -100,8 +100,11 @@ meta: {
   area_detail?: "texto libre si area = otro"
 }
 ```
-**Nota actual**: hoy el frontend **todavía no envía** este `meta` en `finalize_upload`.  
-Está validado en UI, pero el payload aún no lo incluye.
+**Estado actual**: el frontend **ya envía** este `meta` en `finalize_upload` para cada foto.
+
+**Backend confirmado**:
+- Se permiten **múltiples fotos por fase** (inicio y fin) para el mismo turno.
+- Se hace `request_upload` + `finalize_upload` **por cada foto**.
 
 ## 4) Catálogo de áreas / subáreas
 
@@ -162,7 +165,7 @@ Finalizar turno:
 ## 6) OTP en pantalla (sin SMS)
 Para simplificar el flujo (usuarios mayores), el OTP **se muestra en pantalla** sin envío SMS.
 
-Requerimiento backend:
+Backend confirmado:
 - `phone_otp_send` debe devolver `debug_code` siempre (no solo demo).
 - `delivery_status` puede venir como `"debug"` o `"screen"`.
 - El frontend **muestra el `debug_code` en UI** para que el usuario lo ingrese manualmente.
@@ -318,14 +321,20 @@ Body:
   "lat": 4.7110,
   "lng": -74.0721,
   "accuracy": 8,
-  "captured_at": "2026-03-17T12:00:00.000Z"
+  "captured_at": "2026-03-17T12:00:00.000Z",
+  "meta": {
+    "area_key": "cocina",
+    "area_label": "Cocina",
+    "subarea_key": "campana",
+    "subarea_label": "Campana"
+  }
 }
 ```
-**Importante**: hoy **no** enviamos `meta` con área/subárea en finalize_upload.  
-El área/subárea se valida en UI pero no se envía aún en el payload.
+**Importante**: se envía `meta` por cada foto (inicio y fin).
 
 ### 8.8 Evidencia de salida (por cada foto)
 Mismo flujo que inicio, con `type: "fin"`.
+Se repite `request_upload` + `finalize_upload` **por cada foto**.
 
 ### 8.9 Finalizar turno
 **Validaciones UI previas**
@@ -429,7 +438,7 @@ Para turnos/evidencias además: `x-shift-otp-token`.
 | `/employee_self_service` | POST | Base | `{ action: "create_observation", shift_id, kind, message }` | `{ "action": "create_observation", "shift_id": 123, "kind": "observation", "message": "..." }` |
 | `/shifts_start` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ restaurant_id, lat, lng, fit_for_work, declaration }` | `{ "restaurant_id": 5, "lat": 4.7110, "lng": -74.0721, "fit_for_work": true, "declaration": "Me siento bien" }` |
 | `/evidence_upload` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ action: "request_upload", shift_id, type }` | `{ "action": "request_upload", "shift_id": 123, "type": "inicio" }` |
-| `/evidence_upload` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ action: "finalize_upload", shift_id, type, path, lat, lng, accuracy, captured_at }` | `{ "action": "finalize_upload", "shift_id": 123, "type": "inicio", "path": "...", "lat": 4.7110, "lng": -74.0721, "accuracy": 8, "captured_at": "2026-03-17T12:00:00.000Z" }` |
+| `/evidence_upload` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ action: "finalize_upload", shift_id, type, path, lat, lng, accuracy, captured_at, meta }` | `{ "action": "finalize_upload", "shift_id": 123, "type": "inicio", "path": "...", "lat": 4.7110, "lng": -74.0721, "accuracy": 8, "captured_at": "2026-03-17T12:00:00.000Z", "meta": { "area_key": "cocina", "area_label": "Cocina", "subarea_key": "campana", "subarea_label": "Campana" } }` |
 | `/shifts_end` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ shift_id, lat, lng, fit_for_work, declaration, early_end_reason? }` | `{ "shift_id": 123, "lat": 4.7110, "lng": -74.0721, "fit_for_work": true, "declaration": "Sin incidentes", "early_end_reason": "Terminé tareas" }` |
 | `/operational_tasks_manage` | POST | Base | `{ action: "list_my_open", limit }` | `{ "action": "list_my_open", "limit": 30 }` |
 | `/operational_tasks_manage` | POST | Base | `{ action: "request_evidence_upload", task_id, mime_type }` | `{ "action": "request_evidence_upload", "task_id": 77, "mime_type": "image/jpeg" }` |

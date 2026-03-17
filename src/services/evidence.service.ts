@@ -5,6 +5,14 @@ import { ensureTrustedDeviceReady } from "@/services/trustedDevice.service"
 
 type EvidenceType = "inicio" | "fin"
 
+export type EvidenceMeta = {
+  area_key: string
+  area_label: string
+  subarea_key?: string
+  subarea_label?: string
+  area_detail?: string
+}
+
 interface RequestUploadResponse {
   upload?: {
     token?: string
@@ -27,6 +35,7 @@ interface FinalizePayload {
   lng: number
   accuracy?: number
   capturedAt: string
+  meta?: EvidenceMeta
 }
 
 function resolveUploadUrl(payload: RequestUploadResponse) {
@@ -48,7 +57,7 @@ function resolveUploadBucket(payload: RequestUploadResponse) {
 async function requestUpload(shiftId: number, type: EvidenceType) {
   const otpToken = getShiftOtpToken()
   if (!otpToken) {
-    throw new Error("OTP token is required. Verify your phone before uploading shift evidence.")
+    throw new Error("OTP token is required. Verify OTP before uploading shift evidence.")
   }
   const { fingerprint } = await ensureTrustedDeviceReady()
 
@@ -69,7 +78,7 @@ async function requestUpload(shiftId: number, type: EvidenceType) {
 async function finalizeUpload(payload: FinalizePayload) {
   const otpToken = getShiftOtpToken()
   if (!otpToken) {
-    throw new Error("OTP token is required. Verify your phone before finalizing shift evidence.")
+    throw new Error("OTP token is required. Verify OTP before finalizing shift evidence.")
   }
   const { fingerprint } = await ensureTrustedDeviceReady()
 
@@ -88,6 +97,7 @@ async function finalizeUpload(payload: FinalizePayload) {
       lng: payload.lng,
       accuracy: payload.accuracy ?? 8,
       captured_at: payload.capturedAt,
+      ...(payload.meta ? { meta: payload.meta } : {}),
     },
   })
 }
@@ -100,6 +110,7 @@ export async function uploadShiftEvidence(payload: {
   lng: number
   accuracy?: number
   capturedAt?: string
+  meta?: EvidenceMeta
 }) {
   const requested = await requestUpload(payload.shiftId, payload.type)
   const uploadUrl = resolveUploadUrl(requested)
@@ -143,6 +154,7 @@ export async function uploadShiftEvidence(payload: {
     lng: payload.lng,
     accuracy: payload.accuracy,
     capturedAt: payload.capturedAt ?? new Date().toISOString(),
+    meta: payload.meta,
   })
 
   return uploadPath
