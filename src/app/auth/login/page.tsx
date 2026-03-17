@@ -274,7 +274,6 @@ export default function LoginPage() {
               autoComplete="one-time-code"
               placeholder={t("PIN de 6 digitos", "6-digit PIN")}
               inputMode="numeric"
-              pattern="\\d*"
               maxLength={6}
               value={pin}
               onChange={e => {

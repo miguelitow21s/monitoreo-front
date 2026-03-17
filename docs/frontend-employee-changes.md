@@ -100,6 +100,8 @@ meta: {
   area_detail?: "texto libre si area = otro"
 }
 ```
+**Nota actual**: hoy el frontend **todavía no envía** este `meta` en `finalize_upload`.  
+Está validado en UI, pero el payload aún no lo incluye.
 
 ## 4) Catálogo de áreas / subáreas
 
@@ -157,15 +159,17 @@ Evidencias:
 Finalizar turno:
 - Si se termina antes de `scheduled_end`, `early_end_reason` es obligatoria
 
-## 6) OTP demo (modo debug)
-Cuando `OTP_DEBUG_MODE=true`:
-- `phone_otp_send` devuelve `debug_code` + `delivery_status: "debug"`
-- El frontend muestra el `debug_code` solo en demo
-- El usuario ingresa el `debug_code` en UI y verifica con `phone_otp_verify`
+## 6) OTP en pantalla (sin SMS)
+Para simplificar el flujo (usuarios mayores), el OTP **se muestra en pantalla** sin envío SMS.
+
+Requerimiento backend:
+- `phone_otp_send` debe devolver `debug_code` siempre (no solo demo).
+- `delivery_status` puede venir como `"debug"` o `"screen"`.
+- El frontend **muestra el `debug_code` en UI** para que el usuario lo ingrese manualmente.
 
 **Source of truth del teléfono**
-- OTP usa `users.phone_e164` (E.164)
-- `profiles.phone_number` NO es fuente para OTP
+- Si el OTP es en pantalla, `users.phone_e164` **no es obligatorio**.
+- Si en el futuro se vuelve a SMS, se re‑habilita `phone_e164` como requerido.
 
 ## 7) Contraseñas / manejo de acceso
 Resumen:
@@ -199,7 +203,7 @@ Notas:
 - `Idempotency-Key` se genera por request con `crypto.randomUUID()`.
 - Para operaciones de turno/evidencia se agrega `x-shift-otp-token`.
 
-### 8.2 OTP (demo y normal)
+### 8.2 OTP (en pantalla, sin SMS)
 
 **Enviar OTP**
 ```
@@ -208,7 +212,7 @@ Headers: (base) + x-device-fingerprint
 Body:
 { "device_fingerprint": "<fingerprint>" }
 ```
-Respuesta usada por UI:
+Respuesta usada por UI (OTP visible):
 ```
 {
   "otp_id": 55,
@@ -230,7 +234,7 @@ La UI guarda el `verification_token` en `sessionStorage` (`app_shift_otp_token`)
 
 **¿Dónde se guarda el debug_code?**
 - Solo en memoria (state), **no** se guarda en localStorage.
-- Se muestra en UI únicamente si `NEXT_PUBLIC_OTP_DEBUG=true`.
+- Se muestra siempre en pantalla para este flujo (OTP visible).
 
 ### 8.3 Dispositivo confiable
 **Validar dispositivo**
@@ -260,15 +264,12 @@ Body:
 ```
 
 ### 8.5 Turnos programados (listado)
-```
-POST /functions/v1/scheduled_shifts_manage
-Body:
-{
-  "action": "list",
-  "status": "scheduled",
-  "limit": 50
-}
-```
+**Empleado**
+- Se obtienen desde `employee_self_service` → `action: "my_dashboard"`.
+- La UI muestra lo que viene en `scheduled_shifts` y marca estado local (scheduled / in_progress / ended).
+
+**Supervisora/Admin**
+- Sí usa `scheduled_shifts_manage` (fuera del scope de este documento).
 
 ### 8.6 Iniciar turno
 **Validaciones UI previas**
@@ -411,3 +412,26 @@ El frontend loguea en consola (si debug está activo):
 - `edge.request <endpoint>` con headers y body redactados
 - `edge.error <endpoint>` con status y mensaje
 - Incluye `request_id` cuando backend lo retorna
+
+## 9) Tabla resumen (endpoint | headers | body | ejemplo real)
+
+**Headers base en todos los requests**
+`Content-Type, apikey, Authorization, Idempotency-Key, x-device-fingerprint`  
+Para turnos/evidencias además: `x-shift-otp-token`.
+
+| Endpoint | Método | Headers | Body (resumen) | Ejemplo real |
+|---|---|---|---|---|
+| `/trusted_device_validate` | POST | Base + `x-device-fingerprint` | `{ device_fingerprint }` | `{ "device_fingerprint": "<fingerprint>" }` |
+| `/trusted_device_register` | POST | Base + `x-device-fingerprint` | `{ device_fingerprint, device_name, platform }` | `{ "device_fingerprint": "<fingerprint>", "device_name": "Web on Win32", "platform": "web" }` |
+| `/phone_otp_send` | POST | Base + `x-device-fingerprint` | `{ device_fingerprint }` | `{ "device_fingerprint": "<fingerprint>" }` |
+| `/phone_otp_verify` | POST | Base + `x-device-fingerprint` | `{ code, device_fingerprint }` | `{ "code": "123456", "device_fingerprint": "<fingerprint>" }` |
+| `/employee_self_service` | POST | Base | `{ action: "my_dashboard", schedule_limit, pending_tasks_limit }` | `{ "action": "my_dashboard", "schedule_limit": 10, "pending_tasks_limit": 10 }` |
+| `/employee_self_service` | POST | Base | `{ action: "create_observation", shift_id, kind, message }` | `{ "action": "create_observation", "shift_id": 123, "kind": "observation", "message": "..." }` |
+| `/shifts_start` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ restaurant_id, lat, lng, fit_for_work, declaration }` | `{ "restaurant_id": 5, "lat": 4.7110, "lng": -74.0721, "fit_for_work": true, "declaration": "Me siento bien" }` |
+| `/evidence_upload` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ action: "request_upload", shift_id, type }` | `{ "action": "request_upload", "shift_id": 123, "type": "inicio" }` |
+| `/evidence_upload` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ action: "finalize_upload", shift_id, type, path, lat, lng, accuracy, captured_at }` | `{ "action": "finalize_upload", "shift_id": 123, "type": "inicio", "path": "...", "lat": 4.7110, "lng": -74.0721, "accuracy": 8, "captured_at": "2026-03-17T12:00:00.000Z" }` |
+| `/shifts_end` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ shift_id, lat, lng, fit_for_work, declaration, early_end_reason? }` | `{ "shift_id": 123, "lat": 4.7110, "lng": -74.0721, "fit_for_work": true, "declaration": "Sin incidentes", "early_end_reason": "Terminé tareas" }` |
+| `/operational_tasks_manage` | POST | Base | `{ action: "list_my_open", limit }` | `{ "action": "list_my_open", "limit": 30 }` |
+| `/operational_tasks_manage` | POST | Base | `{ action: "request_evidence_upload", task_id, mime_type }` | `{ "action": "request_evidence_upload", "task_id": 77, "mime_type": "image/jpeg" }` |
+| `/operational_tasks_manage` | POST | Base | `{ action: "request_manifest_upload", task_id }` | `{ "action": "request_manifest_upload", "task_id": 77 }` |
+| `/operational_tasks_manage` | POST | Base | `{ action: "complete", task_id, evidence_path }` | `{ "action": "complete", "task_id": 77, "evidence_path": "users/<employee_id>/task-evidence/..." }` |
