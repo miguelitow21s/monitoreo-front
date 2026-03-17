@@ -2694,7 +2694,7 @@ export default function ShiftsPage() {
           </div>
         )}
         {canOperateShift && (
-          <section className="space-y-5">
+          <section className={`space-y-5 ${manrope.className}`}>
             <h2 className="text-lg font-semibold text-slate-900">
               {t("Operacion de empleado", "Employee operations")}
             </h2>
@@ -4252,135 +4252,204 @@ export default function ShiftsPage() {
             )}
 
             {isEmpleado && isEmployeeProfileView && !activeShift && (
-              <Card title={t("Tareas especiales pendientes", "Pending special tasks")}>
-                {pendingSpecialTasks.length > 0 ? (
-                  <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
-                    {pendingSpecialTasks.map(task => (
-                      <li key={task.id}>
-                        #{task.id} {task.title ?? t("Tarea asignada", "Assigned task")}{" "}
-                        {task.status ? `(${task.status})` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-slate-500">
-                    {t(
-                      "No tienes tareas especiales pendientes.",
-                      "You have no pending special tasks."
-                    )}
+              <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    {t("Tareas especiales pendientes", "Pending special tasks")}
                   </p>
-                )}
-              </Card>
-            )}
-
-            {isEmpleado && isEmployeeProfileView && (
-              <Card title={t("Historial de turnos", "Shift history")}>
-              {loadingData ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <Skeleton key={index} className="h-10" />
-                  ))}
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                    {pendingSpecialTasks.length} {t("pendientes", "pending")}
+                  </span>
                 </div>
-              ) : history.length === 0 ? (
-                <EmptyState
-                  title={t("Sin historial", "No history")}
-                  description={t("Cuando registres turnos apareceran aqui.", "When you register shifts, they will appear here.")}
-                  actionLabel={t("Recargar", "Reload")}
-                  onAction={() => void loadEmployeeData(historyPage)}
-                />
-              ) : (
-                <>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="min-w-full border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                          <th className="pb-2 pr-3">{t("Inicio", "Start")}</th>
-                          <th className="pb-2 pr-3">{t("Fin", "End")}</th>
-                          <th className="pb-2 pr-3">{t("Estado", "Status")}</th>
-                          <th className="pb-2 pr-3">{t("Duracion", "Duration")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {history.map(shift => (
-                          <tr key={shift.id} className="border-b border-slate-100 text-sm text-slate-700">
-                            <td className="py-2 pr-3">{formatDateTime(shift.start_time)}</td>
-                            <td className="py-2 pr-3">{formatDateTime(shift.end_time)}</td>
-                            <td className="py-2 pr-3">
-                              <Badge variant={shift.end_time ? "neutral" : "success"}>
-                                {shift.end_time ? t("Completado", "Completed") : t("Activo", "Active")}
-                              </Badge>
-                            </td>
-                            <td className="py-2 pr-3">{formatDuration(shift.start_time, shift.end_time)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="text-xs text-slate-500">
-                      <p>{t("Pagina", "Page")} {historyPage} {t("de", "of")} {historyTotalPages}</p>
-                      <p>{t("Total trabajado (pagina actual)", "Total worked (current page)")}: {(totalWorkedMinutes / 60).toFixed(1)}h</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={historyPage <= 1 || loadingData}
-                        onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+                <div className="mt-4 space-y-3">
+                  {pendingSpecialTasks.length > 0 ? (
+                    pendingSpecialTasks.map(task => (
+                      <div
+                        key={task.id}
+                        className="flex items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50/70 px-4 py-3 text-sm"
                       >
-                        {t("Anterior", "Previous")}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={historyPage >= historyTotalPages || loadingData}
-                        onClick={() => setHistoryPage(prev => prev + 1)}
-                      >
-                        {t("Siguiente", "Next")}
-                      </Button>
+                        <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-base shadow-sm">
+                          ⚠️
+                        </span>
+                        <div>
+                          <p className="font-semibold text-amber-900">
+                            {task.title ?? t("Tarea asignada", "Assigned task")}
+                          </p>
+                          <p className="text-xs text-amber-700/80">
+                            #{task.id}
+                            {task.status ? ` · ${task.status}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+                      {t("No tienes tareas especiales pendientes.", "You have no pending special tasks.")}
                     </div>
-                  </div>
-                </>
-              )}
-              </Card>
+                  )}
+                </div>
+              </div>
             )}
 
             {isEmpleado && isEmployeeProfileView && (
-              <Card title={t("Turnos programados", "Scheduled shifts")}>
-              {scheduledShiftsWithUiState.length === 0 ? (
-                <p className="text-sm text-slate-500">{t("No tienes turnos programados.", "You do not have scheduled shifts.")}</p>
-              ) : (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
-                        <th className="px-3 py-2">{t("Fecha", "Date")}</th>
-                        <th className="px-3 py-2">{t("Inicio", "Start")}</th>
-                        <th className="px-3 py-2">{t("Fin", "End")}</th>
-                        <th className="px-3 py-2">{t("Restaurante", "Restaurant")}</th>
-                        <th className="px-3 py-2">{t("Estado", "Status")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+              <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {t("Historial de turnos", "Shift history")}
+                </p>
+                <div className="mt-4">
+                  {loadingData ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 4 }).map((_, index) => (
+                        <Skeleton key={index} className="h-10" />
+                      ))}
+                    </div>
+                  ) : history.length === 0 ? (
+                    <EmptyState
+                      title={t("Sin historial", "No history")}
+                      description={t("Cuando registres turnos apareceran aqui.", "When you register shifts, they will appear here.")}
+                      actionLabel={t("Recargar", "Reload")}
+                      onAction={() => void loadEmployeeData(historyPage)}
+                    />
+                  ) : (
+                    <>
+                      <div className="space-y-3">
+                        {history.map(shift => {
+                          const completed = Boolean(shift.end_time)
+                          return (
+                            <div
+                              key={shift.id}
+                              className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                    {t("Inicio", "Start")}
+                                  </p>
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {formatDateTime(shift.start_time)}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                                    completed
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                      : "border-blue-200 bg-blue-50 text-blue-700"
+                                  }`}
+                                >
+                                  {completed ? t("Completado", "Completed") : t("Activo", "Active")}
+                                </span>
+                              </div>
+                              <div className="mt-3 grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                    {t("Fin", "End")}
+                                  </p>
+                                  <p className="font-medium">{formatDateTime(shift.end_time)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                    {t("Duracion", "Duration")}
+                                  </p>
+                                  <p className="font-medium">{formatDuration(shift.start_time, shift.end_time)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                    {t("Registro", "Record")}
+                                  </p>
+                                  <p className="font-medium">#{String(shift.id).slice(0, 6)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between">
+                        <div className="text-xs text-slate-500">
+                          <p>{t("Pagina", "Page")} {historyPage} {t("de", "of")} {historyTotalPages}</p>
+                          <p>{t("Total trabajado (pagina actual)", "Total worked (current page)")}: {(totalWorkedMinutes / 60).toFixed(1)}h</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={historyPage <= 1 || loadingData}
+                            onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+                          >
+                            {t("Anterior", "Previous")}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={historyPage >= historyTotalPages || loadingData}
+                            onClick={() => setHistoryPage(prev => prev + 1)}
+                          >
+                            {t("Siguiente", "Next")}
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isEmpleado && isEmployeeProfileView && (
+              <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {t("Turnos programados", "Scheduled shifts")}
+                </p>
+                <div className="mt-4">
+                  {scheduledShiftsWithUiState.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+                      {t("No tienes turnos programados.", "You do not have scheduled shifts.")}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
                       {scheduledShiftsWithUiState.map(({ shift, uiState }) => (
-                        <tr key={shift.id} className="border-b border-slate-100 last:border-b-0">
-                          <td className="px-3 py-2 text-slate-700">{formatDateOnly(shift.scheduled_start)}</td>
-                          <td className="px-3 py-2 text-slate-700">{formatTimeOnly(shift.scheduled_start)}</td>
-                          <td className="px-3 py-2 text-slate-700">{formatTimeOnly(shift.scheduled_end)}</td>
-                          <td className="px-3 py-2 text-slate-700">{getRestaurantLabelById(shift.restaurant_id)}</td>
-                          <td className="px-3 py-2">
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${getScheduledShiftStatusClass(uiState)}`}>
+                        <div
+                          key={shift.id}
+                          className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                {t("Fecha", "Date")}
+                              </p>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {formatDateOnly(shift.scheduled_start)}
+                              </p>
+                            </div>
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getScheduledShiftStatusClass(uiState)}`}>
                               {getScheduledShiftStatusLabel(uiState)}
                             </span>
-                          </td>
-                        </tr>
+                          </div>
+                          <div className="mt-3 grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                {t("Inicio", "Start")}
+                              </p>
+                              <p className="font-medium">{formatTimeOnly(shift.scheduled_start)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                {t("Fin", "End")}
+                              </p>
+                              <p className="font-medium">{formatTimeOnly(shift.scheduled_end)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                {t("Restaurante", "Restaurant")}
+                              </p>
+                              <p className="font-medium">{getRestaurantLabelById(shift.restaurant_id)}</p>
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  )}
                 </div>
-              )}
-              </Card>
+              </div>
             )}
           </section>
         )}
