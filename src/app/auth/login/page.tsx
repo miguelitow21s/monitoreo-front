@@ -3,12 +3,18 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { Manrope } from "next/font/google"
 
 import LanguageSwitch from "@/components/LanguageSwitch"
 import { useLanguage } from "@/context/LanguageContext"
 import { useAuth } from "@/hooks/useAuth"
 import { acceptLegalConsent, getLegalConsentStatus, LegalConsentStatus } from "@/services/compliance.service"
 import { supabase } from "@/services/supabaseClient"
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  weight: ["400", "600", "700", "800"],
+})
 
 export default function LoginPage() {
   const router = useRouter()
@@ -208,8 +214,8 @@ export default function LoginPage() {
 
   if (loading || (!blockAutoRedirect && session)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm">
+      <div className={`flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 px-4 ${manrope.className}`}>
+        <div className="w-full max-w-md rounded-[28px] border border-white/30 bg-white/90 p-7 text-center shadow-2xl">
           <p className="text-sm text-slate-600">
             {t("Validando sesion...", "Validating session...")}
           </p>
@@ -219,36 +225,40 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-start justify-center bg-slate-100 px-3 pb-6 pt-6 sm:items-center sm:px-4">
+    <div className={`flex min-h-screen items-start justify-center bg-gradient-to-br from-indigo-500 to-purple-600 px-3 pb-6 pt-6 sm:items-center sm:px-4 ${manrope.className}`}>
       <form
         onSubmit={handleLogin}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7"
+        className="w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-5 shadow-2xl sm:p-7"
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             {t("Acceso seguro", "Secure access")}
-          </p>
+          </span>
           <LanguageSwitch />
         </div>
 
-        <h1 className="mt-2 text-xl font-bold text-slate-900 sm:text-2xl">{t("Iniciar sesion", "Sign in")}</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          {t("Ingresa tus credenciales para continuar.", "Enter your credentials to continue.")}
-        </p>
+        <div className="mt-6 text-center">
+          <div className="text-5xl">🧼✨</div>
+          <h1 className="mt-3 text-2xl font-extrabold text-slate-900">CLEAN CONTROL</h1>
+          <p className="mt-1 text-sm text-slate-500">{t("Control de Aseo Pro", "Cleaning Operations")}</p>
+        </div>
 
         <div className="mt-6 space-y-3">
-          <input
-            type="text"
-            required
-            autoComplete="username"
-            placeholder={t("Correo o usuario", "Email or username")}
-            value={email}
-            onChange={e => {
-              setEmail(e.target.value)
-              if (error) setError(null)
-            }}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 caret-slate-900 outline-none transition focus:border-slate-800"
-          />
+          <div className="flex items-center gap-3 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm">
+            <span className="text-lg">📧</span>
+            <input
+              type="text"
+              required
+              autoComplete="username"
+              placeholder={t("Correo o usuario", "Email or username")}
+              value={email}
+              onChange={e => {
+                setEmail(e.target.value)
+                if (error) setError(null)
+              }}
+              className="w-full bg-transparent text-base text-slate-800 outline-none"
+            />
+          </div>
 
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -256,7 +266,8 @@ export default function LoginPage() {
             </span>
           </div>
 
-          <div className="relative">
+          <div className="relative flex items-center gap-3 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm">
+            <span className="text-lg">🔒</span>
             <input
               type={showPassword ? "text" : "password"}
               required
@@ -271,14 +282,14 @@ export default function LoginPage() {
                 setPin(next)
                 if (error) setError(null)
               }}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-11 text-sm text-slate-800 caret-slate-900 outline-none transition focus:border-slate-800"
+              className="w-full bg-transparent text-base text-slate-800 outline-none"
             />
             <button
               type="button"
               onClick={() => setShowPassword(prev => !prev)}
               aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
               title={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
-              className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
+              className="absolute right-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
             >
               {showPassword ? (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
@@ -297,7 +308,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700 sm:p-3">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
           <div className="flex items-start gap-2">
             <input
               id="accept-data-treatment"
@@ -339,7 +350,7 @@ export default function LoginPage() {
             processingBackendConsent ||
             needsBackendConsent
           }
-          className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+          className="mt-5 w-full rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 py-3 text-sm font-semibold text-white transition hover:from-blue-500 hover:to-blue-700 disabled:opacity-60"
         >
           {submitting ? t("Ingresando...", "Signing in...") : t("Ingresar", "Sign in")}
         </button>
@@ -349,7 +360,7 @@ export default function LoginPage() {
             type="button"
             onClick={() => void handleAcceptBackendConsent()}
             disabled={processingBackendConsent}
-            className="mt-3 w-full rounded-lg border border-slate-300 bg-white py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60"
+            className="mt-3 w-full rounded-2xl border border-slate-300 bg-white py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60"
           >
             {processingBackendConsent
               ? t("Aceptando terminos...", "Accepting terms...")

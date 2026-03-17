@@ -26,6 +26,32 @@ It will be updated incrementally on each new change.
 - Expected behavior:
   - Delivery/cost metrics consume `unit_cost` without null/negative values.
 
+### 3) Shift evidence tagging by area/subarea (new UI flow)
+- Context: Employee/Supervisora shift flow now requiere multiples fotos de inicio y fin, cada foto clasificada por **area** + **subarea** del restaurante.
+- Objetivo: permitir control de calidad y auditoria por zona (cocina, comedor, baños, etc.).
+- Propuesta de payload adicional en `POST /evidence_upload` (finalize_upload):
+  - `meta`: objeto JSON opcional con:
+    - `area_key` (string)
+    - `subarea_key` (string)
+    - `area_label` (string)
+    - `subarea_label` (string)
+    - `sequence` (number) orden de captura
+    - `phase` ("inicio" | "fin")
+    - `capture_source` ("camera")
+- Backend recomendado:
+  - Persistir `meta` en `shift_photos` (columna JSONB) o columnas dedicadas.
+  - Si no se puede persistir, al menos aceptar el campo y no fallar la solicitud.
+- Lista base de areas/subareas (frontend):
+  - Cocina: Campana, Pisos, Esquinas, Detrás de freidoras, Debajo de mesas, Frente de neveras
+  - Comedor: General, Pisos, Esquinas, Debajo de mesas y asientos, Marcos de ventanas
+  - Puntos de dispensadores de gaseosas: Frente, Atrás, Gabinetes
+  - Desagües: General
+  - Fachadas - patios: Pisos, Esquinas, Debajo de mesas y asientos, Marcos de las ventanas
+  - Baños: Pisos, Sanitarios adelante, Sanitarios atrás, Lavamanos, Cambiador de niños, Puertas y marcos
+  - Otro: texto libre en frontend (solo si aplica)
+- Observacion:
+  - Si backend puede proveer esta matriz por restaurante, frontend puede reemplazar el catalogo fijo.
+
 ## Proposed Migration Script
 - File prepared by frontend: `sql/08_release_readiness.sql`
 - Status: `pending backend approval`
@@ -107,3 +133,4 @@ Use this checklist so backend can validate the complete flow in one pass, includ
 - 2026-03-10: Reports backend generation updated to consume signed URLs (`url_pdf`, `url_excel`) from `reports_generate` and open outputs directly when present.
 - 2026-03-10: Evidence upload client now supports new `evidence_upload` request payload shape (`upload.token`, `upload.path`, `bucket`) with backward compatibility to URL-based upload responses.
 - 2026-03-10: Edge client now appends `request_id` to surfaced error messages for support/debug traceability.
+- 2026-03-16: Frontend new shift UI requires multiple start/end photos tagged by area/subarea; proposed `meta` payload for `evidence_upload finalize_upload` and optional backend persistence.
