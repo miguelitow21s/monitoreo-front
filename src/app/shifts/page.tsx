@@ -338,6 +338,9 @@ function ShiftsPageContent() {
   const [endEvidenceUploadedShiftId, setEndEvidenceUploadedShiftId] = useState<string | number | null>(null)
   const [startEvidencePhotoCount, setStartEvidencePhotoCount] = useState(0)
   const [endEvidencePhotoCount, setEndEvidencePhotoCount] = useState(0)
+  const [supervisorScreen, setSupervisorScreen] = useState<
+    "home" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active"
+  >("home")
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
   const [endEvidenceUploadError, setEndEvidenceUploadError] = useState<string | null>(null)
   const [endShiftError, setEndShiftError] = useState<string | null>(null)
@@ -453,6 +456,7 @@ function ShiftsPageContent() {
   const employeeView = searchParams.get("view") ?? "start"
   const isEmployeeProfileView = isEmpleado && employeeView === "profile"
   const isEmployeeStartView = isEmpleado && !isEmployeeProfileView
+
   const displayName = useMemo(() => {
     const raw =
       (user?.user_metadata?.full_name as string | undefined) ??
@@ -2650,6 +2654,25 @@ function ShiftsPageContent() {
       </div>
     </div>
   )
+  const supervisorOtpHint =
+    canOperateSupervisor && !canOperateShift && !shiftOtpReady ? (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-medium">
+            {t("OTP pendiente para aprobaciones.", "OTP required for approvals.")}
+          </p>
+          <Button size="sm" variant="secondary" onClick={() => setSupervisorScreen("otp")}>
+            {t("Verificar OTP", "Verify OTP")}
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-amber-800">
+          {t(
+            "Completa el codigo antes de aprobar/rechazar turnos o registrar incidencias.",
+            "Complete the code before approving/rejecting shifts or logging incidents."
+          )}
+        </p>
+      </div>
+    ) : null
 
   return (
     <ProtectedRoute>
@@ -2783,212 +2806,212 @@ function ShiftsPageContent() {
                       </div>
 
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          {t("Tareas especiales", "Special tasks")}
-                        </p>
-                        <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                          {pendingSpecialTasks.length > 0 ? (
-                            <ul className="space-y-2">
-                              {pendingSpecialTasks.map(task => (
-                                <li key={task.id} className="flex items-center gap-2">
-                                  <span>⚠️</span>
-                                  <span>
-                                    {task.title ?? t("Tarea asignada", "Assigned task")}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-xs text-amber-700">
-                              {t(
-                                "No tienes tareas especiales asignadas por ahora.",
-                                "No special tasks assigned at the moment."
+                            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                              {t("Tareas especiales", "Special tasks")}
+                            </p>
+                            <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                              {pendingSpecialTasks.length > 0 ? (
+                                <ul className="space-y-2">
+                                  {pendingSpecialTasks.map(task => (
+                                    <li key={task.id} className="flex items-center gap-2">
+                                      <span>⚠️</span>
+                                      <span>
+                                        {task.title ?? t("Tarea asignada", "Assigned task")}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-xs text-amber-700">
+                                  {t(
+                                    "No tienes tareas especiales asignadas por ahora.",
+                                    "No special tasks assigned at the moment."
+                                  )}
+                                </p>
                               )}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                          {t("Requisitos", "Requirements")}
-                        </p>
-                        <div className="mt-2 grid grid-cols-2 gap-3">
-                          <div
-                            className={`rounded-2xl border px-4 py-3 text-center ${
-                              gpsReady ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"
-                            }`}
-                          >
-                            <div className="text-2xl">📍</div>
-                            <p className="text-xs font-semibold text-slate-500">GPS</p>
-                            <p className={`text-sm font-semibold ${gpsReady ? "text-emerald-600" : "text-amber-600"}`}>
-                              {gpsReady ? t("Activo", "Active") : t("Pendiente", "Pending")}
-                            </p>
+                            </div>
                           </div>
-                          <div
-                            className={`rounded-2xl border px-4 py-3 text-center ${
-                              startCameraReady ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"
-                            }`}
-                          >
-                            <div className="text-2xl">📷</div>
-                            <p className="text-xs font-semibold text-slate-500">{t("Camara", "Camera")}</p>
-                            <p className={`text-sm font-semibold ${startCameraReady ? "text-emerald-600" : "text-amber-600"}`}>
-                              {startCameraReady ? t("Lista", "Ready") : t("Pendiente", "Pending")}
+
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                              {t("Requisitos", "Requirements")}
                             </p>
-                          </div>
-                        </div>
+                            <div className="mt-2 grid grid-cols-2 gap-3">
+                              <div
+                                className={`rounded-2xl border px-4 py-3 text-center ${
+                                  gpsReady ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"
+                                }`}
+                              >
+                                <div className="text-2xl">📍</div>
+                                <p className="text-xs font-semibold text-slate-500">GPS</p>
+                                <p className={`text-sm font-semibold ${gpsReady ? "text-emerald-600" : "text-amber-600"}`}>
+                                  {gpsReady ? t("Activo", "Active") : t("Pendiente", "Pending")}
+                                </p>
+                              </div>
+                              <div
+                                className={`rounded-2xl border px-4 py-3 text-center ${
+                                  startCameraReady ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"
+                                }`}
+                              >
+                                <div className="text-2xl">📷</div>
+                                <p className="text-xs font-semibold text-slate-500">{t("Camara", "Camera")}</p>
+                                <p className={`text-sm font-semibold ${startCameraReady ? "text-emerald-600" : "text-amber-600"}`}>
+                                  {startCameraReady ? t("Lista", "Ready") : t("Pendiente", "Pending")}
+                                </p>
+                              </div>
+                            </div>
 
-                        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-xs font-semibold text-slate-600">
-                            {t("Ubicacion de inicio", "Start location")}
-                          </p>
-                          <div className="mt-2">
-                            <GPSGuard onLocation={setCoords} />
+                            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <p className="text-xs font-semibold text-slate-600">
+                                {t("Ubicacion de inicio", "Start location")}
+                              </p>
+                              <div className="mt-2">
+                                <GPSGuard onLocation={setCoords} />
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
 
-                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                        <p className="text-sm font-semibold text-emerald-700">
-                          {t("Certificado de aptitud", "Fitness certificate")}
-                        </p>
-                        <p className="mt-1 text-xs text-emerald-600">
-                          {t("Confirma que estas en condiciones para iniciar el turno.", "Confirm you are fit to start the shift.")}
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-4 text-sm text-emerald-700">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="start-fit"
-                              checked={startFitForWork === true}
-                              onChange={() => setStartFitForWork(true)}
-                            />
-                            {t("Si", "Yes")}
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="start-fit"
-                              checked={startFitForWork === false}
-                              onChange={() => setStartFitForWork(false)}
-                            />
-                            {t("No", "No")}
-                          </label>
-                        </div>
-                        {startFitForWork === false && (
-                          <textarea
-                            rows={2}
-                            value={startHealthDeclaration}
-                            onChange={event => setStartHealthDeclaration(event.target.value)}
-                            className="mt-3 w-full rounded-2xl border-2 border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                            placeholder={t("Describe condicion de salud o incidente.", "Describe health condition or incident.")}
-                          />
-                        )}
+                          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                            <p className="text-sm font-semibold text-emerald-700">
+                              {t("Certificado de aptitud", "Fitness certificate")}
+                            </p>
+                            <p className="mt-1 text-xs text-emerald-600">
+                              {t("Confirma que estas en condiciones para iniciar el turno.", "Confirm you are fit to start the shift.")}
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-4 text-sm text-emerald-700">
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="start-fit"
+                                  checked={startFitForWork === true}
+                                  onChange={() => setStartFitForWork(true)}
+                                />
+                                {t("Si", "Yes")}
+                              </label>
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="start-fit"
+                                  checked={startFitForWork === false}
+                                  onChange={() => setStartFitForWork(false)}
+                                />
+                                {t("No", "No")}
+                              </label>
+                            </div>
+                            {startFitForWork === false && (
+                              <textarea
+                                rows={2}
+                                value={startHealthDeclaration}
+                                onChange={event => setStartHealthDeclaration(event.target.value)}
+                                className="mt-3 w-full rounded-2xl border-2 border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-400"
+                                placeholder={t("Describe condicion de salud o incidente.", "Describe health condition or incident.")}
+                              />
+                            )}
                       </div>
 
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs uppercase tracking-wider text-slate-500">
-                              {t("Paso 1 de 4", "Step 1 of 4")}
-                            </p>
-                            <p className="text-lg font-semibold text-slate-900">
-                              {t("Fotos de ingreso (antes)", "Entry photos (before)")}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {t(
-                                "Toma varias fotos del antes. Luego repetirás las mismas en la salida.",
-                                "Take multiple before photos. You will repeat the same shots at the end."
-                              )}
-                            </p>
-                          </div>
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            {startPhotoCaptures.length} {t("fotos", "photos")}
-                          </span>
-                        </div>
-
-                        <div className="mt-4 space-y-3">
-                          <label className="text-xs font-medium text-slate-600">
-                            {t("Area", "Area")}
-                          </label>
-                          <select
-                            value={startAreaKey}
-                            onChange={event => {
-                              const value = event.target.value
-                              setStartAreaKey(value)
-                              setStartSubareaKey("")
-                              if (value !== "otro") setStartAreaDetail("")
-                            }}
-                            className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
-                          >
-                            <option value="">{t("Selecciona un area", "Select an area")}</option>
-                            {shiftAreaOptions.map(option => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          {startAreaKey === "otro" && (
-                            <input
-                              value={startAreaDetail}
-                              onChange={event => setStartAreaDetail(event.target.value)}
-                              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
-                              placeholder={t("Describe el area", "Describe the area")}
-                            />
-                          )}
-                          {startAreaKey && startAreaKey !== "otro" && (
-                            <select
-                              value={startSubareaKey}
-                              onChange={event => setStartSubareaKey(event.target.value)}
-                              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
-                            >
-                              <option value="">{t("Selecciona una subarea", "Select a subarea")}</option>
-                              {(subareaOptionsByArea.get(startAreaKey) ?? []).map(option => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          <p className="text-xs text-slate-500">
-                            {t("Toca la camara para agregar otra foto.", "Tap the camera to add another photo.")}
-                          </p>
-                          <CameraCapture onCapture={handleCaptureStartPhoto} overlayLines={startOverlayLines} />
-
-                          <div className="flex gap-2 overflow-x-auto pb-2">
-                            {startPhotoCaptures.map(item => (
-                              <div
-                                key={item.id}
-                                className="relative flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-emerald-500 text-[10px] font-semibold text-white"
-                              >
-                                <span>✓</span>
-                                <span className="px-1 text-center">{getAreaLabel(item.areaKey, item.areaDetail, item.subareaKey)}</span>
-                                <button
-                                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] text-emerald-600 shadow"
-                                  onClick={() => handleRemoveStartPhoto(item.id)}
-                                >
-                                  ×
-                                </button>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="text-xs uppercase tracking-wider text-slate-500">
+                                  {t("Paso 1 de 4", "Step 1 of 4")}
+                                </p>
+                                <p className="text-lg font-semibold text-slate-900">
+                                  {t("Fotos de ingreso (antes)", "Entry photos (before)")}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {t(
+                                    "Toma varias fotos del antes. Luego repetirás las mismas en la salida.",
+                                    "Take multiple before photos. You will repeat the same shots at the end."
+                                  )}
+                                </p>
                               </div>
-                            ))}
-                            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-400">
-                              +
+                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                {startPhotoCaptures.length} {t("fotos", "photos")}
+                              </span>
+                            </div>
+
+                            <div className="mt-4 space-y-3">
+                              <label className="text-xs font-medium text-slate-600">
+                                {t("Area", "Area")}
+                              </label>
+                              <select
+                                value={startAreaKey}
+                                onChange={event => {
+                                  const value = event.target.value
+                                  setStartAreaKey(value)
+                                  setStartSubareaKey("")
+                                  if (value !== "otro") setStartAreaDetail("")
+                                }}
+                                className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
+                              >
+                                <option value="">{t("Selecciona un area", "Select an area")}</option>
+                                {shiftAreaOptions.map(option => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {startAreaKey === "otro" && (
+                                <input
+                                  value={startAreaDetail}
+                                  onChange={event => setStartAreaDetail(event.target.value)}
+                                  className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
+                                  placeholder={t("Describe el area", "Describe the area")}
+                                />
+                              )}
+                              {startAreaKey && startAreaKey !== "otro" && (
+                                <select
+                                  value={startSubareaKey}
+                                  onChange={event => setStartSubareaKey(event.target.value)}
+                                  className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
+                                >
+                                  <option value="">{t("Selecciona una subarea", "Select a subarea")}</option>
+                                  {(subareaOptionsByArea.get(startAreaKey) ?? []).map(option => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                              <p className="text-xs text-slate-500">
+                                {t("Toca la camara para agregar otra foto.", "Tap the camera to add another photo.")}
+                              </p>
+                              <CameraCapture onCapture={handleCaptureStartPhoto} overlayLines={startOverlayLines} />
+
+                              <div className="flex gap-2 overflow-x-auto pb-2">
+                                {startPhotoCaptures.map(item => (
+                                  <div
+                                    key={item.id}
+                                    className="relative flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-emerald-500 text-[10px] font-semibold text-white"
+                                  >
+                                    <span>✓</span>
+                                    <span className="px-1 text-center">{getAreaLabel(item.areaKey, item.areaDetail, item.subareaKey)}</span>
+                                    <button
+                                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] text-emerald-600 shadow"
+                                      onClick={() => handleRemoveStartPhoto(item.id)}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                                <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-400">
+                                  +
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-semibold text-slate-600">
-                          {t("Observacion inicial (opcional)", "Initial observation (optional)")}
-                        </p>
-                        <textarea
-                          rows={3}
-                          value={startObservation}
-                          onChange={event => setStartObservation(event.target.value)}
-                          className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                          placeholder={t("Escribe una nota si es necesario.", "Write a note if needed.")}
-                        />
+                          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs font-semibold text-slate-600">
+                              {t("Observacion inicial (opcional)", "Initial observation (optional)")}
+                            </p>
+                            <textarea
+                              rows={3}
+                              value={startObservation}
+                              onChange={event => setStartObservation(event.target.value)}
+                              className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                              placeholder={t("Escribe una nota si es necesario.", "Write a note if needed.")}
+                            />
                       </div>
                     </div>
 
@@ -3000,7 +3023,7 @@ function ShiftsPageContent() {
                         fullWidth
                         className="border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500"
                       >
-                        {processing ? t("Almacenando datos...", "Saving data...") : t("INICIAR TURNO", "START SHIFT")}
+                        {processing ? t("Almacenando datos...", "Saving data...") : t("REGISTRAR INICIO", "REGISTER START")}
                       </Button>
 
                       {submitBlockers.length > 0 && (
@@ -3010,6 +3033,23 @@ function ShiftsPageContent() {
                           ))}
                         </ul>
                       )}
+
+                      <Button
+                        fullWidth
+                        variant="secondary"
+                        className="h-12 rounded-2xl"
+                        onClick={() => handleEmployeeView("profile")}
+                      >
+                        {t("Ver perfil", "View profile")}
+                      </Button>
+                      <Button
+                        fullWidth
+                        variant="ghost"
+                        className="h-12 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50"
+                        onClick={logout}
+                      >
+                        {t("Cerrar sesión", "Sign out")}
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -4488,9 +4528,58 @@ function ShiftsPageContent() {
 
         {canOperateSupervisor && (
           <section className="space-y-5">
-            <h2 className="text-lg font-semibold text-slate-900">{t("Panel de supervision", "Supervision panel")}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">{t("Panel de supervision", "Supervision panel")}</h2>
+              {supervisorScreen !== "home" && (
+                <Button size="sm" variant="ghost" onClick={() => setSupervisorScreen("home")}>
+                  {t("Volver al inicio", "Back to home")}
+                </Button>
+              )}
+            </div>
 
-            {!canOperateShift && (
+            {supervisorScreen === "home" && (
+              <div className="space-y-4">
+                {supervisorOtpHint}
+                {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                    {overdueSupervisorTasks.length > 0 && (
+                      <p className="font-medium">
+                        {t("Hay", "There are")} {overdueSupervisorTasks.length} {t("tarea(s) vencidas pendientes de cierre.", "overdue task(s) pending closure.")}
+                      </p>
+                    )}
+                    {pendingPresenceClosures.length > 0 && (
+                      <p className="mt-1">
+                        {t("Tienes", "You have")} {pendingPresenceClosures.length} {t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Button variant="secondary" onClick={() => setSupervisorScreen("active")}>
+                    {t("Turnos activos", "Active shifts")} ({supervisorRows.length})
+                  </Button>
+                  <Button variant="secondary" onClick={() => setSupervisorScreen("tasks")}>
+                    {t("Monitoreo de tareas", "Task monitoring")} ({supervisorTasks.length})
+                  </Button>
+                  <Button variant="secondary" onClick={() => setSupervisorScreen("schedule")}>
+                    {t("Programar turno", "Schedule shift")}
+                  </Button>
+                  <Button variant="secondary" onClick={() => setSupervisorScreen("scheduled")}>
+                    {t("Turnos programados", "Scheduled shifts")} ({supervisionScheduledShifts.length})
+                  </Button>
+                  <Button variant="secondary" onClick={() => setSupervisorScreen("staff")}>
+                    {t("Asignacion de personal", "Staff assignment")}
+                  </Button>
+                  {isSupervisora && (
+                    <Button variant="secondary" onClick={() => setSupervisorScreen("presence")}>
+                      {t("Registrar presencia", "Register presence")}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {supervisorScreen === "otp" && !canOperateShift && (
               <Card title={t("OTP para aprobaciones e incidentes", "OTP for approvals and incidents")}>
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
@@ -4520,10 +4609,41 @@ function ShiftsPageContent() {
                     </Button>
                   </div>
 
+                  {otpDebugCode && (
+                    <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+                        {t("Codigo en pantalla", "On-screen code")}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded-lg bg-white px-2 py-1 font-mono text-base font-semibold text-emerald-900">
+                          {otpDebugCode}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                              void navigator.clipboard.writeText(otpDebugCode)
+                            }
+                            showToast("success", t("Codigo copiado.", "Code copied."))
+                          }}
+                        >
+                          {t("Copiar", "Copy")}
+                        </Button>
+                      </div>
+                      <div className="mt-1 text-[11px] text-emerald-700">
+                        {otpDebugMaskedPhone ? `${t("Referencia", "Reference")}: ${otpDebugMaskedPhone}. ` : ""}
+                        {otpDebugExpiresAt ? `${t("Expira", "Expires")}: ${formatDateTime(otpDebugExpiresAt)}` : ""}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_auto]">
                     <input
                       value={otpCode}
-                      onChange={event => setOtpCode(event.target.value)}
+                      onChange={event => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                      inputMode="numeric"
+                      maxLength={6}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                       placeholder={t("Codigo OTP", "OTP code")}
                     />
@@ -4535,22 +4655,8 @@ function ShiftsPageContent() {
               </Card>
             )}
 
-            {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-                {overdueSupervisorTasks.length > 0 && (
-                  <p className="font-medium">
-                    {t("Hay", "There are")} {overdueSupervisorTasks.length} {t("tarea(s) vencidas pendientes de cierre.", "overdue task(s) pending closure.")}
-                  </p>
-                )}
-                {pendingPresenceClosures.length > 0 && (
-                  <p className="mt-1">
-                    {t("Tienes", "You have")} {pendingPresenceClosures.length} {t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")}
-                  </p>
-                )}
-              </div>
-            )}
-
-            <Card title={t("Asignacion de personal", "Staff assignment")}>
+            {supervisorScreen === "staff" && (
+              <Card title={t("Asignacion de personal", "Staff assignment")}>
               <div className="grid gap-2 lg:grid-cols-3">
                 <select
                   value={staffRestaurantId ?? ""}
@@ -4601,8 +4707,10 @@ function ShiftsPageContent() {
                 </div>
               )}
               </Card>
+            )}
 
-            <Card title={t("Programar turno", "Schedule shift")}>
+            {supervisorScreen === "schedule" && (
+              <Card title={t("Programar turno", "Schedule shift")}>
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
                 <p className="text-xs text-slate-500">
@@ -4859,8 +4967,9 @@ function ShiftsPageContent() {
                 </div>
               </div>
             </Card>
+            )}
 
-            {isSupervisora && (
+            {supervisorScreen === "presence" && isSupervisora && (
               <Card title={t("Entrada/salida de supervision", "Supervisor entry/exit")}>
                 <div className="grid gap-3 lg:grid-cols-2">
                   <div className="space-y-2">
@@ -4955,7 +5064,8 @@ function ShiftsPageContent() {
               </Card>
             )}
 
-            <Card title={t("Monitoreo de tareas", "Task monitoring")}>
+            {supervisorScreen === "tasks" && (
+              <Card title={t("Monitoreo de tareas", "Task monitoring")}>
               {loadingTasks ? (
                 <Skeleton className="h-20" />
               ) : supervisorTasks.length === 0 ? (
@@ -4989,9 +5099,11 @@ function ShiftsPageContent() {
                   ))}
                 </div>
               )}
-            </Card>
+              </Card>
+            )}
 
-            <Card title={t("Control de turnos programados", "Scheduled shift control")}>
+            {supervisorScreen === "scheduled" && (
+              <Card title={t("Control de turnos programados", "Scheduled shift control")}>
               {supervisionScheduledShifts.length === 0 ? (
                 <p className="text-sm text-slate-500">{t("No se encontraron turnos programados.", "No scheduled shifts found.")}</p>
               ) : (
@@ -5058,8 +5170,11 @@ function ShiftsPageContent() {
                 </div>
               )}
             </Card>
+            )}
 
-            {loadingSupervisor ? (
+            {supervisorScreen === "active" && (
+              <>
+                {loadingSupervisor ? (
               <Skeleton className="h-40" />
             ) : supervisorRows.length === 0 ? (
               <EmptyState
@@ -5265,6 +5380,8 @@ function ShiftsPageContent() {
                   )
                 })}
               </div>
+            )}
+              </>
             )}
           </section>
         )}

@@ -9,6 +9,7 @@ reglas/expectativas necesarias desde backend.
 - Se elimina **"Auto por rol"** (genera ruido).
 - Se elimina texto de **"Construir la política de datos"** en home.
 - Pantalla inicial queda más minimal: solo selector de idioma (ES/EN) y acceso a login.
+- **Insumos desactivado temporalmente** (UI y navegación ocultas).
 
 ## 2) Perfil de empleado - pantallas y flujo
 
@@ -34,6 +35,8 @@ Usuario ve:
   - **Cerrar sesión**
 
 ### Pantalla 3: Iniciar turno / Ver perfil
+**Nota UI**: Pantalla 3 y 4 se muestran **unidas** en una sola vista (info + evidencia antes de registrar inicio).
+
 **Iniciar turno**
 Usuario ve:
 - Nombre, fecha, hora inicio/fin, restaurante

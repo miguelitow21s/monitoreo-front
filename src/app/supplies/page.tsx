@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
@@ -85,10 +86,30 @@ function toRestaurantShape(id: number, name: string): Restaurant {
 }
 
 export default function SuppliesPage() {
+  const router = useRouter()
   const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { loading: roleLoading, isSuperAdmin, isSupervisora } = useRole()
   const { formatDateTime, t } = useI18n()
   const { showToast } = useToast()
+  const suppliesDisabled = true
+
+  if (suppliesDisabled) {
+    return (
+      <ProtectedRoute>
+        <section className="flex min-h-[60vh] items-center justify-center px-4">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 text-center">
+            <h1 className="text-lg font-semibold text-slate-900">{t("Modulo de insumos desactivado", "Supplies module disabled")}</h1>
+            <p className="text-sm text-slate-600">
+              {t("Este modulo no se usara por ahora. Volveremos a activarlo cuando sea necesario.", "This module is paused for now. We'll enable it again when needed.")}
+            </p>
+            <Button variant="primary" onClick={() => router.push("/dashboard")}>
+              {t("Volver al inicio", "Back to home")}
+            </Button>
+          </div>
+        </section>
+      </ProtectedRoute>
+    )
+  }
   const [loading, setLoading] = useState(true)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [supplies, setSupplies] = useState<Supply[]>([])

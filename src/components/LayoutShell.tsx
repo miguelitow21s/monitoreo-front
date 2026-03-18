@@ -1,22 +1,14 @@
 "use client"
 
-import { useState } from "react"
-import { usePathname } from "next/navigation"
-
-import Header from "@/components/Header"
-import Sidebar from "@/components/Sidebar"
-import Footer from "@/components/Footer"
-import { useRole } from "@/hooks/useRole"
+import { usePathname, useRouter } from "next/navigation"
 
 type LayoutShellProps = {
   children: React.ReactNode
 }
 
 export default function LayoutShell({ children }: LayoutShellProps) {
+  const router = useRouter()
   const pathname = usePathname()
-  const { loading: roleLoading, isEmpleado } = useRole()
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
 
   const standalonePage =
     pathname === "/" ||
@@ -28,35 +20,22 @@ export default function LayoutShell({ children }: LayoutShellProps) {
     return <>{children}</>
   }
 
-  if (!roleLoading && isEmpleado) {
-    return (
-      <main className="min-h-screen px-3 pb-6 pt-6 sm:px-5 lg:px-6">
-        <div className="mx-auto w-full max-w-[1240px]">{children}</div>
-      </main>
-    )
-  }
-
-  const desktopOffset = collapsed ? "md:ml-20" : "md:ml-64"
+  const showHome = pathname !== "/dashboard"
 
   return (
-    <>
-      <Header
-        collapsed={collapsed}
-        onToggleDesktop={() => setCollapsed(v => !v)}
-        onToggleMobile={() => setMobileOpen(v => !v)}
-      />
-      <Sidebar
-        collapsed={collapsed}
-        mobileOpen={mobileOpen}
-        onToggle={setCollapsed}
-        onCloseMobile={() => setMobileOpen(false)}
-      />
-      <main
-        className={`min-h-screen px-3 pb-6 pt-20 transition-all duration-300 sm:px-5 md:pb-14 md:pt-20 lg:px-6 ${desktopOffset}`}
-      >
-        <div className="mx-auto w-full max-w-[1240px]">{children}</div>
-      </main>
-      <Footer collapsed={collapsed} />
-    </>
+    <main className="min-h-screen px-3 pb-6 pt-6 sm:px-5 lg:px-6">
+      {showHome && (
+        <div className="mx-auto mb-5 flex w-full max-w-[1240px] justify-start">
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            Volver al inicio
+          </button>
+        </div>
+      )}
+      <div className="mx-auto w-full max-w-[1240px]">{children}</div>
+    </main>
   )
 }
