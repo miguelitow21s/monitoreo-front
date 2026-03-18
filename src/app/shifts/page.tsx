@@ -4527,57 +4527,69 @@ function ShiftsPageContent() {
         )}
 
         {canOperateSupervisor && (
-          <section className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">{t("Panel de supervision", "Supervision panel")}</h2>
-              {supervisorScreen !== "home" && (
-                <Button size="sm" variant="ghost" onClick={() => setSupervisorScreen("home")}>
-                  {t("Volver al inicio", "Back to home")}
-                </Button>
-              )}
-            </div>
-
-            {supervisorScreen === "home" && (
-              <div className="space-y-4">
-                {supervisorOtpHint}
-                {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-                    {overdueSupervisorTasks.length > 0 && (
-                      <p className="font-medium">
-                        {t("Hay", "There are")} {overdueSupervisorTasks.length} {t("tarea(s) vencidas pendientes de cierre.", "overdue task(s) pending closure.")}
-                      </p>
-                    )}
-                    {pendingPresenceClosures.length > 0 && (
-                      <p className="mt-1">
-                        {t("Tienes", "You have")} {pendingPresenceClosures.length} {t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")}
-                      </p>
-                    )}
+          <section className={`space-y-5 ${manrope.className}`}>
+            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+              <div className="bg-gradient-to-br from-sky-600 to-blue-700 px-6 py-6 text-white">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
+                    <p className="mt-1 text-sm text-blue-100">{t("Supervisión", "Supervision")}</p>
                   </div>
-                )}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Button variant="secondary" onClick={() => setSupervisorScreen("active")}>
-                    {t("Turnos activos", "Active shifts")} ({supervisorRows.length})
-                  </Button>
-                  <Button variant="secondary" onClick={() => setSupervisorScreen("tasks")}>
-                    {t("Monitoreo de tareas", "Task monitoring")} ({supervisorTasks.length})
-                  </Button>
-                  <Button variant="secondary" onClick={() => setSupervisorScreen("schedule")}>
-                    {t("Programar turno", "Schedule shift")}
-                  </Button>
-                  <Button variant="secondary" onClick={() => setSupervisorScreen("scheduled")}>
-                    {t("Turnos programados", "Scheduled shifts")} ({supervisionScheduledShifts.length})
-                  </Button>
-                  <Button variant="secondary" onClick={() => setSupervisorScreen("staff")}>
-                    {t("Asignacion de personal", "Staff assignment")}
-                  </Button>
-                  {isSupervisora && (
-                    <Button variant="secondary" onClick={() => setSupervisorScreen("presence")}>
-                      {t("Registrar presencia", "Register presence")}
+                  {supervisorScreen !== "home" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="border border-white/40 text-white hover:bg-white/10"
+                      onClick={() => setSupervisorScreen("home")}
+                    >
+                      {t("Volver al inicio", "Back to home")}
                     </Button>
                   )}
                 </div>
               </div>
-            )}
+
+              <div className="space-y-4 px-6 py-6">
+                {supervisorScreen === "home" && (
+                  <div className="space-y-4">
+                    {supervisorOtpHint}
+                    {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
+                      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                        {overdueSupervisorTasks.length > 0 && (
+                          <p className="font-medium">
+                            {t("Hay", "There are")} {overdueSupervisorTasks.length} {t("tarea(s) vencidas pendientes de cierre.", "overdue task(s) pending closure.")}
+                          </p>
+                        )}
+                        {pendingPresenceClosures.length > 0 && (
+                          <p className="mt-1">
+                            {t("Tienes", "You have")} {pendingPresenceClosures.length} {t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Button variant="secondary" onClick={() => setSupervisorScreen("active")}>
+                        {t("Turnos activos", "Active shifts")} ({supervisorRows.length})
+                      </Button>
+                      <Button variant="secondary" onClick={() => setSupervisorScreen("tasks")}>
+                        {t("Monitoreo de tareas", "Task monitoring")} ({supervisorTasks.length})
+                      </Button>
+                      <Button variant="secondary" onClick={() => setSupervisorScreen("schedule")}>
+                        {t("Programar turno", "Schedule shift")}
+                      </Button>
+                      <Button variant="secondary" onClick={() => setSupervisorScreen("scheduled")}>
+                        {t("Turnos programados", "Scheduled shifts")} ({supervisionScheduledShifts.length})
+                      </Button>
+                      <Button variant="secondary" onClick={() => setSupervisorScreen("staff")}>
+                        {t("Asignacion de personal", "Staff assignment")}
+                      </Button>
+                      {isSupervisora && (
+                        <Button variant="secondary" onClick={() => setSupervisorScreen("presence")}>
+                          {t("Registrar presencia", "Register presence")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
             {supervisorScreen === "otp" && !canOperateShift && (
               <Card title={t("OTP para aprobaciones e incidentes", "OTP for approvals and incidents")}>
@@ -5383,6 +5395,8 @@ function ShiftsPageContent() {
             )}
               </>
             )}
+              </div>
+            </div>
           </section>
         )}
 

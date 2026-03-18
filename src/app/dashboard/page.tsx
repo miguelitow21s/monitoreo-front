@@ -149,14 +149,11 @@ export default function DashboardPage() {
             <div className="bg-gradient-to-br from-indigo-600 to-blue-700 px-6 py-6 text-white">
               <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
               <p className="mt-2 text-sm text-indigo-100">
-                {t("Panel de administracion simplificado.", "Simplified admin panel.")}
+                {t("Super administracion", "Super administration")}
               </p>
             </div>
 
-            <div className="grid gap-3 px-6 py-6 sm:grid-cols-2">
-              <Button fullWidth className="h-16 rounded-2xl text-base" variant="primary" onClick={() => router.push("/admin")}>
-                {t("Admin", "Admin")}
-              </Button>
+            <div className="space-y-3 px-6 py-6">
               <Button fullWidth className="h-16 rounded-2xl text-base" variant="secondary" onClick={() => router.push("/restaurants")}>
                 {t("Restaurantes", "Restaurants")}
               </Button>

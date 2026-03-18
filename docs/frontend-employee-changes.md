@@ -447,3 +447,19 @@ Para turnos/evidencias además: `x-shift-otp-token`.
 | `/operational_tasks_manage` | POST | Base | `{ action: "request_evidence_upload", task_id, mime_type }` | `{ "action": "request_evidence_upload", "task_id": 77, "mime_type": "image/jpeg" }` |
 | `/operational_tasks_manage` | POST | Base | `{ action: "request_manifest_upload", task_id }` | `{ "action": "request_manifest_upload", "task_id": 77 }` |
 | `/operational_tasks_manage` | POST | Base | `{ action: "complete", task_id, evidence_path }` | `{ "action": "complete", "task_id": 77, "evidence_path": "users/<employee_id>/task-evidence/..." }` |
+
+## 10) Perfil de supervisión (lineamientos de UI)
+Pendiente de implementación visual, mantener **pantallas simples** y por función:
+- Dashboard simplificado (sin header/sidebars) con botones grandes.
+- Cada módulo abre pantalla con botón **Volver al inicio**.
+- Gestión restaurante
+- Gestión usuarios
+- Gestión de turnos
+- Gestión de supervisión (evidencias ingreso/limpieza/salida + observaciones + finalizar)
+- Gestión de insumos (desactivado por ahora)
+- Gestión de alertas
+- Gestión de informes
+
+## 11) Perfil de superusuario
+Gestionar (mismo enfoque simple y sin sobrecargar).
+- Dashboard simplificado con accesos directos (restaurantes, usuarios, reportes, turnos).
