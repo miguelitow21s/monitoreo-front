@@ -53,8 +53,11 @@ import {
 import { supabase } from "@/services/supabaseClient"
 import { debugLog } from "@/services/debug"
 import {
+  cancelOperationalTask,
+  closeOperationalTask,
   completeOperationalTask,
   createOperationalTask,
+  deleteOperationalTask,
   fetchTaskEvidenceManifest,
   listMyOperationalTasks,
   listSupervisorOperationalTasks,
@@ -62,6 +65,7 @@ import {
   OperationalTask,
   TaskPriority,
   TaskEvidenceManifestResolved,
+  updateOperationalTaskDetails,
   requestTaskEvidenceUpload,
   requestTaskManifestUpload,
   uploadTaskEvidenceViaSignedUrl,
@@ -390,6 +394,14 @@ function ShiftsPageContent() {
   const [taskEvidenceMode, setTaskEvidenceMode] = useState<"manifest" | "image">("manifest")
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [processingTask, setProcessingTask] = useState(false)
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null)
+  const [editingTaskTitle, setEditingTaskTitle] = useState("")
+  const [editingTaskDescription, setEditingTaskDescription] = useState("")
+  const [editingTaskPriority, setEditingTaskPriority] = useState<TaskPriority>("normal")
+  const [editingTaskDueAt, setEditingTaskDueAt] = useState("")
+  const [savingTaskEditId, setSavingTaskEditId] = useState<number | null>(null)
+  const [closingTaskId, setClosingTaskId] = useState<number | null>(null)
+  const [deletingTaskId, setDeletingTaskId] = useState<number | null>(null)
   const [newTaskByShift, setNewTaskByShift] = useState<Record<string, { title: string; description: string; priority: TaskPriority; dueAt: string }>>({})
   const [creatingTaskForShift, setCreatingTaskForShift] = useState<string | null>(null)
 
@@ -2221,6 +2233,83 @@ function ShiftsPageContent() {
       setTaskDetailManifestError(extractErrorMessage(error, t("No se pudieron cargar los detalles de evidencia de la tarea.", "Could not load task evidence details.")))
     } finally {
       setLoadingTaskDetailManifest(false)
+    }
+  }
+
+  const resetTaskEditState = () => {
+    setEditingTaskId(null)
+    setEditingTaskTitle("")
+    setEditingTaskDescription("")
+    setEditingTaskPriority("normal")
+    setEditingTaskDueAt("")
+  }
+
+  const handleStartEditTask = (task: OperationalTask) => {
+    setEditingTaskId(task.id)
+    setEditingTaskTitle(task.title ?? "")
+    setEditingTaskDescription(task.description ?? "")
+    setEditingTaskPriority(task.priority ?? "normal")
+    setEditingTaskDueAt(task.due_at ? new Date(task.due_at).toISOString().slice(0, 16) : "")
+  }
+
+  const handleSaveTaskEdit = async () => {
+    if (!editingTaskId) return
+    if (!editingTaskTitle.trim()) {
+      showToast("info", t("El titulo es obligatorio.", "Title is required."))
+      return
+    }
+
+    setSavingTaskEditId(editingTaskId)
+    try {
+      await updateOperationalTaskDetails({
+        taskId: editingTaskId,
+        title: editingTaskTitle.trim(),
+        description: editingTaskDescription.trim(),
+        priority: editingTaskPriority,
+        dueAt: editingTaskDueAt ? new Date(editingTaskDueAt).toISOString() : null,
+      })
+      showToast("success", t("Tarea actualizada.", "Task updated."))
+      resetTaskEditState()
+      await loadTasks()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo actualizar la tarea.", "Could not update task.")))
+    } finally {
+      setSavingTaskEditId(null)
+    }
+  }
+
+  const handleCloseSupervisorTask = async (taskId: number) => {
+    setClosingTaskId(taskId)
+    try {
+      await closeOperationalTask(taskId)
+      showToast("success", t("Tarea cerrada.", "Task closed."))
+      await loadTasks()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo cerrar la tarea.", "Could not close task.")))
+    } finally {
+      setClosingTaskId(null)
+    }
+  }
+
+  const handleDeleteSupervisorTask = async (taskId: number) => {
+    setDeletingTaskId(taskId)
+    try {
+      await deleteOperationalTask(taskId)
+      showToast("success", t("Tarea eliminada.", "Task deleted."))
+      await loadTasks()
+    } catch (error: unknown) {
+      try {
+        await cancelOperationalTask(taskId)
+        showToast(
+          "info",
+          t("No se pudo eliminar. La tarea quedo cancelada.", "Could not delete. Task was cancelled.")
+        )
+        await loadTasks()
+      } catch (innerError: unknown) {
+        showToast("error", extractErrorMessage(innerError, t("No se pudo eliminar la tarea.", "Could not delete task.")))
+      }
+    } finally {
+      setDeletingTaskId(null)
     }
   }
 
@@ -5096,6 +5185,81 @@ function ShiftsPageContent() {
                       {task.due_at && (
                         <p className="text-xs text-slate-500">{t("Vence", "Due")}: {formatDateTime(task.due_at)}</p>
                       )}
+
+                      {editingTaskId === task.id ? (
+                        <div className="mt-3 space-y-2">
+                          <input
+                            value={editingTaskTitle}
+                            onChange={event => setEditingTaskTitle(event.target.value)}
+                            className="w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
+                            placeholder={t("Titulo de tarea", "Task title")}
+                          />
+                          <textarea
+                            value={editingTaskDescription}
+                            onChange={event => setEditingTaskDescription(event.target.value)}
+                            rows={2}
+                            className="w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
+                            placeholder={t("Descripcion", "Description")}
+                          />
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <select
+                              value={editingTaskPriority}
+                              onChange={event => setEditingTaskPriority(event.target.value as TaskPriority)}
+                              className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                            >
+                              <option value="low">{t("Baja", "Low")}</option>
+                              <option value="normal">{t("Normal", "Normal")}</option>
+                              <option value="high">{t("Alta", "High")}</option>
+                              <option value="critical">{t("Critica", "Critical")}</option>
+                            </select>
+                            <input
+                              type="datetime-local"
+                              value={editingTaskDueAt}
+                              onChange={event => setEditingTaskDueAt(event.target.value)}
+                              className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => void handleSaveTaskEdit()}
+                              disabled={savingTaskEditId === task.id}
+                            >
+                              {savingTaskEditId === task.id ? t("Guardando...", "Saving...") : t("Guardar", "Save")}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={resetTaskEditState}>
+                              {t("Cerrar", "Close")}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        task.status !== "completed" &&
+                        task.status !== "cancelled" && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => handleStartEditTask(task)}>
+                              {t("Modificar", "Edit")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => void handleCloseSupervisorTask(task.id)}
+                              disabled={closingTaskId === task.id}
+                            >
+                              {closingTaskId === task.id ? t("Cerrando...", "Closing...") : t("Cerrar tarea", "Close task")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void handleDeleteSupervisorTask(task.id)}
+                              disabled={deletingTaskId === task.id}
+                            >
+                              {deletingTaskId === task.id ? t("Eliminando...", "Deleting...") : t("Eliminar", "Delete")}
+                            </Button>
+                          </div>
+                        )
+                      )}
+
                       {task.status === "completed" && task.evidence_path && (
                         <div className="mt-2">
                           <Button

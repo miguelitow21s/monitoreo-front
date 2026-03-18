@@ -103,6 +103,7 @@ export default function ReportsPage() {
   const [resolvingReportId, setResolvingReportId] = useState<string | null>(null)
   const [reportLimit, setReportLimit] = useState(500)
   const [historyLimit, setHistoryLimit] = useState(20)
+  const [tableFilter, setTableFilter] = useState("")
 
   const employeeOptions = useMemo(
     () => employees.filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false),
@@ -136,6 +137,22 @@ export default function ReportsPage() {
     const selectedSet = new Set(selectedColumns)
     return localizedColumnOptions.filter(item => selectedSet.has(item.key))
   }, [localizedColumnOptions, selectedColumns])
+
+  const filteredRows = useMemo(() => {
+    const query = tableFilter.trim().toLowerCase()
+    if (!query) return rows
+
+    return rows.filter(row => {
+      const values = [
+        String(getDisplayValue(row, "shift_id")),
+        String(getDisplayValue(row, "restaurant_id")),
+        String(getDisplayValue(row, "employee_id")),
+        String(getDisplayValue(row, "supervisor_id")),
+        String(getDisplayValue(row, "status")),
+      ]
+      return values.some(value => value.toLowerCase().includes(query))
+    })
+  }, [getDisplayValue, rows, tableFilter])
 
   const loadCatalogs = useCallback(async () => {
     try {
@@ -279,6 +296,107 @@ export default function ReportsPage() {
       window.open(signedUrl, "_blank", "noopener,noreferrer")
     },
     [showToast, t]
+  )
+
+  const getStatusBadge = useCallback(
+    (value: string) => {
+      const normalized = value.trim().toLowerCase()
+      const mapping: Record<string, { label: string; className: string }> = {
+        active: {
+          label: t("Activo", "Active"),
+          className: "border-blue-200 bg-blue-50 text-blue-700",
+        },
+        in_progress: {
+          label: t("En progreso", "In progress"),
+          className: "border-blue-200 bg-blue-50 text-blue-700",
+        },
+        completed: {
+          label: t("Completado", "Completed"),
+          className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        },
+        approved: {
+          label: t("Aprobado", "Approved"),
+          className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        },
+        rejected: {
+          label: t("Rechazado", "Rejected"),
+          className: "border-rose-200 bg-rose-50 text-rose-700",
+        },
+        cancelled: {
+          label: t("Cancelado", "Cancelled"),
+          className: "border-slate-200 bg-slate-50 text-slate-600",
+        },
+        canceled: {
+          label: t("Cancelado", "Cancelled"),
+          className: "border-slate-200 bg-slate-50 text-slate-600",
+        },
+      }
+
+      if (mapping[normalized]) return mapping[normalized]
+
+      return {
+        label: value || "-",
+        className: "border-slate-200 bg-slate-50 text-slate-600",
+      }
+    },
+    [t]
+  )
+
+  const renderCellValue = useCallback(
+    (row: ReportRow, column: ReportColumnKey) => {
+      if (column === "start_evidence" || column === "end_evidence") {
+        const hasEvidence = column === "start_evidence" ? row.start_evidence_path : row.end_evidence_path
+        return (
+          <Button
+            size="sm"
+            variant={hasEvidence ? "secondary" : "ghost"}
+            onClick={() =>
+              void openEvidenceReadonly(
+                column === "start_evidence" ? row.start_evidence_path : row.end_evidence_path
+              )
+            }
+            disabled={!hasEvidence}
+          >
+            {hasEvidence
+              ? column === "start_evidence"
+                ? t("Ver foto inicial", "View start photo")
+                : t("Ver foto final", "View end photo")
+              : t("Sin evidencia", "No evidence")}
+          </Button>
+        )
+      }
+
+      if (column === "status") {
+        const badge = getStatusBadge(row.status ?? "")
+        return (
+          <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${badge.className}`}>
+            {badge.label}
+          </span>
+        )
+      }
+
+      if (column === "incidents") {
+        const count = row.incidents_count ?? 0
+        const className =
+          count > 0
+            ? "border-amber-200 bg-amber-50 text-amber-700"
+            : "border-slate-200 bg-slate-50 text-slate-600"
+        return (
+          <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${className}`}>
+            {count}
+          </span>
+        )
+      }
+
+      if (column === "shift_id") {
+        const value = getDisplayValue(row, column)
+        return <span className="font-mono text-xs text-slate-700">#{String(value).slice(0, 8)}</span>
+      }
+
+      const value = getDisplayValue(row, column)
+      return <span className="text-slate-700">{String(value)}</span>
+    },
+    [getDisplayValue, getStatusBadge, openEvidenceReadonly, t]
   )
 
   const handleExportCsv = useCallback(() => {
@@ -482,11 +600,18 @@ export default function ReportsPage() {
                 actionLabel={t("Reintentar", "Retry")}
                 onAction={() => void loadReport()}
               />
+            ) : filteredRows.length === 0 ? (
+              <EmptyState
+                title={t("Sin coincidencias", "No matches")}
+                description={t("No hay filas que coincidan con el filtro rapido.", "No rows match the quick filter.")}
+                actionLabel={t("Limpiar filtro", "Clear filter")}
+                onAction={() => setTableFilter("")}
+              />
             ) : (
               <div className="space-y-3">
                 <div className="hidden md:flex md:items-center md:justify-between md:rounded-lg md:border md:border-slate-200 md:bg-slate-50 md:px-3 md:py-2">
                   <p className="text-xs text-slate-600">
-                    {t("Mostrando", "Showing")} {rows.length} {t("filas", "rows")}
+                    {t("Mostrando", "Showing")} {filteredRows.length} {t("de", "of")} {rows.length} {t("filas", "rows")}
                   </p>
                   <div className="flex flex-wrap gap-2 text-xs text-slate-600">
                     {visibleColumns.map(column => (
@@ -497,8 +622,20 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs text-slate-600 md:hidden">
+                    {t("Mostrando", "Showing")} {filteredRows.length} {t("de", "of")} {rows.length} {t("filas", "rows")}
+                  </div>
+                  <input
+                    value={tableFilter}
+                    onChange={event => setTableFilter(event.target.value)}
+                    placeholder={t("Filtro rapido: empleado, restaurante, estado...", "Quick filter: employee, restaurant, status...")}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm md:max-w-sm"
+                  />
+                </div>
+
                 <div className="space-y-2 md:hidden">
-                  {rows.map(item => (
+                  {filteredRows.map(item => (
                     <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                       {visibleColumns.map(column => (
                         <div key={`${item.id}-${column.key}`} className="mt-2 flex items-start justify-between gap-3 text-sm">
@@ -506,23 +643,7 @@ export default function ReportsPage() {
                             {column.label}
                           </span>
                           <div className="text-right text-sm text-slate-700">
-                            {column.key === "start_evidence" || column.key === "end_evidence" ? (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  void openEvidenceReadonly(
-                                    column.key === "start_evidence" ? item.start_evidence_path : item.end_evidence_path
-                                  )
-                                }
-                              >
-                                {column.key === "start_evidence"
-                                  ? t("Ver foto inicial", "View start photo")
-                                  : t("Ver foto final", "View end photo")}
-                              </Button>
-                            ) : (
-                              getDisplayValue(item, column.key)
-                            )}
+                            {renderCellValue(item, column.key)}
                           </div>
                         </div>
                       ))}
@@ -535,34 +656,35 @@ export default function ReportsPage() {
                     <thead className="bg-slate-50">
                       <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                         {visibleColumns.map(column => (
-                          <th key={column.key} className="px-3 py-2">
+                          <th key={column.key} className="px-4 py-3 whitespace-nowrap">
                             {column.label}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map(item => (
-                        <tr key={item.id} className="border-b border-slate-100">
+                      {filteredRows.map((item, index) => (
+                        <tr
+                          key={item.id}
+                          className={`border-b border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-slate-100`}
+                        >
                           {visibleColumns.map(column => (
-                            <td key={`${item.id}-${column.key}`} className="px-3 py-2 align-top">
-                              {column.key === "start_evidence" || column.key === "end_evidence" ? (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() =>
-                                    void openEvidenceReadonly(
-                                      column.key === "start_evidence" ? item.start_evidence_path : item.end_evidence_path
-                                    )
-                                  }
-                                >
-                                  {column.key === "start_evidence"
-                                    ? t("Ver foto inicial", "View start photo")
-                                    : t("Ver foto final", "View end photo")}
-                                </Button>
-                              ) : (
-                                getDisplayValue(item, column.key)
-                              )}
+                            <td
+                              key={`${item.id}-${column.key}`}
+                              className={`px-4 py-3 align-top ${
+                                column.key === "incidents" || column.key === "duration" ? "text-right" : ""
+                              } ${
+                                column.key === "shift_id" ||
+                                column.key === "start_time" ||
+                                column.key === "end_time" ||
+                                column.key === "status" ||
+                                column.key === "duration" ||
+                                column.key === "incidents"
+                                  ? "whitespace-nowrap"
+                                  : ""
+                              }`}
+                            >
+                              {renderCellValue(item, column.key)}
                             </td>
                           ))}
                         </tr>
@@ -580,29 +702,79 @@ export default function ReportsPage() {
             ) : reportHistory.length === 0 ? (
               <p className="text-sm text-slate-500">{t("Aun no hay reportes generados registrados.", "No generated reports recorded yet.")}</p>
             ) : (
-              <div className="space-y-2">
-                {reportHistory.map(report => (
-                  <div key={report.id} className="rounded-lg border border-slate-200 p-3 text-sm">
-                    <p className="font-medium text-slate-800">{t("Reporte", "Report")} #{String(report.id).slice(0, 8)}</p>
-                    <p className="text-slate-600">
-                      {t("Generado", "Generated")}: {formatDateTime(report.generated_at)} | {t("Restaurante", "Restaurant")}: {report.restaurant_id ?? "-"}
-                    </p>
-                    <p className="text-slate-600">{t("Generado por", "Generated by")}: {report.generated_by ?? "-"}</p>
-                    <p className="text-xs text-slate-500">
-                      {t("Filtros", "Filters")}: {formatHistoryFilters(report.filtros_json)}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={resolvingReportId === report.id}
-                        onClick={() => void handleCopyReadonlyLink(report)}
-                      >
-                        {resolvingReportId === report.id ? t("Generando link...", "Generating link...") : t("Copiar enlace solo lectura", "Copy read-only link")}
-                      </Button>
-                    </div>
+              <div className="space-y-3">
+                <div className="hidden md:block">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-slate-50">
+                        <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-4 py-3 whitespace-nowrap">{t("Reporte", "Report")}</th>
+                          <th className="px-4 py-3 whitespace-nowrap">{t("Generado", "Generated")}</th>
+                          <th className="px-4 py-3 whitespace-nowrap">{t("Restaurante", "Restaurant")}</th>
+                          <th className="px-4 py-3 whitespace-nowrap">{t("Generado por", "Generated by")}</th>
+                          <th className="px-4 py-3">{t("Filtros", "Filters")}</th>
+                          <th className="px-4 py-3 whitespace-nowrap">{t("Acciones", "Actions")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportHistory.map((report, index) => (
+                          <tr
+                            key={report.id}
+                            className={`border-b border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-slate-100`}
+                          >
+                            <td className="px-4 py-3 font-mono text-xs text-slate-700">#{String(report.id).slice(0, 8)}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-slate-700">{formatDateTime(report.generated_at)}</td>
+                            <td className="px-4 py-3 text-slate-700">{report.restaurant_id ?? "-"}</td>
+                            <td className="px-4 py-3 text-slate-700">{report.generated_by ?? "-"}</td>
+                            <td className="px-4 py-3 text-xs text-slate-500">
+                              {formatHistoryFilters(report.filtros_json)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                disabled={resolvingReportId === report.id}
+                                onClick={() => void handleCopyReadonlyLink(report)}
+                              >
+                                {resolvingReportId === report.id ? t("Generando link...", "Generating link...") : t("Copiar enlace", "Copy link")}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                ))}
+                </div>
+
+                <div className="space-y-2 md:hidden">
+                  {reportHistory.map(report => (
+                    <div key={report.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm">
+                      <p className="font-medium text-slate-800">{t("Reporte", "Report")} #{String(report.id).slice(0, 8)}</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {t("Generado", "Generated")}: {formatDateTime(report.generated_at)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {t("Restaurante", "Restaurant")}: {report.restaurant_id ?? "-"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {t("Generado por", "Generated by")}: {report.generated_by ?? "-"}
+                      </p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {t("Filtros", "Filters")}: {formatHistoryFilters(report.filtros_json)}
+                      </p>
+                      <div className="mt-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={resolvingReportId === report.id}
+                          onClick={() => void handleCopyReadonlyLink(report)}
+                        >
+                          {resolvingReportId === report.id ? t("Generando link...", "Generating link...") : t("Copiar enlace", "Copy link")}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 <div className="pt-2">
                   <Button size="sm" variant="ghost" onClick={() => setHistoryLimit(prev => Math.min(prev + 20, 500))}>

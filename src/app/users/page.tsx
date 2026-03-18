@@ -10,14 +10,6 @@ import Button from "@/components/ui/Button"
 import Card from "@/components/ui/Card"
 import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
-import { listRestaurants, Restaurant } from "@/services/restaurants.service"
-import {
-  assignScheduledShiftsBulk,
-  cancelScheduledShift,
-  listScheduledShifts,
-  reprogramScheduledShift,
-  ScheduledShift,
-} from "@/services/scheduling.service"
 import {
   createAdminUser,
   listUserProfiles,
@@ -28,11 +20,6 @@ import {
 import { useI18n } from "@/hooks/useI18n"
 import { ROLES, Role } from "@/utils/permissions"
 import { normalizePhoneForOtp } from "@/utils/phone"
-import {
-  generateScheduleBlocksFromRange,
-  getSchedulePresetRange,
-  ScheduleQuickPreset,
-} from "@/utils/scheduling"
 
 const roleOptions: Role[] = [ROLES.EMPLEADO, ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]
 const roleLabels: Record<Role, { es: string; en: string }> = {
@@ -49,62 +36,12 @@ function escapeCsvValue(value: string) {
   return `"${value.replaceAll('"', '""')}"`
 }
 
-function toDateInputValue(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
-function daysFromToday(days: number) {
-  const date = new Date()
-  date.setDate(date.getDate() + days)
-  return toDateInputValue(date)
-}
-
-function formatRestaurantAddress(restaurant: Restaurant | null | undefined) {
-  if (!restaurant) return ""
-  return [
-    restaurant.address_line,
-    restaurant.city,
-    restaurant.state,
-    restaurant.postal_code,
-    restaurant.country,
-  ]
-    .map(item => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean)
-    .join(", ")
-}
-
-function formatRestaurantLabel(restaurant: Restaurant | null | undefined) {
-  if (!restaurant) return ""
-  const address = formatRestaurantAddress(restaurant)
-  return address ? `${restaurant.name} - ${address}` : restaurant.name
-}
-
 export default function UsersPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
-  const { formatDateTime, language, t } = useI18n()
+  const { language, t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<UserProfile[]>([])
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([])
-  const [scheduled, setScheduled] = useState<ScheduledShift[]>([])
-  const [scheduleEmployeeId, setScheduleEmployeeId] = useState("")
-  const [scheduleRestaurantId, setScheduleRestaurantId] = useState("")
-  const [scheduleNotes, setScheduleNotes] = useState("")
-  const [scheduledLimit, setScheduledLimit] = useState(40)
-  const [scheduleBlocks, setScheduleBlocks] = useState<Array<{ id: number; start: string; end: string }>>([])
-  const [bulkRangeStart, setBulkRangeStart] = useState("")
-  const [bulkRangeEnd, setBulkRangeEnd] = useState("")
-  const [bulkStartTime, setBulkStartTime] = useState("08:00")
-  const [bulkEndTime, setBulkEndTime] = useState("16:00")
-  const [bulkWeekdays, setBulkWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
-  const [savingBulk, setSavingBulk] = useState(false)
-  const [editingScheduledId, setEditingScheduledId] = useState<number | null>(null)
-  const [editScheduledStart, setEditScheduledStart] = useState("")
-  const [editScheduledEnd, setEditScheduledEnd] = useState("")
-  const [editScheduledNotes, setEditScheduledNotes] = useState("")
   const [newUserFullName, setNewUserFullName] = useState("")
   const [newUserEmail, setNewUserEmail] = useState("")
   const [newUserRole, setNewUserRole] = useState<Role>(ROLES.EMPLEADO)
@@ -114,35 +51,20 @@ export default function UsersPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [usersData, restaurantsData, scheduledData] = await Promise.all([
-        listUserProfiles({ useAdminApi: true }),
-        listRestaurants({ useAdminApi: true }),
-        listScheduledShifts(scheduledLimit),
-      ])
+      const usersData = await listUserProfiles({ useAdminApi: true })
       setRows(usersData)
-      setRestaurants(restaurantsData)
-      setScheduled(scheduledData)
-
-      const employees = usersData.filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false)
-      setScheduleEmployeeId(prev => prev || employees[0]?.id || "")
-      setScheduleRestaurantId(prev => prev || restaurantsData[0]?.id || "")
     } catch (error: unknown) {
       showToast("error", error instanceof Error ? error.message : t("No se pudieron cargar los usuarios.", "Could not load users."))
     } finally {
       setLoading(false)
     }
-  }, [scheduledLimit, showToast, t])
+  }, [showToast, t])
 
   useEffect(() => {
     if (authLoading) return
     if (!isAuthenticated || !session?.access_token) return
     void loadData()
   }, [authLoading, isAuthenticated, session?.access_token, loadData])
-
-  useEffect(() => {
-    if (!bulkRangeStart) setBulkRangeStart(daysFromToday(0))
-    if (!bulkRangeEnd) setBulkRangeEnd(daysFromToday(30))
-  }, [bulkRangeStart, bulkRangeEnd])
 
   const handleRoleChange = async (id: string, role: Role) => {
     try {
@@ -218,210 +140,6 @@ export default function UsersPage() {
       showToast("error", error instanceof Error ? error.message : t("No se pudo actualizar el estado.", "Could not update status."))
     }
   }
-
-  const handleAddScheduleBlock = () => {
-    setScheduleBlocks(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 1000), start: "", end: "" }])
-  }
-
-  const handleScheduleBlockChange = (blockId: number, key: "start" | "end", value: string) => {
-    setScheduleBlocks(prev => prev.map(item => (item.id === blockId ? { ...item, [key]: value } : item)))
-  }
-
-  const handleRemoveScheduleBlock = (blockId: number) => {
-    setScheduleBlocks(prev => prev.filter(item => item.id !== blockId))
-  }
-
-  const handleToggleBulkWeekday = (day: number) => {
-    setBulkWeekdays(prev => {
-      if (prev.includes(day)) return prev.filter(item => item !== day)
-      return [...prev, day].sort((a, b) => a - b)
-    })
-  }
-
-  const appendGeneratedScheduleBlocks = (generated: Array<{ startLocal: string; endLocal: string }>) => {
-    if (generated.length === 0) {
-      showToast("info", t("No se pudieron generar bloques con esos criterios.", "Could not generate schedule blocks with those criteria."))
-      return
-    }
-
-    let addedCount = 0
-    setScheduleBlocks(prev => {
-      const seen = new Set(prev.map(item => `${item.start}|${item.end}`))
-      const next = [...prev]
-
-      for (const item of generated) {
-        const key = `${item.startLocal}|${item.endLocal}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        next.push({
-          id: Date.now() + next.length + Math.floor(Math.random() * 1000),
-          start: item.startLocal,
-          end: item.endLocal,
-        })
-        addedCount += 1
-      }
-
-      return next
-    })
-
-    if (addedCount === 0) {
-      showToast("info", t("Los bloques ya existian en la lista.", "Those blocks already exist in the list."))
-      return
-    }
-
-    showToast("success", t(`${addedCount} bloque(s) agregados.`, `${addedCount} block(s) added.`))
-  }
-
-  const handleGenerateBlocksFromRange = () => {
-    const generated = generateScheduleBlocksFromRange({
-      startDate: bulkRangeStart,
-      endDate: bulkRangeEnd,
-      startTime: bulkStartTime,
-      endTime: bulkEndTime,
-      weekdays: bulkWeekdays,
-      maxEntries: 200,
-    })
-
-    appendGeneratedScheduleBlocks(generated)
-  }
-
-  const handleApplyBulkPreset = (preset: ScheduleQuickPreset) => {
-    const range = getSchedulePresetRange(preset)
-    setBulkRangeStart(range.startDate)
-    setBulkRangeEnd(range.endDate)
-    setBulkWeekdays(range.weekdays)
-
-    const generated = generateScheduleBlocksFromRange({
-      startDate: range.startDate,
-      endDate: range.endDate,
-      startTime: bulkStartTime,
-      endTime: bulkEndTime,
-      weekdays: range.weekdays,
-      maxEntries: 200,
-    })
-
-    appendGeneratedScheduleBlocks(generated)
-  }
-
-  const handleClearScheduleBlocks = () => {
-    setScheduleBlocks([])
-  }
-
-  const handleAssignScheduledShiftBulk = async () => {
-    if (!scheduleEmployeeId || !scheduleRestaurantId) {
-      showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
-      return
-    }
-
-    const validBlocks = scheduleBlocks
-      .map(item => ({
-        startIso: item.start ? new Date(item.start).toISOString() : "",
-        endIso: item.end ? new Date(item.end).toISOString() : "",
-      }))
-      .filter(item => item.startIso && item.endIso)
-
-    if (validBlocks.length === 0) {
-      showToast("info", t("Agrega al menos un bloque de fecha/hora valido.", "Add at least one valid date/time block."))
-      return
-    }
-    if (validBlocks.length > 200) {
-      showToast("info", t("El lote permite maximo 200 turnos por envio.", "Bulk scheduling allows a maximum of 200 shifts per request."))
-      return
-    }
-
-    const hasInvalidRange = validBlocks.some(item => new Date(item.endIso).getTime() <= new Date(item.startIso).getTime())
-    if (hasInvalidRange) {
-      showToast("info", t("Todos los bloques deben tener fin posterior al inicio.", "All blocks must have end time after start time."))
-      return
-    }
-
-    setSavingBulk(true)
-    try {
-      await assignScheduledShiftsBulk({
-        employeeId: scheduleEmployeeId,
-        restaurantId: scheduleRestaurantId,
-        blocks: validBlocks.map(item => ({ scheduledStartIso: item.startIso, scheduledEndIso: item.endIso })),
-        notes: scheduleNotes.trim() || undefined,
-      })
-      showToast("success", t("Turnos en lote programados correctamente.", "Bulk shifts scheduled successfully."))
-      setScheduleBlocks([])
-      await loadData()
-    } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : t("No se pudieron programar turnos en lote.", "Could not schedule bulk shifts."))
-    } finally {
-      setSavingBulk(false)
-    }
-  }
-
-  const handleCancelScheduled = async (item: ScheduledShift) => {
-    try {
-      await cancelScheduledShift(item.id, item.notes ?? undefined)
-      showToast("success", t("Turno cancelado.", "Shift cancelled."))
-      await loadData()
-    } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : t("No se pudo cancelar el turno.", "Could not cancel shift."))
-    }
-  }
-
-  const handleStartEditScheduled = (item: ScheduledShift) => {
-    setEditingScheduledId(item.id)
-    setEditScheduledStart(item.scheduled_start ? new Date(item.scheduled_start).toISOString().slice(0, 16) : "")
-    setEditScheduledEnd(item.scheduled_end ? new Date(item.scheduled_end).toISOString().slice(0, 16) : "")
-    setEditScheduledNotes(item.notes ?? "")
-  }
-
-  const handleSaveReprogramScheduled = async () => {
-    if (!editingScheduledId || !editScheduledStart || !editScheduledEnd) {
-      showToast("info", t("Completa inicio y fin para reprogramar.", "Fill start and end to reschedule."))
-      return
-    }
-    const startIso = new Date(editScheduledStart).toISOString()
-    const endIso = new Date(editScheduledEnd).toISOString()
-    if (new Date(endIso).getTime() <= new Date(startIso).getTime()) {
-      showToast("info", t("La hora de fin debe ser posterior a inicio.", "End time must be after start."))
-      return
-    }
-
-    try {
-      await reprogramScheduledShift({
-        scheduledShiftId: editingScheduledId,
-        scheduledStartIso: startIso,
-        scheduledEndIso: endIso,
-        notes: editScheduledNotes,
-      })
-      showToast("success", t("Turno reprogramado.", "Shift rescheduled."))
-      setEditingScheduledId(null)
-      setEditScheduledStart("")
-      setEditScheduledEnd("")
-      setEditScheduledNotes("")
-      await loadData()
-    } catch (error: unknown) {
-      showToast("error", error instanceof Error ? error.message : t("No se pudo reprogramar el turno.", "Could not reschedule shift."))
-    }
-  }
-
-  const usersById = new Map(rows.map(item => [item.id, item]))
-  const restaurantsById = new Map(restaurants.map(item => [String(item.id), item]))
-  const selectedScheduleEmployee = usersById.get(scheduleEmployeeId)
-  const selectedScheduleRestaurant = restaurantsById.get(String(scheduleRestaurantId))
-  const selectedScheduleEmployeeLabel =
-    selectedScheduleEmployee?.full_name ??
-    selectedScheduleEmployee?.email ??
-    selectedScheduleEmployee?.id ??
-    t("Sin empleado seleccionado", "No employee selected")
-  const selectedScheduleRestaurantLabel =
-    formatRestaurantLabel(selectedScheduleRestaurant) ||
-    selectedScheduleRestaurant?.name ||
-    t("Sin restaurante seleccionado", "No restaurant selected")
-  const weekdayOptions = [
-    { value: 1, label: t("Lun", "Mon") },
-    { value: 2, label: t("Mar", "Tue") },
-    { value: 3, label: t("Mie", "Wed") },
-    { value: 4, label: t("Jue", "Thu") },
-    { value: 5, label: t("Vie", "Fri") },
-    { value: 6, label: t("Sab", "Sat") },
-    { value: 0, label: t("Dom", "Sun") },
-  ]
   const otpPhoneMissingRows = rows.filter(item => {
     if (!roleRequiresOtpPhone(item.role)) return false
     return !item.phone_number?.trim()
@@ -672,250 +390,6 @@ export default function UsersPage() {
                   </div>
                 )}
               </Card>
-
-              <Card title={t("Programar turno", "Schedule shift")}>
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
-                  <p className="text-xs text-slate-500">
-                    {t("Define rangos, dias o bloques.", "Define ranges, weekdays, or blocks.")}
-                  </p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <select
-                      value={scheduleEmployeeId}
-                      onChange={event => setScheduleEmployeeId(event.target.value)}
-                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                    >
-                      <option value="">{t("Seleccionar empleado", "Select employee")}</option>
-                      {rows
-                        .filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false)
-                        .map(item => (
-                          <option key={item.id} value={item.id}>
-                            {item.full_name ?? item.email ?? item.id}
-                          </option>
-                        ))}
-                    </select>
-
-                    <select
-                      value={scheduleRestaurantId}
-                      onChange={event => setScheduleRestaurantId(event.target.value)}
-                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                    >
-                      <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
-                      {restaurants.map(item => (
-                        <option key={item.id} value={item.id}>
-                          {formatRestaurantLabel(item)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                    <p>
-                      <span className="font-semibold">{t("Empleado seleccionado", "Selected employee")}:</span> {selectedScheduleEmployeeLabel}
-                    </p>
-                    <p className="mt-1">
-                      <span className="font-semibold">{t("Restaurante seleccionado", "Selected restaurant")}:</span> {selectedScheduleRestaurantLabel}
-                    </p>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => handleApplyBulkPreset("day")}>
-                      {t("1 dia (hoy)", "1 day (today)")}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleApplyBulkPreset("week")}>
-                      {t("1 semana", "1 week")}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleApplyBulkPreset("month")}>
-                      {t("1 mes", "1 month")}
-                    </Button>
-                  </div>
-
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                    <input
-                      type="date"
-                      value={bulkRangeStart}
-                      onChange={event => setBulkRangeStart(event.target.value)}
-                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                    />
-                    <input
-                      type="date"
-                      value={bulkRangeEnd}
-                      onChange={event => setBulkRangeEnd(event.target.value)}
-                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                    />
-                    <input
-                      type="time"
-                      value={bulkStartTime}
-                      onChange={event => setBulkStartTime(event.target.value)}
-                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                    />
-                    <input
-                      type="time"
-                      value={bulkEndTime}
-                      onChange={event => setBulkEndTime(event.target.value)}
-                      className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                    />
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {weekdayOptions.map(day => {
-                      const active = bulkWeekdays.includes(day.value)
-                      return (
-                        <Button
-                          key={day.value}
-                          size="sm"
-                          variant={active ? "secondary" : "ghost"}
-                          onClick={() => handleToggleBulkWeekday(day.value)}
-                        >
-                          {day.label}
-                        </Button>
-                      )
-                    })}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" variant="secondary" onClick={handleGenerateBlocksFromRange}>
-                      {t("Generar por rango", "Generate by range")}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={handleAddScheduleBlock}>
-                      {t("Agregar bloque manual", "Add manual block")}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={handleClearScheduleBlocks}>
-                      {t("Limpiar bloques", "Clear blocks")}
-                    </Button>
-                  </div>
-
-                  <div className="mt-2 space-y-2">
-                    {scheduleBlocks.length === 0 && (
-                      <p className="text-xs text-slate-500">{t("No hay bloques agregados.", "No blocks added.")}</p>
-                    )}
-                    {scheduleBlocks.map(block => (
-                      <div key={block.id} className="grid gap-2 sm:grid-cols-3">
-                        <input
-                          type="datetime-local"
-                          value={block.start}
-                          onChange={event => handleScheduleBlockChange(block.id, "start", event.target.value)}
-                          className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                        />
-                        <input
-                          type="datetime-local"
-                          value={block.end}
-                          onChange={event => handleScheduleBlockChange(block.id, "end", event.target.value)}
-                          className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                        />
-                        <Button size="sm" variant="ghost" onClick={() => handleRemoveScheduleBlock(block.id)}>
-                          {t("Quitar", "Remove")}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <textarea
-                    value={scheduleNotes}
-                    onChange={event => setScheduleNotes(event.target.value)}
-                    rows={2}
-                    placeholder={t("Notas del turno (opcional)", "Shift notes (optional)")}
-                    className="mt-3 w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  />
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-slate-500">
-                      {t("Bloques listos", "Ready blocks")}: {scheduleBlocks.length}
-                    </span>
-                    <Button size="sm" onClick={() => void handleAssignScheduledShiftBulk()} disabled={savingBulk}>
-                      {savingBulk
-                        ? scheduleBlocks.length === 1
-                          ? t("Guardando turno...", "Saving shift...")
-                          : t("Guardando turnos...", "Saving shifts...")
-                        : scheduleBlocks.length === 1
-                          ? t("Programar turno", "Schedule shift")
-                          : t("Programar turnos", "Schedule shifts")}
-                    </Button>
-                  </div>
-                </div>
-
-                {scheduled.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {t("Turnos programados recientes", "Recent scheduled shifts")}
-                    </p>
-                    <div className="space-y-2">
-                      {scheduled.slice(0, 12).map(item => {
-                        const employee = usersById.get(item.employee_id)
-                        const restaurant = restaurantsById.get(String(item.restaurant_id))
-                        const editing = editingScheduledId === item.id
-                        return (
-                          <div key={item.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-                            <p className="font-medium text-slate-800">
-                              {employee?.full_name ?? employee?.email ?? item.employee_id} - {formatRestaurantLabel(restaurant) || `#${item.restaurant_id}`}
-                            </p>
-                            {!editing ? (
-                              <>
-                                <p className="text-slate-600">
-                                  {formatDateTime(item.scheduled_start)} - {formatDateTime(item.scheduled_end)}
-                                </p>
-                                <p className="text-xs text-slate-500">{t("Estado", "Status")}: {item.status}</p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {item.status !== "cancelled" && (
-                                    <Button size="sm" variant="ghost" onClick={() => handleStartEditScheduled(item)}>
-                                      {t("Reprogramar", "Reschedule")}
-                                    </Button>
-                                  )}
-                                  {item.status !== "cancelled" && (
-                                    <Button size="sm" variant="danger" onClick={() => void handleCancelScheduled(item)}>
-                                      {t("Cancelar", "Cancel")}
-                                    </Button>
-                                  )}
-                                </div>
-                              </>
-                            ) : (
-                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                <input
-                                  type="datetime-local"
-                                  value={editScheduledStart}
-                                  onChange={event => setEditScheduledStart(event.target.value)}
-                                  className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                                />
-                                <input
-                                  type="datetime-local"
-                                  value={editScheduledEnd}
-                                  onChange={event => setEditScheduledEnd(event.target.value)}
-                                  className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                                />
-                                <textarea
-                                  rows={2}
-                                  value={editScheduledNotes}
-                                  onChange={event => setEditScheduledNotes(event.target.value)}
-                                  className="sm:col-span-2 rounded-md border border-slate-300 px-2 py-2 text-sm"
-                                  placeholder={t("Notas", "Notes")}
-                                />
-                                <div className="sm:col-span-2 flex flex-wrap gap-2">
-                                  <Button size="sm" variant="primary" onClick={() => void handleSaveReprogramScheduled()}>
-                                    {t("Guardar", "Save")}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setEditingScheduledId(null)
-                                      setEditScheduledStart("")
-                                      setEditScheduledEnd("")
-                                      setEditScheduledNotes("")
-                                    }}
-                                  >
-                                    {t("Cerrar", "Close")}
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <Button size="sm" variant="ghost" onClick={() => setScheduledLimit(prev => Math.min(prev + 40, 1000))}>
-                      {t("Cargar mas historial", "Load more history")}
-                    </Button>
-                  </div>
-                )}
-              </Card>
             </div>
           )}
         </div>
@@ -923,3 +397,5 @@ export default function UsersPage() {
     </ProtectedRoute>
   )
 }
+
+

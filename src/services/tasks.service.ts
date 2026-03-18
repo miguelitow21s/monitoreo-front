@@ -45,6 +45,14 @@ interface CompleteOperationalTaskPayload {
   evidenceSizeBytes: number
 }
 
+interface UpdateOperationalTaskPayload {
+  taskId: number
+  title?: string
+  description?: string
+  priority?: TaskPriority
+  dueAt?: string | null
+}
+
 interface TaskManageUploadResponse {
   upload?: {
     token?: string
@@ -315,6 +323,59 @@ export async function markTaskInProgress(taskId: number) {
 
   if (error) throw error
   return data as OperationalTask
+}
+
+export async function updateOperationalTaskDetails(payload: UpdateOperationalTaskPayload) {
+  const updates: Record<string, unknown> = {}
+
+  if (typeof payload.title === "string") updates.title = payload.title.trim()
+  if (typeof payload.description === "string") updates.description = payload.description.trim()
+  if (typeof payload.priority === "string") updates.priority = payload.priority
+  if (payload.dueAt !== undefined) updates.due_at = payload.dueAt
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error("No task updates provided.")
+  }
+
+  const { data, error } = await supabase
+    .from("operational_tasks")
+    .update(updates)
+    .eq("id", payload.taskId)
+    .select("*")
+    .single()
+
+  if (error) throw error
+  return data as OperationalTask
+}
+
+async function updateOperationalTaskStatus(taskId: number, status: TaskStatus) {
+  const updates = {
+    status,
+    resolved_at: new Date().toISOString(),
+  }
+
+  const { data, error } = await supabase
+    .from("operational_tasks")
+    .update(updates)
+    .eq("id", taskId)
+    .select("*")
+    .single()
+
+  if (error) throw error
+  return data as OperationalTask
+}
+
+export async function closeOperationalTask(taskId: number) {
+  return updateOperationalTaskStatus(taskId, "completed")
+}
+
+export async function cancelOperationalTask(taskId: number) {
+  return updateOperationalTaskStatus(taskId, "cancelled")
+}
+
+export async function deleteOperationalTask(taskId: number) {
+  const { error } = await supabase.from("operational_tasks").delete().eq("id", taskId)
+  if (error) throw error
 }
 
 export async function completeOperationalTask(payload: CompleteOperationalTaskPayload) {
