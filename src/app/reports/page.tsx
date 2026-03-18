@@ -138,22 +138,6 @@ export default function ReportsPage() {
     return localizedColumnOptions.filter(item => selectedSet.has(item.key))
   }, [localizedColumnOptions, selectedColumns])
 
-  const filteredRows = useMemo(() => {
-    const query = tableFilter.trim().toLowerCase()
-    if (!query) return rows
-
-    return rows.filter(row => {
-      const values = [
-        String(getDisplayValue(row, "shift_id")),
-        String(getDisplayValue(row, "restaurant_id")),
-        String(getDisplayValue(row, "employee_id")),
-        String(getDisplayValue(row, "supervisor_id")),
-        String(getDisplayValue(row, "status")),
-      ]
-      return values.some(value => value.toLowerCase().includes(query))
-    })
-  }, [getDisplayValue, rows, tableFilter])
-
   const loadCatalogs = useCallback(async () => {
     try {
       const [restaurantRows, profileRows] = await Promise.all([
@@ -279,6 +263,22 @@ export default function ReportsPage() {
     },
     [restaurantsById, usersById]
   )
+
+  const filteredRows = useMemo(() => {
+    const query = tableFilter.trim().toLowerCase()
+    if (!query) return rows
+
+    return rows.filter(row => {
+      const values = [
+        String(getDisplayValue(row, "shift_id")),
+        String(getDisplayValue(row, "restaurant_id")),
+        String(getDisplayValue(row, "employee_id")),
+        String(getDisplayValue(row, "supervisor_id")),
+        String(getDisplayValue(row, "status")),
+      ]
+      return values.some(value => value.toLowerCase().includes(query))
+    })
+  }, [getDisplayValue, rows, tableFilter])
 
   const openEvidenceReadonly = useCallback(
     async (path: string | null | undefined) => {
