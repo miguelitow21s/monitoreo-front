@@ -2411,7 +2411,8 @@ function ShiftsPageContent() {
   )
 
   const handleCaptureSupervisionPhoto = useCallback(
-    (blob: Blob) => {
+    (blob: Blob | null) => {
+      if (!blob) return
       if (!supervisionAreaKey) {
         showToast("info", t("Selecciona un area antes de tomar la foto.", "Select an area before taking the photo."))
         return
