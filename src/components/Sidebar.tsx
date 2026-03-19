@@ -129,12 +129,8 @@ export default function Sidebar({
     items.push({ href: "/account/hours", label: t("Mis horas", "My hours"), key: "hours" })
   }
 
-  if (isSupervisora) {
+  if (isSupervisora || isSuperAdmin) {
     items.push({ href: "/shifts", label: t("Turnos", "Shifts"), key: "shifts" })
-  }
-
-  if (isSuperAdmin) {
-    items.push({ href: "/admin", label: t("Admin", "Admin"), key: "admin" })
     items.push({ href: "/restaurants", label: t("Restaurantes", "Restaurants"), key: "restaurants" })
     items.push({ href: "/users", label: t("Usuarios", "Users"), key: "users" })
     items.push({ href: "/reports", label: t("Reportes", "Reports"), key: "reports" })

@@ -4904,7 +4904,6 @@ function ShiftsPageContent() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
-                    <p className="mt-1 text-sm text-blue-100">{t("Supervisión", "Supervision")}</p>
                   </div>
                   {supervisorScreen !== "home" && (
                     <Button
@@ -4937,39 +4936,31 @@ function ShiftsPageContent() {
                         )}
                       </div>
                     )}
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Button variant="secondary" onClick={() => setSupervisorScreen("active")}>
+                    <div className="space-y-2">
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("active")}>
                         {t("Turnos activos", "Active shifts")} ({supervisorRows.length})
                       </Button>
-                      <Button variant="secondary" onClick={() => setSupervisorScreen("tasks")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("tasks")}>
                         {t("Monitoreo de tareas", "Task monitoring")} ({supervisorTasks.length})
                       </Button>
-                      <Button variant="secondary" onClick={() => setSupervisorScreen("alerts")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("alerts")}>
                         {t("Alertas", "Alerts")}
                       </Button>
-                      <Button variant="secondary" onClick={() => setSupervisorScreen("schedule")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("schedule")}>
                         {t("Programar turno", "Schedule shift")}
                       </Button>
-                      <Button variant="secondary" onClick={() => setSupervisorScreen("scheduled")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("scheduled")}>
                         {t("Turnos programados", "Scheduled shifts")} ({supervisionScheduledShifts.length})
                       </Button>
-                      <Button variant="secondary" onClick={() => setSupervisorScreen("staff")}>
-                        {t("Asignacion de personal", "Staff assignment")}
-                      </Button>
-                      {isSupervisora && (
-                        <Button variant="secondary" onClick={() => setSupervisorScreen("presence")}>
-                          {t("Supervision", "Supervision")}
-                        </Button>
-                      )}
                       {isSupervisora && (
                         <>
-                          <Button variant="secondary" onClick={() => router.push("/restaurants")}>
+                          <Button className="w-full justify-between" variant="secondary" onClick={() => router.push("/restaurants")}>
                             {t("Restaurantes", "Restaurants")}
                           </Button>
-                          <Button variant="secondary" onClick={() => router.push("/users")}>
+                          <Button className="w-full justify-between" variant="secondary" onClick={() => router.push("/users")}>
                             {t("Usuarios", "Users")}
                           </Button>
-                          <Button variant="secondary" onClick={() => router.push("/reports")}>
+                          <Button className="w-full justify-between" variant="secondary" onClick={() => router.push("/reports")}>
                             {t("Informes", "Reports")}
                           </Button>
                         </>
@@ -5051,60 +5042,6 @@ function ShiftsPageContent() {
                     </Button>
                   </div>
                 </div>
-              </Card>
-            )}
-
-            {supervisorScreen === "staff" && (
-              <Card title={t("Asignacion de personal", "Staff assignment")}>
-              <div className="grid gap-2 lg:grid-cols-3">
-                <select
-                  value={staffRestaurantId ?? ""}
-                  onChange={event => setStaffRestaurantId(Number(event.target.value) || null)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
-                  {staffRestaurants.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={staffUserId}
-                  onChange={event => setStaffUserId(event.target.value)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">{t("Seleccionar empleado", "Select employee")}</option>
-                  {staffUsers.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.full_name ?? item.email ?? item.id}
-                    </option>
-                  ))}
-                </select>
-                <Button variant="secondary" disabled={assigningStaff} onClick={() => void handleAssignStaff()}>
-                  {assigningStaff ? t("Guardando...", "Saving...") : t("Asignar empleado", "Assign employee")}
-                </Button>
-              </div>
-
-              {staffRestaurantId && (
-                <div className="mt-3 space-y-2">
-                  {staffAssignments.length === 0 ? (
-                    <p className="text-sm text-slate-500">{t("Sin personal asignado para este restaurante.", "No staff assigned for this restaurant.")}</p>
-                  ) : (
-                    staffAssignments.map(item => {
-                      const profile = staffUsers.find(user => user.id === item.user_id)
-                      return (
-                        <div key={`${item.restaurant_id}-${item.user_id}`} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                          <span>{profile?.full_name ?? profile?.email ?? item.user_id}</span>
-                          <Button size="sm" variant="ghost" onClick={() => void handleUnassignStaff(item.user_id)}>
-                            {t("Desasignar", "Unassign")}
-                          </Button>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              )}
               </Card>
             )}
 
