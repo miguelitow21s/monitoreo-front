@@ -153,10 +153,10 @@ Pre-requisitos antes de iniciar turno:
 - Dispositivo confiable (trusted device)
 - OTP validado (x-shift-otp-token)
 
-Regla ventana de inicio:
-- Solo inicia si hay turno programado con:
-  - `scheduled_start <= now + 30 min`
-  - `scheduled_end >= now`
+Regla de inicio:
+- El empleado puede iniciar turno cuando quiera, siempre que exista un turno programado no vencido.
+- Un turno se considera vigente si `now <= scheduled_end`.
+- Si hay varios pendientes, se recomienda enviar `scheduled_shift_id` en `shifts_start`.
 
 Evidencias:
 - Foto **inicio** obligatoria (type: `inicio`)
@@ -277,6 +277,25 @@ Body:
 **Supervisora/Admin**
 - Sí usa `scheduled_shifts_manage` (fuera del scope de este documento).
 
+### 8.5.1 Programacion masiva (supervisora/admin)
+Permite programar varios dias y/o restaurantes para un mismo empleado.
+```
+POST /functions/v1/scheduled_shifts_manage
+Body:
+{
+  "action": "bulk_assign",
+  "entries": [
+    {
+      "employee_id": "<uuid>",
+      "restaurant_id": 5,
+      "scheduled_start": "2026-03-19T14:00:00.000Z",
+      "scheduled_end": "2026-03-19T18:00:00.000Z",
+      "notes": "Opcional"
+    }
+  ]
+}
+```
+
 ### 8.6 Iniciar turno
 **Validaciones UI previas**
 - GPS listo.
@@ -284,7 +303,8 @@ Body:
 - Checklist de salud completo.
 - Al menos 1 foto de ingreso.
 - Cada foto tiene área + subárea seleccionadas.
-- Debe existir turno programado en ventana (30 min antes → fin).
+- Debe existir turno programado no vencido.
+- Si hay varios turnos pendientes, enviar `scheduled_shift_id` para iniciar el correcto.
 
 **Request**
 ```
@@ -296,7 +316,8 @@ Body:
   "lat": 4.7110,
   "lng": -74.0721,
   "fit_for_work": true,
-  "declaration": "Me siento bien"
+  "declaration": "Me siento bien",
+  "scheduled_shift_id": 123 // opcional, recomendado si hay varios
 }
 ```
 
@@ -439,7 +460,8 @@ Para turnos/evidencias además: `x-shift-otp-token`.
 | `/phone_otp_verify` | POST | Base + `x-device-fingerprint` | `{ code, device_fingerprint }` | `{ "code": "123456", "device_fingerprint": "<fingerprint>" }` |
 | `/employee_self_service` | POST | Base | `{ action: "my_dashboard", schedule_limit, pending_tasks_limit }` | `{ "action": "my_dashboard", "schedule_limit": 10, "pending_tasks_limit": 10 }` |
 | `/employee_self_service` | POST | Base | `{ action: "create_observation", shift_id, kind, message }` | `{ "action": "create_observation", "shift_id": 123, "kind": "observation", "message": "..." }` |
-| `/shifts_start` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ restaurant_id, lat, lng, fit_for_work, declaration }` | `{ "restaurant_id": 5, "lat": 4.7110, "lng": -74.0721, "fit_for_work": true, "declaration": "Me siento bien" }` |
+| `/scheduled_shifts_manage` | POST | Base | `{ action: "bulk_assign", entries }` | `{ "action": "bulk_assign", "entries": [ { "employee_id": "<uuid>", "restaurant_id": 5, "scheduled_start": "2026-03-19T14:00:00.000Z", "scheduled_end": "2026-03-19T18:00:00.000Z", "notes": "Opcional" } ] }` |
+| `/shifts_start` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ restaurant_id, lat, lng, fit_for_work, declaration, scheduled_shift_id? }` | `{ "restaurant_id": 5, "lat": 4.7110, "lng": -74.0721, "fit_for_work": true, "declaration": "Me siento bien", "scheduled_shift_id": 123 }` |
 | `/evidence_upload` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ action: "request_upload", shift_id, type }` | `{ "action": "request_upload", "shift_id": 123, "type": "inicio" }` |
 | `/evidence_upload` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ action: "finalize_upload", shift_id, type, path, lat, lng, accuracy, captured_at, meta }` | `{ "action": "finalize_upload", "shift_id": 123, "type": "inicio", "path": "...", "lat": 4.7110, "lng": -74.0721, "accuracy": 8, "captured_at": "2026-03-17T12:00:00.000Z", "meta": { "area_key": "cocina", "area_label": "Cocina", "subarea_key": "campana", "subarea_label": "Campana" } }` |
 | `/shifts_end` | POST | Base + `x-device-fingerprint` + `x-shift-otp-token` | `{ shift_id, lat, lng, fit_for_work, declaration, early_end_reason? }` | `{ "shift_id": 123, "lat": 4.7110, "lng": -74.0721, "fit_for_work": true, "declaration": "Sin incidentes", "early_end_reason": "Terminé tareas" }` |

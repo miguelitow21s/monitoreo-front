@@ -23,6 +23,7 @@ interface StartShiftPayload {
   lng: number
   fitForWork: boolean
   declaration: string | null
+  scheduledShiftId?: number | null
 }
 
 interface EndShiftPayload {
@@ -207,7 +208,7 @@ function normalizeActiveShift(data: unknown): ShiftRecord | null {
 }
 
 export async function startShift(payload: StartShiftPayload) {
-  const { restaurantId, lat, lng, fitForWork, declaration } = payload
+  const { restaurantId, lat, lng, fitForWork, declaration, scheduledShiftId } = payload
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || typeof fitForWork !== "boolean") {
     throw new Error("Incomplete data to start shift.")
   }
@@ -231,6 +232,7 @@ export async function startShift(payload: StartShiftPayload) {
       lng,
       fit_for_work: fitForWork,
       declaration,
+      ...(scheduledShiftId ? { scheduled_shift_id: scheduledShiftId } : {}),
     },
   })
 

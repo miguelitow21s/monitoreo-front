@@ -194,8 +194,6 @@ function isConsentPendingError(error: unknown) {
   return message.includes("consent") || message.includes("legal") || message.includes("data processing")
 }
 
-const SHIFT_START_WINDOW_MINUTES = 30
-
 function findEligibleScheduledShift(scheduledShifts: ScheduledShift[], nowMs = Date.now()) {
   const sorted = [...scheduledShifts].sort(
     (a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
@@ -211,8 +209,7 @@ function findEligibleScheduledShift(scheduledShifts: ScheduledShift[], nowMs = D
       const endMs = new Date(item.scheduled_end).getTime()
       if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return false
 
-      const windowStart = startMs - SHIFT_START_WINDOW_MINUTES * 60 * 1000
-      return nowMs >= windowStart && nowMs <= endMs
+      return nowMs <= endMs
     }) ?? null
   )
 }
@@ -744,9 +741,9 @@ function ShiftsPageContent() {
       const itemStart = new Date(item.scheduled_start).getTime()
       const itemEnd = new Date(item.scheduled_end).getTime()
       if (!Number.isFinite(itemStart) || !Number.isFinite(itemEnd)) continue
-      const inRange = startMs >= itemStart - SHIFT_START_WINDOW_MINUTES * 60 * 1000 && startMs <= itemEnd + 60 * 60 * 1000
+      if (startMs > itemEnd) continue
       const score = Math.abs(startMs - itemStart)
-      if (inRange && (!best || score < best.score)) {
+      if (!best || score < best.score) {
         best = { shift: item, score }
       }
     }
@@ -929,8 +926,8 @@ function ShiftsPageContent() {
     if (!activeShift && !currentScheduledShift) {
       blockers.push(
         t(
-          `No hay turno programado dentro de la ventana permitida (30 min antes del inicio hasta el fin).`,
-          "No scheduled shift is within the allowed window (30 min before start through end time)."
+          "No hay turno programado disponible o el turno ya vencio.",
+          "No scheduled shift is available or the shift already expired."
         )
       )
     }
@@ -1590,8 +1587,8 @@ function ShiftsPageContent() {
       if (!currentRestaurantId) {
         throw new Error(
           t(
-            "No hay turno programado disponible en la ventana de inicio (30 min antes hasta el fin).",
-            "No scheduled shift is available within the start window (30 min before until end)."
+            "No hay turno programado disponible o el turno ya vencio.",
+            "No scheduled shift is available or the shift already expired."
           )
         )
       }
@@ -1605,6 +1602,7 @@ function ShiftsPageContent() {
           lng: coords.lng,
           fitForWork: startFitForWork,
           declaration: startHealthDeclaration.trim() || null,
+          scheduledShiftId: scheduledShift?.id ?? null,
         })
       )
       startedShiftId = shiftId
@@ -4811,263 +4809,276 @@ function ShiftsPageContent() {
             )}
 
             {supervisorScreen === "schedule" && (
-              <Card title={t("Programar turno", "Schedule shift")}>
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm font-semibold text-slate-800">{t("Programacion multiple", "Bulk scheduling")}</p>
-                <p className="text-xs text-slate-500">
-                  {t(
-                    "Define rangos, dias o bloques manuales.",
-                    "Define ranges, weekdays, or manual blocks."
-                  )}
-                </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <select
-                    value={supervisorScheduleEmployeeId}
-                    onChange={event => setSupervisorScheduleEmployeeId(event.target.value)}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">{t("Seleccionar empleado", "Select employee")}</option>
-                    {supervisorScheduleEligibleUsers.map(item => (
-                      <option key={item.id} value={item.id}>
-                        {item.full_name ?? item.email ?? item.id}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={supervisorScheduleRestaurantId ?? ""}
-                    onChange={event => setSupervisorScheduleRestaurantId(Number(event.target.value) || null)}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
-                    {staffRestaurants.map(item => (
-                      <option key={item.id} value={item.id}>
-                        {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                  <p>
-                    <span className="font-semibold">{t("Empleado seleccionado", "Selected employee")}:</span> {selectedSupervisorScheduleEmployeeLabel}
+              <Card title={t("Programar turnos", "Schedule shifts")}>
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600">
+                    {t(
+                      "Paso rapido: 1) Elige empleado y restaurante. 2) Define fechas y horas. 3) Genera bloques y guarda.",
+                      "Quick steps: 1) Choose employee and restaurant. 2) Set dates and times. 3) Generate blocks and save."
+                    )}
                   </p>
-                  <p className="mt-1">
-                    <span className="font-semibold">{t("Restaurante seleccionado", "Selected restaurant")}:</span> {selectedSupervisorScheduleRestaurantLabel}
-                  </p>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("day")}>
-                    {t("1 dia (hoy)", "1 day (today)")}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("week")}>
-                    {t("1 semana", "1 week")}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("month")}>
-                    {t("1 mes", "1 month")}
-                  </Button>
-                </div>
 
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <input
-                    type="date"
-                    value={supervisorBulkRangeStart}
-                    onChange={event => setSupervisorBulkRangeStart(event.target.value)}
-                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  />
-                  <input
-                    type="date"
-                    value={supervisorBulkRangeEnd}
-                    onChange={event => setSupervisorBulkRangeEnd(event.target.value)}
-                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  />
-                  <input
-                    type="time"
-                    value={supervisorBulkStartTime}
-                    onChange={event => setSupervisorBulkStartTime(event.target.value)}
-                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  />
-                  <input
-                    type="time"
-                    value={supervisorBulkEndTime}
-                    onChange={event => setSupervisorBulkEndTime(event.target.value)}
-                    className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {weekdayOptions.map(day => {
-                    const active = supervisorBulkWeekdays.includes(day.value)
-                    return (
-                      <Button
-                        key={day.value}
-                        size="sm"
-                        variant={active ? "secondary" : "ghost"}
-                        onClick={() => handleToggleSupervisorBulkWeekday(day.value)}
-                      >
-                        {day.label}
-                      </Button>
-                    )
-                  })}
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" onClick={handleGenerateSupervisorScheduleBlocks}>
-                    {t("Generar por rango", "Generate by range")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setSupervisorScheduleBlocks(prev => [
-                        ...prev,
-                        { id: Date.now() + Math.floor(Math.random() * 1000), start: "", end: "" },
-                      ])
-                    }
-                  >
-                    {t("Agregar bloque manual", "Add manual block")}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={handleClearSupervisorScheduleBlocks}>
-                    {t("Limpiar bloques", "Clear blocks")}
-                  </Button>
-                </div>
-
-                <div className="mt-3 space-y-2">
-                  {supervisorScheduleBlocks.length === 0 ? (
-                    <p className="text-xs text-slate-500">{t("No hay bloques agregados.", "No blocks added.")}</p>
-                  ) : (
-                    supervisorScheduleBlocks.map(block => (
-                      <div key={block.id} className="grid gap-2 sm:grid-cols-3">
-                        <input
-                          type="datetime-local"
-                          value={block.start}
-                          onChange={event =>
-                            setSupervisorScheduleBlocks(prev =>
-                              prev.map(item => (item.id === block.id ? { ...item, start: event.target.value } : item))
-                            )
-                          }
-                          className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                        />
-                        <input
-                          type="datetime-local"
-                          value={block.end}
-                          onChange={event =>
-                            setSupervisorScheduleBlocks(prev =>
-                              prev.map(item => (item.id === block.id ? { ...item, end: event.target.value } : item))
-                            )
-                          }
-                          className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                        />
-                        <Button size="sm" variant="ghost" onClick={() => handleRemoveSupervisorScheduleBlock(block.id)}>
-                          {t("Quitar", "Remove")}
-                        </Button>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      1 · {t("Empleado y restaurante", "Employee & restaurant")}
+                    </p>
+                    <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {t("Empleado", "Employee")}
+                        </p>
+                        <select
+                          value={supervisorScheduleEmployeeId}
+                          onChange={event => setSupervisorScheduleEmployeeId(event.target.value)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          <option value="">{t("Seleccionar empleado", "Select employee")}</option>
+                          {supervisorScheduleEligibleUsers.map(item => (
+                            <option key={item.id} value={item.id}>
+                              {item.full_name ?? item.email ?? item.id}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    ))
-                  )}
-                </div>
-
-                <textarea
-                  rows={2}
-                  value={supervisorScheduleNotes}
-                  onChange={event => setSupervisorScheduleNotes(event.target.value)}
-                  className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  placeholder={t("Notas para el turno (opcional)", "Shift notes (optional)")}
-                />
-
-                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">
-                        {t("Tareas opcionales al programar", "Optional tasks while scheduling")}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {t(
-                          "Puedes agregar cero, una o varias tareas. Se intentan crear automaticamente si ya existe turno activo.",
-                          "You can add zero, one, or many tasks. They are auto-created only when an active shift already exists."
-                        )}
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {t("Restaurante", "Restaurant")}
+                        </p>
+                        <select
+                          value={supervisorScheduleRestaurantId ?? ""}
+                          onChange={event => setSupervisorScheduleRestaurantId(Number(event.target.value) || null)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
+                          {staffRestaurants.map(item => (
+                            <option key={item.id} value={item.id}>
+                              {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <Button size="sm" variant="ghost" onClick={handleAddSupervisorScheduleTaskDraft}>
-                      {t("Agregar tarea opcional", "Add optional task")}
-                    </Button>
+                    <p className="mt-2 text-xs text-slate-600">
+                      {t("Seleccionado", "Selected")}: {selectedSupervisorScheduleEmployeeLabel} ·{" "}
+                      {selectedSupervisorScheduleRestaurantLabel}
+                    </p>
                   </div>
 
-                  {supervisorScheduleTaskDrafts.length === 0 ? (
-                    <p className="mt-2 text-xs text-slate-500">
-                      {t("Sin tareas opcionales.", "No optional tasks.")}
-                    </p>
-                  ) : (
-                    <div className="mt-3 space-y-3">
-                      {supervisorScheduleTaskDrafts.map(draft => (
-                        <div key={draft.id} className="space-y-2 rounded-lg border border-slate-200 p-2">
-                          <input
-                            value={draft.title}
-                            onChange={event =>
-                              handleUpdateSupervisorScheduleTaskDraft(draft.id, { title: event.target.value })
-                            }
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            placeholder={t("Titulo de tarea (opcional)", "Task title (optional)")}
-                          />
-                          <textarea
-                            rows={2}
-                            value={draft.description}
-                            onChange={event =>
-                              handleUpdateSupervisorScheduleTaskDraft(draft.id, { description: event.target.value })
-                            }
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            placeholder={t("Descripcion (opcional)", "Description (optional)")}
-                          />
-                          <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">2 · {t("Fechas y horas", "Dates & times")}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("day")}>
+                        {t("Hoy", "Today")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("week")}>
+                        {t("Semana", "Week")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("month")}>
+                        {t("Mes", "Month")}
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <input
+                        type="date"
+                        value={supervisorBulkRangeStart}
+                        onChange={event => setSupervisorBulkRangeStart(event.target.value)}
+                        className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                      />
+                      <input
+                        type="date"
+                        value={supervisorBulkRangeEnd}
+                        onChange={event => setSupervisorBulkRangeEnd(event.target.value)}
+                        className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                      />
+                      <input
+                        type="time"
+                        value={supervisorBulkStartTime}
+                        onChange={event => setSupervisorBulkStartTime(event.target.value)}
+                        className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                      />
+                      <input
+                        type="time"
+                        value={supervisorBulkEndTime}
+                        onChange={event => setSupervisorBulkEndTime(event.target.value)}
+                        className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                      />
+                    </div>
+
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {t("Dias de la semana", "Weekdays")}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {weekdayOptions.map(day => {
+                          const active = supervisorBulkWeekdays.includes(day.value)
+                          return (
+                            <Button
+                              key={day.value}
+                              size="sm"
+                              variant={active ? "secondary" : "ghost"}
+                              onClick={() => handleToggleSupervisorBulkWeekday(day.value)}
+                            >
+                              {day.label}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">3 · {t("Bloques", "Blocks")}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" onClick={handleGenerateSupervisorScheduleBlocks}>
+                        {t("Generar bloques", "Generate blocks")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setSupervisorScheduleBlocks(prev => [
+                            ...prev,
+                            { id: Date.now() + Math.floor(Math.random() * 1000), start: "", end: "" },
+                          ])
+                        }
+                      >
+                        {t("Agregar bloque manual", "Add manual block")}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={handleClearSupervisorScheduleBlocks}>
+                        {t("Limpiar", "Clear")}
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {supervisorScheduleBlocks.length === 0 ? (
+                        <p className="text-xs text-slate-500">{t("No hay bloques agregados.", "No blocks added.")}</p>
+                      ) : (
+                        supervisorScheduleBlocks.map(block => (
+                          <div key={block.id} className="grid gap-2 sm:grid-cols-3">
                             <input
                               type="datetime-local"
-                              value={draft.dueAt}
+                              value={block.start}
                               onChange={event =>
-                                handleUpdateSupervisorScheduleTaskDraft(draft.id, { dueAt: event.target.value })
+                                setSupervisorScheduleBlocks(prev =>
+                                  prev.map(item => (item.id === block.id ? { ...item, start: event.target.value } : item))
+                                )
                               }
-                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              className="rounded-md border border-slate-300 px-2 py-2 text-sm"
                             />
-                            <select
-                              value={draft.priority}
+                            <input
+                              type="datetime-local"
+                              value={block.end}
                               onChange={event =>
-                                handleUpdateSupervisorScheduleTaskDraft(draft.id, {
-                                  priority: event.target.value as TaskPriority,
-                                })
+                                setSupervisorScheduleBlocks(prev =>
+                                  prev.map(item => (item.id === block.id ? { ...item, end: event.target.value } : item))
+                                )
                               }
-                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                            >
-                              <option value="low">{t("Baja", "Low")}</option>
-                              <option value="normal">{t("Normal", "Normal")}</option>
-                              <option value="high">{t("Alta", "High")}</option>
-                              <option value="critical">{t("Critica", "Critical")}</option>
-                            </select>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleRemoveSupervisorScheduleTaskDraft(draft.id)}
-                            >
-                              {t("Quitar tarea", "Remove task")}
+                              className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                            />
+                            <Button size="sm" variant="ghost" onClick={() => handleRemoveSupervisorScheduleBlock(block.id)}>
+                              {t("Quitar", "Remove")}
                             </Button>
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
-                  )}
-                </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-slate-500">
-                    {t("Bloques listos", "Ready blocks")}: {supervisorScheduleBlocks.length}
-                  </span>
-                  <Button size="sm" onClick={() => void handleScheduleSupervisorShiftBulk()} disabled={supervisorBulkScheduling}>
-                    {supervisorBulkScheduling
-                      ? supervisorScheduleBlocks.length === 1
-                        ? t("Guardando turno...", "Saving shift...")
-                        : t("Guardando turnos...", "Saving shifts...")
-                      : supervisorScheduleBlocks.length === 1
-                        ? t("Programar turno", "Schedule shift")
-                        : t("Programar turnos", "Schedule shifts")}
-                  </Button>
+                    <textarea
+                      rows={2}
+                      value={supervisorScheduleNotes}
+                      onChange={event => setSupervisorScheduleNotes(event.target.value)}
+                      className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      placeholder={t("Notas del turno (opcional)", "Shift notes (optional)")}
+                    />
+                  </div>
+
+                  <details className="rounded-xl border border-slate-200 bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+                      {t("Tareas opcionales", "Optional tasks")}
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <Button size="sm" variant="ghost" onClick={handleAddSupervisorScheduleTaskDraft}>
+                        {t("Agregar tarea", "Add task")}
+                      </Button>
+
+                      {supervisorScheduleTaskDrafts.length === 0 ? (
+                        <p className="text-xs text-slate-500">{t("Sin tareas opcionales.", "No optional tasks.")}</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {supervisorScheduleTaskDrafts.map(draft => (
+                            <div key={draft.id} className="space-y-2 rounded-lg border border-slate-200 p-2">
+                              <input
+                                value={draft.title}
+                                onChange={event =>
+                                  handleUpdateSupervisorScheduleTaskDraft(draft.id, { title: event.target.value })
+                                }
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                placeholder={t("Titulo de tarea (opcional)", "Task title (optional)")}
+                              />
+                              <textarea
+                                rows={2}
+                                value={draft.description}
+                                onChange={event =>
+                                  handleUpdateSupervisorScheduleTaskDraft(draft.id, { description: event.target.value })
+                                }
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                placeholder={t("Descripcion (opcional)", "Description (optional)")}
+                              />
+                              <div className="grid gap-2 sm:grid-cols-3">
+                                <input
+                                  type="datetime-local"
+                                  value={draft.dueAt}
+                                  onChange={event =>
+                                    handleUpdateSupervisorScheduleTaskDraft(draft.id, { dueAt: event.target.value })
+                                  }
+                                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                />
+                                <select
+                                  value={draft.priority}
+                                  onChange={event =>
+                                    handleUpdateSupervisorScheduleTaskDraft(draft.id, {
+                                      priority: event.target.value as TaskPriority,
+                                    })
+                                  }
+                                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                >
+                                  <option value="low">{t("Baja", "Low")}</option>
+                                  <option value="normal">{t("Normal", "Normal")}</option>
+                                  <option value="high">{t("Alta", "High")}</option>
+                                  <option value="critical">{t("Critica", "Critical")}</option>
+                                </select>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRemoveSupervisorScheduleTaskDraft(draft.id)}
+                                >
+                                  {t("Quitar tarea", "Remove task")}
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-slate-500">
+                      {t("Bloques listos", "Ready blocks")}: {supervisorScheduleBlocks.length}
+                    </span>
+                    <Button size="sm" onClick={() => void handleScheduleSupervisorShiftBulk()} disabled={supervisorBulkScheduling}>
+                      {supervisorBulkScheduling
+                        ? supervisorScheduleBlocks.length === 1
+                          ? t("Guardando turno...", "Saving shift...")
+                          : t("Guardando turnos...", "Saving shifts...")
+                        : supervisorScheduleBlocks.length === 1
+                          ? t("Programar turno", "Schedule shift")
+                          : t("Programar turnos", "Schedule shifts")}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
             )}
 
             {supervisorScreen === "presence" && isSupervisora && (
