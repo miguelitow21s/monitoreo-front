@@ -156,7 +156,7 @@ export default function ReportsPage() {
     }
   }, [isSuperAdmin, isSupervisora])
 
-  const loadReport = useCallback(async (overrides: Partial<{ status: string }> = {}) => {
+  const loadReport = useCallback(async () => {
     if (isSupervisora && !restaurantId) {
       setRows([])
       setLoading(false)
@@ -171,7 +171,7 @@ export default function ReportsPage() {
         restaurantId: restaurantId || undefined,
         employeeId: employeeId || undefined,
         supervisorId: supervisorId || undefined,
-        status: (overrides.status ?? status) || undefined,
+        status: status || undefined,
         limit: reportLimit,
       })
       setRows(reportRows)
@@ -222,12 +222,6 @@ export default function ReportsPage() {
     () => rows.reduce((accumulator, item) => accumulator + (item.incidents_count ?? 0), 0),
     [rows]
   )
-  const completedRowsSorted = useMemo(() => {
-    return [...rows]
-      .filter(item => item.end_time)
-      .sort((a, b) => new Date(b.end_time as string).getTime() - new Date(a.end_time as string).getTime())
-  }, [rows])
-  const recentCompletedRows = useMemo(() => completedRowsSorted.slice(0, 6), [completedRowsSorted])
 
   const formatDateParts = useCallback(
     (value: string | null) => {
@@ -683,73 +677,6 @@ export default function ReportsPage() {
               />
             ) : (
               <div className="space-y-3">
-                {recentCompletedRows.length > 0 && (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">
-                          {t("Turnos finalizados recientes", "Recent completed shifts")}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {t("Resumen rapido de lo ya realizado.", "Quick summary of finished work.")}
-                        </p>
-                      </div>
-                      <Button size="sm" variant="ghost" onClick={() => { setStatus("completed"); void loadReport({ status: "completed" }) }}>
-                        {t("Ver solo finalizados", "View completed only")}
-                      </Button>
-                    </div>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                      {recentCompletedRows.map(item => {
-                        const employee = getEmployeeDisplay(item)
-                        const restaurant = getRestaurantDisplay(item)
-                        const startParts = formatDateParts(item.start_time)
-                        const endParts = formatDateParts(item.end_time)
-                        const statusBadge = getStatusBadge(item.status ?? "completed")
-                        return (
-                          <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-800">{employee.title}</p>
-                                <p className="text-xs text-slate-500">{restaurant.title}</p>
-                              </div>
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${statusBadge.className}`}>
-                                {statusBadge.label}
-                              </span>
-                            </div>
-                            <div className="mt-2 text-xs text-slate-600">
-                              {t("Inicio", "Start")}: {startParts.date} {startParts.time} · {t("Fin", "End")}: {endParts.date}{" "}
-                              {endParts.time}
-                            </div>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant={item.start_evidence_path ? "secondary" : "ghost"}
-                                disabled={!item.start_evidence_path}
-                                onClick={() => void openEvidenceReadonly(item.start_evidence_path)}
-                              >
-                                {t("Foto inicio", "Start photo")}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={item.end_evidence_path ? "secondary" : "ghost"}
-                                disabled={!item.end_evidence_path}
-                                onClick={() => void openEvidenceReadonly(item.end_evidence_path)}
-                              >
-                                {t("Foto fin", "End photo")}
-                              </Button>
-                              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                                {t("Novedades", "Incidents")}: {item.incidents_count ?? 0}
-                              </span>
-                              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                                {t("Duracion", "Duration")}: {getDisplayValue(item, "duration")}
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
                 <div className="hidden md:flex md:items-center md:justify-between md:rounded-lg md:border md:border-slate-200 md:bg-slate-50 md:px-3 md:py-2">
                   <p className="text-xs text-slate-600">
                     {t("Mostrando", "Showing")} {filteredRows.length} {t("de", "of")} {rows.length} {t("filas", "rows")}

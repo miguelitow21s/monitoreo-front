@@ -23,8 +23,7 @@ Usuario ingresa:
 Notas de contraseña:
 - Se elimina el registro de usuarios desde el login (usuarios los crea admin).
 - El login sigue siendo **email/usuario + contraseña**.
-- Se evalúa **PIN numérico (6 dígitos)** para abrir teclado numérico en móvil.
-  - Si backend quiere PIN, deben definir política y validación.
+- La contraseña es **PIN numérico (6 dígitos)** para abrir teclado numérico en móvil.
 
 ### Pantalla 2: Hub (Inicio o Perfil)
 Usuario ve:
@@ -182,11 +181,8 @@ Resumen:
 - Login: **email/usuario + contraseña**
 - **Registro eliminado** desde login (admin crea usuarios)
 - Reset de contraseña se mantiene con flujo de Supabase
-- Posible **PIN de 6 dígitos** (pendiente decisión backend)
-
-Si backend define PIN:
-- Acordar validación y longitud
-- Definir endpoint/estrategia (ej: mismo password, o pin separado)
+- Contraseña es **PIN de 6 dígitos** (solo numérico).
+- La UI fuerza teclado numérico y limita a 6 caracteres.
 
 ---
 

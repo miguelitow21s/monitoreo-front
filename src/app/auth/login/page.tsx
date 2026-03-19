@@ -256,7 +256,7 @@ export default function LoginPage() {
 
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {t("Contraseña", "Password")}
+              {t("PIN (6 digitos)", "PIN (6 digits)")}
             </span>
           </div>
 
@@ -266,10 +266,13 @@ export default function LoginPage() {
               type={showPassword ? "text" : "password"}
               required
               autoComplete="current-password"
-              placeholder={t("Contraseña", "Password")}
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]*"
+              placeholder={t("PIN de 6 digitos", "6-digit PIN")}
               value={password}
               onChange={e => {
-                setPassword(e.target.value)
+                setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))
                 if (error) setError(null)
               }}
               className="w-full bg-transparent text-base text-slate-800 outline-none"
@@ -277,8 +280,8 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPassword(prev => !prev)}
-              aria-label={showPassword ? t("Ocultar contraseña", "Hide password") : t("Mostrar contraseña", "Show password")}
-              title={showPassword ? t("Ocultar contraseña", "Hide password") : t("Mostrar contraseña", "Show password")}
+              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
+              title={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
               className="absolute right-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
             >
               {showPassword ? (
