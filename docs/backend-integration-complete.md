@@ -12,6 +12,7 @@ Este documento consolida **todos los contratos, headers, métodos y flujos** que
 - **Todas las Edge Functions** usan `POST` (excepto `GET /health_ping`).
 - **Idempotencia**: cada request a Edge Functions lleva `Idempotency-Key` único.
 - **OTP**: obligatorio para operaciones sensibles (turnos, evidencias, aprobaciones, incidentes).
+- **Envelope estándar**: todas las Edge Functions responden con `{ success, data, error, request_id }`.
 
 ---
 
@@ -51,13 +52,19 @@ Body:
 Respuesta esperada (OTP visible):
 ```
 {
-  "otp_id": 55,
-  "masked_phone": "+57***169",
-  "expires_at": "2026-03-13T07:54:43.755Z",
-  "delivery_status": "screen",
-  "debug_code": "123456"
+  "success": true,
+  "data": {
+    "otp_id": 55,
+    "masked_phone": "OTP en pantalla",
+    "expires_at": "2026-03-13T07:54:43.755Z",
+    "delivery_status": "screen",
+    "debug_code": "123456"
+  },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
+Nota: `masked_phone` puede venir como `"OTP en pantalla"`.
 
 ### 3.2 Verificar OTP
 ```
@@ -80,6 +87,19 @@ Frontend guarda `verification_token` en `sessionStorage` (`app_shift_otp_token`)
 POST /functions/v1/trusted_device_validate
 Body: { "device_fingerprint": "<fingerprint>" }
 ```
+Respuesta esperada:
+```
+{
+  "success": true,
+  "data": {
+    "trusted": true,
+    "registration_required": false,
+    "device_id": "dev_123"
+  },
+  "error": null,
+  "request_id": "req_abc123"
+}
+```
 
 ### 4.2 Registrar dispositivo (si aplica)
 ```
@@ -89,6 +109,15 @@ Body:
   "device_fingerprint": "<fingerprint>",
   "device_name": "Web on <platform>",
   "platform": "web"
+}
+```
+Respuesta esperada:
+```
+{
+  "success": true,
+  "data": { "device_id": "dev_123" },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
@@ -132,6 +161,18 @@ Body:
   "scheduled_shift_id": 123 // opcional si hay varios turnos
 }
 ```
+Respuesta esperada:
+```
+{
+  "success": true,
+  "data": {
+    "shift_id": 123,
+    "pending_tasks_count": 2
+  },
+  "error": null,
+  "request_id": "req_abc123"
+}
+```
 Notas:
 - **Ya no existe ventana de 30 min**. Puede iniciar cualquier turno programado **no vencido**.
 - Si hay varios turnos pendientes, enviar `scheduled_shift_id`.
@@ -143,7 +184,23 @@ POST /functions/v1/evidence_upload
 Headers: (base) + x-device-fingerprint + x-shift-otp-token
 Body: { "action": "request_upload", "shift_id": 123, "type": "inicio" }
 ```
-**Upload binario**: `PUT` a `signedUrl`.
+**Respuesta request_upload**:
+```
+{
+  "success": true,
+  "data": {
+    "upload": {
+      "path": "users/<employee_id>/shift-photos/...",
+      "signedUrl": "https://...signed...",
+      "method": "PUT",
+      "headers": { "Content-Type": "image/jpeg" }
+    }
+  },
+  "error": null,
+  "request_id": "req_abc123"
+}
+```
+**Upload binario**: `PUT` a `data.upload.signedUrl`.
 
 **Finalize** (por cada foto):
 ```
@@ -166,6 +223,20 @@ Body:
     "subarea_label": "Campana",
     "area_detail": "opcional si area = otro"
   }
+}
+```
+**Respuesta finalize_upload**:
+```
+{
+  "success": true,
+  "data": {
+    "evidence_id": 888,
+    "path": "users/<employee_id>/shift-photos/...",
+    "type": "inicio",
+    "meta": { "area_key": "cocina", "subarea_key": "campana" }
+  },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 **Soporta múltiples fotos por fase** (inicio y fin). Se repite request_upload + finalize por cada una.
@@ -192,6 +263,15 @@ Body:
   "fit_for_work": true,
   "declaration": "Sin incidentes",
   "early_end_reason": "Terminé tareas" // si aplica
+}
+```
+Respuesta esperada:
+```
+{
+  "success": true,
+  "data": {},
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
@@ -223,12 +303,22 @@ Requiere OTP + dispositivo confiable.
 POST /functions/v1/operational_tasks_manage
 Body: { "action": "list_my_open", "limit": 30 }
 ```
+Respuesta esperada:
+```
+{
+  "success": true,
+  "data": { "items": [ { "id": 77, "title": "...", "shift_id": 123 } ] },
+  "error": null,
+  "request_id": "req_abc123"
+}
+```
 
 ### 9.2 Evidencia por imagen
 ```
 POST /functions/v1/operational_tasks_manage
 Body: { "action": "request_evidence_upload", "task_id": 77, "mime_type": "image/jpeg" }
 ```
+Respuesta: `data.upload` con `signedUrl` y `path`.
 Subir binario → luego:
 ```
 POST /functions/v1/operational_tasks_manage
@@ -240,6 +330,7 @@ Body: { "action": "complete", "task_id": 77, "evidence_path": "<path>" }
 POST /functions/v1/operational_tasks_manage
 Body: { "action": "request_manifest_upload", "task_id": 77 }
 ```
+Respuesta: `data.upload` con `signedUrl` y `path`.
 Subir manifest JSON → luego:
 ```
 POST /functions/v1/operational_tasks_manage
@@ -323,6 +414,15 @@ Body:
   ]
 }
 ```
+Respuesta esperada:
+```
+{
+  "success": true,
+  "data": { "created_ids": [123, 124], "errors": [] },
+  "error": null,
+  "request_id": "req_abc123"
+}
+```
 
 ---
 
@@ -393,59 +493,91 @@ GET /functions/v1/health_ping
 ---
 
 ## 16) Respuestas esperadas (éxito) y formato de error
-**Formato de error estándar (referencia)**
+**Envelope estándar (todas las Edge Functions)**
 ```
 {
-  "error": "Human readable message",
-  "code": "SOME_ERROR_CODE",
+  "success": true|false,
+  "data": { ... } | null,
+  "error": { "message": "...", "code": "..." } | null,
   "request_id": "req_abc123"
 }
 ```
 Notas:
 - `request_id` se debe retornar cuando esté disponible para soporte.
 
+**Formato de error estándar (referencia)**
+```
+{
+  "success": false,
+  "data": null,
+  "error": { "message": "Human readable message", "code": "SOME_ERROR_CODE" },
+  "request_id": "req_abc123"
+}
+```
+
 ### 16.1 OTP
 **phone_otp_send (éxito)**
 ```
 {
-  "otp_id": 55,
-  "masked_phone": "+57***169",
-  "expires_at": "2026-03-13T07:54:43.755Z",
-  "delivery_status": "screen",
-  "debug_code": "123456"
+  "success": true,
+  "data": {
+    "otp_id": 55,
+    "masked_phone": "OTP en pantalla",
+    "expires_at": "2026-03-13T07:54:43.755Z",
+    "delivery_status": "screen",
+    "debug_code": "123456"
+  },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
 **phone_otp_verify (éxito)**
 ```
 {
-  "verification_token": "shift_otp_token_xyz",
-  "expires_at": "2026-03-13T08:04:43.755Z"
+  "success": true,
+  "data": {
+    "verification_token": "shift_otp_token_xyz",
+    "expires_at": "2026-03-13T08:04:43.755Z"
+  },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
 ### 16.2 Dispositivo confiable
 **trusted_device_validate (éxito)**
 ```
-{ "status": "trusted" }
-```
-o bien:
-```
-{ "status": "required", "reason": "device_not_registered" }
+{
+  "success": true,
+  "data": { "trusted": true, "registration_required": false, "device_id": "dev_123" },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 
 **trusted_device_register (éxito)**
 ```
-{ "status": "registered" }
+{
+  "success": true,
+  "data": { "device_id": "dev_123" },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 
 ### 16.3 Dashboard empleado
 ```
 {
-  "scheduled_shifts": [ { "id": 123, "restaurant_id": 5, "scheduled_start": "...", "scheduled_end": "..." } ],
-  "active_shift": null,
-  "pending_tasks_preview": [ { "id": 77, "title": "..." } ],
-  "history_preview": [ { "id": 999, "status": "ended" } ]
+  "success": true,
+  "data": {
+    "scheduled_shifts": [ { "id": 123, "restaurant_id": 5, "scheduled_start": "...", "scheduled_end": "..." } ],
+    "active_shift": null,
+    "pending_tasks_preview": [ { "id": 77, "title": "..." } ],
+    "history_preview": [ { "id": 999, "status": "ended" } ]
+  },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
@@ -453,19 +585,20 @@ o bien:
 **shifts_start (éxito)**
 ```
 {
-  "shift_id": 123,
-  "started_at": "2026-03-19T14:00:00.000Z",
-  "restaurant_id": 5,
-  "scheduled_shift_id": 456
+  "success": true,
+  "data": { "shift_id": 123, "pending_tasks_count": 2 },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
 **shifts_end (éxito)**
 ```
 {
-  "shift_id": 123,
-  "ended_at": "2026-03-19T18:00:00.000Z",
-  "status": "ended"
+  "success": true,
+  "data": {},
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
@@ -473,58 +606,110 @@ o bien:
 **evidence_upload request_upload (éxito)**
 ```
 {
-  "path": "users/<employee_id>/shift-photos/...",
-  "signedUrl": "https://...signed...",
-  "method": "PUT",
-  "headers": { "Content-Type": "image/jpeg" }
+  "success": true,
+  "data": {
+    "upload": {
+      "path": "users/<employee_id>/shift-photos/...",
+      "signedUrl": "https://...signed...",
+      "method": "PUT",
+      "headers": { "Content-Type": "image/jpeg" }
+    }
+  },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
 **evidence_upload finalize_upload (éxito)**
 ```
 {
-  "evidence_id": 888,
-  "path": "users/<employee_id>/shift-photos/...",
-  "type": "inicio",
-  "meta": { "area_key": "cocina", "subarea_key": "campana" }
+  "success": true,
+  "data": {
+    "evidence_id": 888,
+    "path": "users/<employee_id>/shift-photos/...",
+    "type": "inicio",
+    "meta": { "area_key": "cocina", "subarea_key": "campana" }
+  },
+  "error": null,
+  "request_id": "req_abc123"
 }
 ```
 
 ### 16.6 Tareas operativas
 **list_my_open (éxito)**
 ```
-{ "tasks": [ { "id": 77, "title": "...", "shift_id": 123 } ] }
+{
+  "success": true,
+  "data": { "items": [ { "id": 77, "title": "...", "shift_id": 123 } ] },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 **request_evidence_upload / request_manifest_upload (éxito)**
 ```
-{ "path": "...", "signedUrl": "https://...signed...", "method": "PUT" }
+{
+  "success": true,
+  "data": { "upload": { "path": "...", "signedUrl": "https://...signed...", "method": "PUT" } },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 **complete (éxito)**
 ```
-{ "status": "completed", "task_id": 77 }
+{
+  "success": true,
+  "data": { "status": "completed", "task_id": 77 },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 
 ### 16.7 Turnos programados
 **assign / reschedule / cancel (éxito)**
 ```
-{ "status": "ok", "scheduled_shift_id": 123 }
+{
+  "success": true,
+  "data": { "status": "ok", "scheduled_shift_id": 123 },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 **bulk_assign (éxito)**
 ```
-{ "created": [123, 124], "errors": [] }
+{
+  "success": true,
+  "data": { "created_ids": [123, 124], "errors": [] },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 
 ### 16.8 Aprobaciones e incidentes
 **shifts_approve / shifts_reject (éxito)**
 ```
-{ "status": "approved", "shift_id": 123 }
+{
+  "success": true,
+  "data": { "status": "approved", "shift_id": 123 },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 ```
-{ "status": "rejected", "shift_id": 123 }
+{
+  "success": true,
+  "data": { "status": "rejected", "shift_id": 123 },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 **incidents_create (éxito)**
 ```
-{ "incident_id": 900, "created_at": "2026-03-19T17:00:00.000Z" }
+{
+  "success": true,
+  "data": { "incident_id": 900, "created_at": "2026-03-19T17:00:00.000Z" },
+  "error": null,
+  "request_id": "req_abc123"
+}
 ```
 
 ---

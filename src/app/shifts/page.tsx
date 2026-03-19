@@ -5078,89 +5078,101 @@ function ShiftsPageContent() {
             {supervisorScreen === "schedule" && (
               <Card title={t("Programar turnos", "Schedule shifts")}>
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      1 · {t("Empleado y restaurante", "Employee & restaurant")}
-                    </p>
-                    <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {t("Empleado", "Employee")}
+                  <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">
+                          {t("Empleado y restaurante", "Employee & restaurant")}
                         </p>
-                        <select
-                          value={supervisorScheduleEmployeeId}
-                          onChange={event => setSupervisorScheduleEmployeeId(event.target.value)}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                        >
-                          <option value="">{t("Seleccionar empleado", "Select employee")}</option>
-                          {supervisorScheduleEligibleUsers.map(item => (
-                            <option key={item.id} value={item.id}>
-                              {item.full_name ?? item.email ?? item.id}
-                            </option>
-                          ))}
-                        </select>
+                        <p className="text-xs text-slate-500">
+                          {t("Selecciona a quien asignaras el turno.", "Choose who will receive the shift.")}
+                        </p>
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {t("Restaurante", "Restaurant")}
-                        </p>
-                        <select
-                          value={supervisorScheduleRestaurantId ?? ""}
-                          onChange={event => setSupervisorScheduleRestaurantId(Number(event.target.value) || null)}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                        >
-                          <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
-                          {staffRestaurants.map(item => (
-                            <option key={item.id} value={item.id}>
-                              {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {t("Empleado", "Employee")}
+                          </p>
+                          <select
+                            value={supervisorScheduleEmployeeId}
+                            onChange={event => setSupervisorScheduleEmployeeId(event.target.value)}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            <option value="">{t("Seleccionar empleado", "Select employee")}</option>
+                            {supervisorScheduleEligibleUsers.map(item => (
+                              <option key={item.id} value={item.id}>
+                                {item.full_name ?? item.email ?? item.id}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {t("Restaurante", "Restaurant")}
+                          </p>
+                          <select
+                            value={supervisorScheduleRestaurantId ?? ""}
+                            onChange={event => setSupervisorScheduleRestaurantId(Number(event.target.value) || null)}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
+                            {staffRestaurants.map(item => (
+                              <option key={item.id} value={item.id}>
+                                {formatRestaurantLabel(knownRestaurantsById.get(item.id)) || item.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-700">{t("Seleccionado", "Selected")}:</span>{" "}
+                        {selectedSupervisorScheduleEmployeeLabel} · {selectedSupervisorScheduleRestaurantLabel}
                       </div>
                     </div>
-                    <p className="mt-2 text-xs text-slate-600">
-                      {t("Seleccionado", "Selected")}: {selectedSupervisorScheduleEmployeeLabel} ·{" "}
-                      {selectedSupervisorScheduleRestaurantLabel}
-                    </p>
+
+                    <details className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+                        {t("Importar Excel/CSV", "Import Excel/CSV")}
+                      </summary>
+                      <div className="mt-3 space-y-2">
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls,.csv"
+                          onChange={event => {
+                            void handleImportSupervisorScheduleFile(event.target.files?.[0] ?? null)
+                            event.currentTarget.value = ""
+                          }}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        />
+                        <p className="text-xs text-slate-500">
+                          {t(
+                            "Columnas esperadas: start/end o scheduled_start/scheduled_end. Aplica al empleado/restaurante seleccionado.",
+                            "Expected columns: start/end or scheduled_start/scheduled_end. Applies to selected employee/restaurant."
+                          )}
+                        </p>
+                      </div>
+                    </details>
                   </div>
 
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      1.1 · {t("Importar Excel/CSV", "Import Excel/CSV")}
-                    </p>
-                    <div className="mt-2 space-y-2">
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls,.csv"
-                        onChange={event => {
-                          void handleImportSupervisorScheduleFile(event.target.files?.[0] ?? null)
-                          event.currentTarget.value = ""
-                        }}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      />
-                      <p className="text-xs text-slate-500">
-                        {t(
-                          "Columnas esperadas: start/end o scheduled_start/scheduled_end. Aplica al empleado/restaurante seleccionado.",
-                          "Expected columns: start/end or scheduled_start/scheduled_end. Applies to selected employee/restaurant."
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      2 · {t("Fechas, horas y bloques", "Dates, times & blocks")}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("day")}>
-                        {t("Hoy", "Today")}
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("week")}>
-                        {t("Semana", "Week")}
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("month")}>
-                        {t("Mes", "Month")}
-                      </Button>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{t("Fechas y horario", "Dates & time")}</p>
+                        <p className="text-xs text-slate-500">
+                          {t("Define el rango y las horas del turno.", "Define the date range and shift hours.")}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("day")}>
+                          {t("Hoy", "Today")}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("week")}>
+                          {t("Semana", "Week")}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("month")}>
+                          {t("Mes", "Month")}
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -5190,7 +5202,7 @@ function ShiftsPageContent() {
                       />
                     </div>
 
-                    <div className="mt-3">
+                    <div className="mt-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         {t("Dias de la semana", "Weekdays")}
                       </p>
@@ -5210,12 +5222,22 @@ function ShiftsPageContent() {
                         })}
                       </div>
                     </div>
+                  </div>
 
-                    <div className="mt-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        {t("Bloques", "Blocks")}
-                      </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{t("Bloques a programar", "Blocks to schedule")}</p>
+                        <p className="text-xs text-slate-500">
+                          {t("Genera bloques automaticamente o agrega manualmente.", "Generate blocks automatically or add manually.")}
+                        </p>
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        {t("Total", "Total")}: {supervisorScheduleBlocks.length}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
                       <Button size="sm" variant="secondary" onClick={handleGenerateSupervisorScheduleBlocks}>
                         {t("Generar bloques", "Generate blocks")}
                       </Button>
@@ -5241,27 +5263,37 @@ function ShiftsPageContent() {
                         <p className="text-xs text-slate-500">{t("No hay bloques agregados.", "No blocks added.")}</p>
                       ) : (
                         supervisorScheduleBlocks.map(block => (
-                          <div key={block.id} className="grid gap-2 sm:grid-cols-3">
-                            <input
-                              type="datetime-local"
-                              value={block.start}
-                              onChange={event =>
-                                setSupervisorScheduleBlocks(prev =>
-                                  prev.map(item => (item.id === block.id ? { ...item, start: event.target.value } : item))
-                                )
-                              }
-                              className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                            />
-                            <input
-                              type="datetime-local"
-                              value={block.end}
-                              onChange={event =>
-                                setSupervisorScheduleBlocks(prev =>
-                                  prev.map(item => (item.id === block.id ? { ...item, end: event.target.value } : item))
-                                )
-                              }
-                              className="rounded-md border border-slate-300 px-2 py-2 text-sm"
-                            />
+                          <div key={block.id} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                            <div className="space-y-1">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                {t("Inicio", "Start")}
+                              </p>
+                              <input
+                                type="datetime-local"
+                                value={block.start}
+                                onChange={event =>
+                                  setSupervisorScheduleBlocks(prev =>
+                                    prev.map(item => (item.id === block.id ? { ...item, start: event.target.value } : item))
+                                  )
+                                }
+                                className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                {t("Fin", "End")}
+                              </p>
+                              <input
+                                type="datetime-local"
+                                value={block.end}
+                                onChange={event =>
+                                  setSupervisorScheduleBlocks(prev =>
+                                    prev.map(item => (item.id === block.id ? { ...item, end: event.target.value } : item))
+                                  )
+                                }
+                                className="rounded-md border border-slate-300 px-2 py-2 text-sm"
+                              />
+                            </div>
                             <Button size="sm" variant="ghost" onClick={() => handleRemoveSupervisorScheduleBlock(block.id)}>
                               {t("Quitar", "Remove")}
                             </Button>
@@ -5277,7 +5309,6 @@ function ShiftsPageContent() {
                       className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                       placeholder={t("Notas del turno (opcional)", "Shift notes (optional)")}
                     />
-                    </div>
                   </div>
 
                   <details className="rounded-xl border border-slate-200 bg-white p-3">
@@ -5350,7 +5381,7 @@ function ShiftsPageContent() {
                     </div>
                   </details>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs text-slate-500">
                       {t("Bloques listos", "Ready blocks")}: {supervisorScheduleBlocks.length}
                     </span>
