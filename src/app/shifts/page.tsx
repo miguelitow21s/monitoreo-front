@@ -4905,16 +4905,6 @@ function ShiftsPageContent() {
                   <div>
                     <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
                   </div>
-                  {supervisorScreen !== "home" && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="border border-white/40 text-white hover:bg-white/10"
-                      onClick={() => setSupervisorScreen("home")}
-                    >
-                      {t("Volver al inicio", "Back to home")}
-                    </Button>
-                  )}
                 </div>
               </div>
 
@@ -5048,13 +5038,6 @@ function ShiftsPageContent() {
             {supervisorScreen === "schedule" && (
               <Card title={t("Programar turnos", "Schedule shifts")}>
                 <div className="space-y-4">
-                  <p className="text-sm text-slate-600">
-                    {t(
-                      "Paso rapido: 1) Elige empleado y restaurante. 2) Define fechas y horas. 3) Genera bloques y guarda.",
-                      "Quick steps: 1) Choose employee and restaurant. 2) Set dates and times. 3) Generate blocks and save."
-                    )}
-                  </p>
-
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       1 · {t("Empleado y restaurante", "Employee & restaurant")}
@@ -5125,7 +5108,9 @@ function ShiftsPageContent() {
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">2 · {t("Fechas y horas", "Dates & times")}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      2 · {t("Fechas, horas y bloques", "Dates, times & blocks")}
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Button size="sm" variant="ghost" onClick={() => handleApplySupervisorBulkPreset("day")}>
                         {t("Hoy", "Today")}
@@ -5185,10 +5170,11 @@ function ShiftsPageContent() {
                         })}
                       </div>
                     </div>
-                  </div>
 
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">3 · {t("Bloques", "Blocks")}</p>
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {t("Bloques", "Blocks")}
+                      </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Button size="sm" variant="secondary" onClick={handleGenerateSupervisorScheduleBlocks}>
                         {t("Generar bloques", "Generate blocks")}
@@ -5251,6 +5237,7 @@ function ShiftsPageContent() {
                       className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                       placeholder={t("Notas del turno (opcional)", "Shift notes (optional)")}
                     />
+                    </div>
                   </div>
 
                   <details className="rounded-xl border border-slate-200 bg-white p-3">

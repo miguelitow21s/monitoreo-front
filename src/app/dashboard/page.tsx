@@ -148,9 +148,6 @@ export default function DashboardPage() {
           <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
             <div className="bg-gradient-to-br from-indigo-600 to-blue-700 px-6 py-6 text-white">
               <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
-              <p className="mt-2 text-sm text-indigo-100">
-                {t("Super administracion", "Super administration")}
-              </p>
             </div>
 
             <div className="space-y-3 px-6 py-6">

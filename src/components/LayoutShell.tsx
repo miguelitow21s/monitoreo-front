@@ -25,7 +25,14 @@ export default function LayoutShell({ children }: LayoutShellProps) {
   return (
     <main className="min-h-screen px-3 pb-6 pt-6 sm:px-5 lg:px-6">
       {showHome && (
-        <div className="mx-auto mb-5 flex w-full max-w-[1240px] justify-start">
+        <div className="mx-auto mb-5 flex w-full max-w-[1240px] flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            Volver atrás
+          </button>
           <button
             type="button"
             onClick={() => router.push("/dashboard")}
