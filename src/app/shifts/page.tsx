@@ -115,6 +115,14 @@ type ScheduleTaskDraft = {
   priority: TaskPriority
   dueAt: string
 }
+type SupervisionPhotoDraft = {
+  id: string
+  file: Blob
+  areaKey: string
+  areaDetail?: string
+  subareaKey?: string
+  previewUrl: string
+}
 type ScheduledShiftUiState = "scheduled" | "in_progress" | "ended" | "cancelled" | "other"
 
 function formatDuration(start: string, end: string | null) {
@@ -340,7 +348,7 @@ function ShiftsPageContent() {
   const [startEvidencePhotoCount, setStartEvidencePhotoCount] = useState(0)
   const [endEvidencePhotoCount, setEndEvidencePhotoCount] = useState(0)
   const [supervisorScreen, setSupervisorScreen] = useState<
-    "home" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active"
+    "home" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active" | "alerts"
   >("home")
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
   const [endEvidenceUploadError, setEndEvidenceUploadError] = useState<string | null>(null)
@@ -409,6 +417,15 @@ function ShiftsPageContent() {
   const [presencePhoto, setPresencePhoto] = useState<Blob | null>(null)
   const [presenceNotes, setPresenceNotes] = useState("")
   const [presencePhase, setPresencePhase] = useState<"start" | "end">("start")
+  const [supervisionStep, setSupervisionStep] = useState<"start" | "cleaning" | "end">("start")
+  const [supervisionStartPhotos, setSupervisionStartPhotos] = useState<SupervisionPhotoDraft[]>([])
+  const [supervisionEndPhotos, setSupervisionEndPhotos] = useState<SupervisionPhotoDraft[]>([])
+  const [supervisionAreaKey, setSupervisionAreaKey] = useState("")
+  const [supervisionAreaDetail, setSupervisionAreaDetail] = useState("")
+  const [supervisionSubareaKey, setSupervisionSubareaKey] = useState("")
+  const [supervisionObservation, setSupervisionObservation] = useState("")
+  const [supervisionUploading, setSupervisionUploading] = useState(false)
+  const [supervisionSessionId, setSupervisionSessionId] = useState<string>(() => crypto.randomUUID())
   const [registeringPresence, setRegisteringPresence] = useState(false)
   const [taskDetailModalTask, setTaskDetailModalTask] = useState<OperationalTask | null>(null)
   const [taskDetailManifest, setTaskDetailManifest] = useState<TaskEvidenceManifestResolved | null>(null)
@@ -518,6 +535,10 @@ function ShiftsPageContent() {
   const endAreaLabel = useMemo(
     () => getAreaLabel(endAreaKey, endAreaDetail, endSubareaKey),
     [getAreaLabel, endAreaDetail, endAreaKey, endSubareaKey]
+  )
+  const supervisionSubareas = useMemo(
+    () => subareaOptionsByArea.get(supervisionAreaKey) ?? [],
+    [subareaOptionsByArea, supervisionAreaKey]
   )
   const buildEvidenceMeta = useCallback(
     (areaKey: string, areaDetail?: string, subKey?: string): EvidenceMeta | undefined => {
@@ -2348,6 +2369,197 @@ function ShiftsPageContent() {
     }
   }
 
+  const resetSupervisionFlow = useCallback(() => {
+    setSupervisionStep("start")
+    setSupervisionStartPhotos(prev => {
+      prev.forEach(photo => URL.revokeObjectURL(photo.previewUrl))
+      return []
+    })
+    setSupervisionEndPhotos(prev => {
+      prev.forEach(photo => URL.revokeObjectURL(photo.previewUrl))
+      return []
+    })
+    setSupervisionAreaKey("")
+    setSupervisionAreaDetail("")
+    setSupervisionSubareaKey("")
+    setSupervisionObservation("")
+    setPresenceCoords(null)
+    setPresencePhoto(null)
+    setSupervisionSessionId(crypto.randomUUID())
+  }, [])
+
+  const buildSupervisionNote = useCallback(
+    (photo: SupervisionPhotoDraft, phase: "start" | "end", observation?: string) => {
+      const areaLabel = areaLabelByKey.get(photo.areaKey) ?? photo.areaKey
+      const subLabel =
+        photo.subareaKey && subareaLabelByArea.get(photo.areaKey)
+          ? subareaLabelByArea.get(photo.areaKey)?.get(photo.subareaKey ?? "") ?? photo.subareaKey
+          : null
+      const payload = {
+        session_id: supervisionSessionId,
+        phase,
+        area_key: photo.areaKey,
+        area_label: areaLabel,
+        subarea_key: photo.subareaKey ?? null,
+        subarea_label: subLabel ?? null,
+        area_detail: photo.areaDetail ?? null,
+        observation: observation?.trim() || null,
+      }
+      return JSON.stringify(payload)
+    },
+    [areaLabelByKey, subareaLabelByArea, supervisionSessionId]
+  )
+
+  const handleCaptureSupervisionPhoto = useCallback(
+    (blob: Blob) => {
+      if (!supervisionAreaKey) {
+        showToast("info", t("Selecciona un area antes de tomar la foto.", "Select an area before taking the photo."))
+        return
+      }
+      const subareas = subareaOptionsByArea.get(supervisionAreaKey) ?? []
+      if (subareas.length > 0 && supervisionAreaKey !== "otro" && !supervisionSubareaKey) {
+        showToast("info", t("Selecciona una subarea.", "Select a subarea."))
+        return
+      }
+      if (supervisionAreaKey === "otro" && !supervisionAreaDetail.trim()) {
+        showToast("info", t("Describe el area.", "Describe the area."))
+        return
+      }
+      const entry: SupervisionPhotoDraft = {
+        id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        file: blob,
+        areaKey: supervisionAreaKey,
+        areaDetail: supervisionAreaDetail.trim() || undefined,
+        subareaKey: supervisionSubareaKey || undefined,
+        previewUrl: URL.createObjectURL(blob),
+      }
+      if (supervisionStep === "start") {
+        setSupervisionStartPhotos(prev => [...prev, entry])
+      } else if (supervisionStep === "end") {
+        setSupervisionEndPhotos(prev => [...prev, entry])
+      }
+      setSupervisionAreaKey("")
+      setSupervisionAreaDetail("")
+      setSupervisionSubareaKey("")
+    },
+    [
+      showToast,
+      subareaOptionsByArea,
+      supervisionAreaDetail,
+      supervisionAreaKey,
+      supervisionStep,
+      supervisionSubareaKey,
+      t,
+    ]
+  )
+
+  const handleRemoveSupervisionPhoto = useCallback((phase: "start" | "end", id: string) => {
+    const remove = (items: SupervisionPhotoDraft[]) => {
+      const target = items.find(item => item.id === id)
+      if (target) URL.revokeObjectURL(target.previewUrl)
+      return items.filter(item => item.id !== id)
+    }
+    if (phase === "start") {
+      setSupervisionStartPhotos(prev => remove(prev))
+    } else {
+      setSupervisionEndPhotos(prev => remove(prev))
+    }
+  }, [])
+
+  const handleRegisterSupervisionStart = async () => {
+    if (!presenceRestaurantId) {
+      showToast("info", t("Selecciona un restaurante.", "Select a restaurant."))
+      return
+    }
+    if (!presenceCoords) {
+      showToast("info", t("Activa el GPS antes de registrar.", "Enable GPS before registering."))
+      return
+    }
+    if (supervisionStartPhotos.length === 0) {
+      showToast("info", t("Agrega al menos una foto de ingreso.", "Add at least one entry photo."))
+      return
+    }
+    setSupervisionUploading(true)
+    try {
+      for (const photo of supervisionStartPhotos) {
+        const { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes } = await uploadEvidence(
+          "supervision-start",
+          photo.file,
+          presenceCoords
+        )
+        await registerSupervisorPresence({
+          restaurantId: presenceRestaurantId,
+          phase: "start",
+          lat: presenceCoords.lat,
+          lng: presenceCoords.lng,
+          notes: buildSupervisionNote(photo, "start"),
+          evidencePath: filePath,
+          evidenceHash,
+          evidenceMimeType,
+          evidenceSizeBytes,
+        })
+      }
+      setSupervisionStartPhotos(prev => {
+        prev.forEach(photo => URL.revokeObjectURL(photo.previewUrl))
+        return []
+      })
+      setSupervisionStep("cleaning")
+      showToast("success", t("Inicio de supervision registrado.", "Supervision start recorded."))
+      await loadPresenceLogs()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo registrar el inicio.", "Could not register start.")))
+    } finally {
+      setSupervisionUploading(false)
+    }
+  }
+
+  const handleRegisterSupervisionEnd = async () => {
+    if (!presenceRestaurantId) {
+      showToast("info", t("Selecciona un restaurante.", "Select a restaurant."))
+      return
+    }
+    if (!presenceCoords) {
+      showToast("info", t("Activa el GPS antes de registrar.", "Enable GPS before registering."))
+      return
+    }
+    if (supervisionEndPhotos.length === 0) {
+      showToast("info", t("Agrega al menos una foto de salida.", "Add at least one exit photo."))
+      return
+    }
+    setSupervisionUploading(true)
+    try {
+      for (const photo of supervisionEndPhotos) {
+        const { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes } = await uploadEvidence(
+          "supervision-end",
+          photo.file,
+          presenceCoords
+        )
+        await registerSupervisorPresence({
+          restaurantId: presenceRestaurantId,
+          phase: "end",
+          lat: presenceCoords.lat,
+          lng: presenceCoords.lng,
+          notes: buildSupervisionNote(photo, "end", supervisionObservation),
+          evidencePath: filePath,
+          evidenceHash,
+          evidenceMimeType,
+          evidenceSizeBytes,
+        })
+      }
+      setSupervisionEndPhotos(prev => {
+        prev.forEach(photo => URL.revokeObjectURL(photo.previewUrl))
+        return []
+      })
+      showToast("success", t("Supervision finalizada.", "Supervision completed."))
+      resetSupervisionFlow()
+      await loadPresenceLogs()
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo finalizar la supervision.", "Could not finish supervision.")))
+    } finally {
+      setSupervisionUploading(false)
+    }
+  }
+
   const handleAssignStaff = async () => {
     if (!staffRestaurantId || !staffUserId) {
       showToast("info", t("Selecciona restaurante y empleado.", "Select restaurant and employee."))
@@ -2457,6 +2669,77 @@ function ShiftsPageContent() {
 
   const handleClearSupervisorScheduleBlocks = () => {
     setSupervisorScheduleBlocks([])
+  }
+
+  const handleImportSupervisorScheduleFile = async (file: File | null) => {
+    if (!file) return
+    if (!supervisorScheduleEmployeeId || !supervisorScheduleRestaurantId) {
+      showToast("info", t("Selecciona empleado y restaurante antes de importar.", "Select employee and restaurant before importing."))
+      return
+    }
+
+    try {
+      const XLSX = (await import("xlsx")) as typeof import("xlsx")
+      const data = await file.arrayBuffer()
+      const workbook = XLSX.read(data, { type: "array", cellDates: true })
+      const sheetName = workbook.SheetNames[0]
+      const sheet = workbook.Sheets[sheetName]
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" })
+
+      const normalizeKey = (value: string) => value.toLowerCase().replace(/[\s_-]+/g, "")
+      const startKeys = new Set(["scheduledstart", "start", "inicio", "fechainicio", "starttime", "iniciohora"])
+      const endKeys = new Set(["scheduledend", "end", "fin", "fechafin", "endtime", "finhora"])
+
+      const parseDateValue = (value: unknown) => {
+        if (!value) return ""
+        if (value instanceof Date) return value.toISOString().slice(0, 16)
+        if (typeof value === "number") {
+          const parsed = XLSX.SSF.parse_date_code(value)
+          if (!parsed) return ""
+          const date = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H, parsed.M, parsed.S || 0))
+          return date.toISOString().slice(0, 16)
+        }
+        if (typeof value === "string") {
+          const trimmed = value.trim()
+          if (!trimmed) return ""
+          const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T")
+          const date = new Date(normalized)
+          if (!Number.isFinite(date.getTime())) return ""
+          return date.toISOString().slice(0, 16)
+        }
+        return ""
+      }
+
+      const blocks = rows
+        .map((row, index) => {
+          const startValue = Object.entries(row).find(([key]) => startKeys.has(normalizeKey(key)))
+          const endValue = Object.entries(row).find(([key]) => endKeys.has(normalizeKey(key)))
+          const start = parseDateValue(startValue?.[1])
+          const end = parseDateValue(endValue?.[1])
+          return {
+            id: Date.now() + index + Math.floor(Math.random() * 1000),
+            start,
+            end,
+          }
+        })
+        .filter(item => item.start && item.end)
+
+      if (blocks.length === 0) {
+        showToast(
+          "info",
+          t(
+            "No se encontraron filas validas. Usa columnas start/end o scheduled_start/scheduled_end.",
+            "No valid rows found. Use start/end or scheduled_start/scheduled_end columns."
+          )
+        )
+        return
+      }
+
+      setSupervisorScheduleBlocks(blocks)
+      showToast("success", t(`${blocks.length} bloque(s) importados.`, `${blocks.length} block(s) imported.`))
+    } catch (error: unknown) {
+      showToast("error", extractErrorMessage(error, t("No se pudo importar el archivo.", "Could not import file.")))
+    }
   }
 
   const handleAddSupervisorScheduleTaskDraft = () => {
@@ -4660,6 +4943,9 @@ function ShiftsPageContent() {
                       <Button variant="secondary" onClick={() => setSupervisorScreen("tasks")}>
                         {t("Monitoreo de tareas", "Task monitoring")} ({supervisorTasks.length})
                       </Button>
+                      <Button variant="secondary" onClick={() => setSupervisorScreen("alerts")}>
+                        {t("Alertas", "Alerts")}
+                      </Button>
                       <Button variant="secondary" onClick={() => setSupervisorScreen("schedule")}>
                         {t("Programar turno", "Schedule shift")}
                       </Button>
@@ -4671,9 +4957,18 @@ function ShiftsPageContent() {
                       </Button>
                       {isSupervisora && (
                         <Button variant="secondary" onClick={() => setSupervisorScreen("presence")}>
-                          {t("Registrar presencia", "Register presence")}
+                          {t("Supervision", "Supervision")}
                         </Button>
                       )}
+                      <Button variant="secondary" onClick={() => router.push("/restaurants")}>
+                        {t("Restaurantes", "Restaurants")}
+                      </Button>
+                      <Button variant="secondary" onClick={() => router.push("/users")}>
+                        {t("Usuarios", "Users")}
+                      </Button>
+                      <Button variant="secondary" onClick={() => router.push("/reports")}>
+                        {t("Informes", "Reports")}
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -4862,6 +5157,29 @@ function ShiftsPageContent() {
                       {t("Seleccionado", "Selected")}: {selectedSupervisorScheduleEmployeeLabel} ·{" "}
                       {selectedSupervisorScheduleRestaurantLabel}
                     </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      1.1 · {t("Importar Excel/CSV", "Import Excel/CSV")}
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={event => {
+                          void handleImportSupervisorScheduleFile(event.target.files?.[0] ?? null)
+                          event.currentTarget.value = ""
+                        }}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <p className="text-xs text-slate-500">
+                        {t(
+                          "Columnas esperadas: start/end o scheduled_start/scheduled_end. Aplica al empleado/restaurante seleccionado.",
+                          "Expected columns: start/end or scheduled_start/scheduled_end. Applies to selected employee/restaurant."
+                        )}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -5082,97 +5400,174 @@ function ShiftsPageContent() {
             )}
 
             {supervisorScreen === "presence" && isSupervisora && (
-              <Card title={t("Entrada/salida de supervision", "Supervisor entry/exit")}>
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <div className="space-y-2">
-                    <select
-                      value={presenceRestaurantId ?? ""}
-                      onChange={event => setPresenceRestaurantId(Number(event.target.value) || null)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    >
-                      <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
-                      {presenceRestaurants.map(restaurant => (
-                        <option key={restaurant.id} value={restaurant.id}>
-                          {formatRestaurantLabel(knownRestaurantsById.get(restaurant.id)) || restaurant.name}
-                        </option>
-                      ))}
-                    </select>
+              <Card title={t("Gestion de supervision", "Supervision flow")}>
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                    {supervisionStep === "start" &&
+                      t("Paso 1: toma fotos de ingreso y registra el inicio.", "Step 1: take entry photos and register start.")}
+                    {supervisionStep === "cleaning" &&
+                      t("Paso 2: limpieza en proceso.", "Step 2: cleaning in progress.")}
+                    {supervisionStep === "end" &&
+                      t("Paso 3: toma fotos de salida, agrega observaciones y finaliza.", "Step 3: take exit photos, add notes, and finish.")}
+                  </div>
 
-                    {presenceRestaurants.length === 0 && (
-                      <p className="text-xs text-amber-700">
-                        {t("No hay restaurantes asignados para registrar presencia.", "No assigned restaurants to register presence.")}
-                      </p>
-                    )}
-
-                    <div className="flex gap-4 text-sm">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="presence-phase"
-                          checked={presencePhase === "start"}
-                          onChange={() => setPresencePhase("start")}
-                        />
-                        {t("Entrada", "Entry")}
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="presence-phase"
-                          checked={presencePhase === "end"}
-                          onChange={() => setPresencePhase("end")}
-                        />
-                        {t("Salida", "Exit")}
-                      </label>
+                  {supervisionStep === "cleaning" ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+                      <p className="text-lg font-semibold text-slate-800">{t("Limpiando...", "Cleaning...")}</p>
+                      <p className="mt-1 text-sm text-slate-600">{t("No cierres la app mientras limpia.", "Do not close the app while cleaning.")}</p>
+                      <Button className="mt-4" size="lg" onClick={() => setSupervisionStep("end")}>
+                        {t("Termine de limpiar", "I finished cleaning")}
+                      </Button>
                     </div>
+                  ) : (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="space-y-3">
+                        <select
+                          value={presenceRestaurantId ?? ""}
+                          onChange={event => setPresenceRestaurantId(Number(event.target.value) || null)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                        >
+                          <option value="">{t("Seleccionar restaurante", "Select restaurant")}</option>
+                          {presenceRestaurants.map(restaurant => (
+                            <option key={restaurant.id} value={restaurant.id}>
+                              {formatRestaurantLabel(knownRestaurantsById.get(restaurant.id)) || restaurant.name}
+                            </option>
+                          ))}
+                        </select>
 
-                    <textarea
-                      rows={2}
-                      value={presenceNotes}
-                      onChange={event => setPresenceNotes(event.target.value)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      placeholder={t("Notas de presencia (opcional)", "Presence notes (optional)")}
-                    />
-                  </div>
+                        {presenceRestaurants.length === 0 && (
+                          <p className="text-xs text-amber-700">
+                            {t("No hay restaurantes asignados para supervision.", "No assigned restaurants for supervision.")}
+                          </p>
+                        )}
 
-                  <div className="space-y-3">
-                    <GPSGuard onLocation={setPresenceCoords} />
-                    <CameraCapture
-                      onCapture={setPresencePhoto}
-                      overlayLines={[
-                        `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                        `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                        `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(presenceRestaurantId)}`,
-                        `${t("Turno", "Shift")}: ${t("supervision", "supervision")}-${presencePhase}`,
-                        `${t("Fase de supervision", "Supervisor phase")}: ${presencePhase}`,
-                        presenceCoords
-                          ? `GPS: ${presenceCoords.lat.toFixed(6)}, ${presenceCoords.lng.toFixed(6)}`
-                          : t("GPS: pendiente", "GPS: pending"),
-                      ]}
-                    />
-                  </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <select
+                            value={supervisionAreaKey}
+                            onChange={event => setSupervisionAreaKey(event.target.value)}
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            <option value="">{t("Seleccionar area", "Select area")}</option>
+                            {shiftAreaOptions.map(option => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={supervisionSubareaKey}
+                            onChange={event => setSupervisionSubareaKey(event.target.value)}
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            disabled={!supervisionAreaKey || supervisionSubareas.length === 0}
+                          >
+                            <option value="">{t("Seleccionar subarea", "Select subarea")}</option>
+                            {supervisionSubareas.map(option => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {supervisionAreaKey === "otro" && (
+                          <input
+                            value={supervisionAreaDetail}
+                            onChange={event => setSupervisionAreaDetail(event.target.value)}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            placeholder={t("Describe el area", "Describe the area")}
+                          />
+                        )}
+
+                        {supervisionStep === "end" && (
+                          <textarea
+                            rows={3}
+                            value={supervisionObservation}
+                            onChange={event => setSupervisionObservation(event.target.value)}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            placeholder={t("Observaciones de la tarea (opcional)", "Task observations (optional)")}
+                          />
+                        )}
+
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {t("Fotos capturadas", "Captured photos")}:{" "}
+                            {(supervisionStep === "start" ? supervisionStartPhotos : supervisionEndPhotos).length}
+                          </p>
+                          {(supervisionStep === "start" ? supervisionStartPhotos : supervisionEndPhotos).length === 0 ? (
+                            <p className="mt-2">{t("Aun no hay fotos.", "No photos yet.")}</p>
+                          ) : (
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                              {(supervisionStep === "start" ? supervisionStartPhotos : supervisionEndPhotos).map(photo => (
+                                <div key={photo.id} className="rounded-lg border border-slate-200 bg-white p-2">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={photo.previewUrl} alt="supervision" className="h-24 w-full rounded-md object-cover" />
+                                  <p className="mt-2 text-xs text-slate-600">
+                                    {getAreaLabel(photo.areaKey, photo.areaDetail, photo.subareaKey)}
+                                  </p>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleRemoveSupervisionPhoto(supervisionStep === "start" ? "start" : "end", photo.id)}
+                                  >
+                                    {t("Quitar", "Remove")}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {supervisionStep === "start" && (
+                          <Button
+                            variant="primary"
+                            onClick={() => void handleRegisterSupervisionStart()}
+                            disabled={supervisionUploading}
+                          >
+                            {supervisionUploading ? t("Guardando...", "Saving...") : t("Registrar inicio", "Register start")}
+                          </Button>
+                        )}
+
+                        {supervisionStep === "end" && (
+                          <Button
+                            variant="primary"
+                            onClick={() => void handleRegisterSupervisionEnd()}
+                            disabled={supervisionUploading}
+                          >
+                            {supervisionUploading ? t("Guardando...", "Saving...") : t("Finalizar turno", "Finish shift")}
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        <GPSGuard onLocation={setPresenceCoords} />
+                        <CameraCapture
+                          onCapture={handleCaptureSupervisionPhoto}
+                          overlayLines={[
+                            `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
+                            `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(presenceRestaurantId)}`,
+                            `${t("Fase", "Phase")}: ${supervisionStep === "start" ? t("Ingreso", "Entry") : t("Salida", "Exit")}`,
+                            presenceCoords
+                              ? `GPS: ${presenceCoords.lat.toFixed(6)}, ${presenceCoords.lng.toFixed(6)}`
+                              : t("GPS: pendiente", "GPS: pending"),
+                          ]}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {supervisorPresence.length > 0 && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                      <p className="mb-2 font-medium text-slate-700">{t("Historial reciente", "Recent history")}</p>
+                      <ul className="space-y-1 text-slate-600">
+                        {supervisorPresence.slice(0, 6).map(item => (
+                          <li key={item.id}>
+                            {formatDateTime(item.recorded_at)} | {t("Restaurante", "Restaurant")}: {getRestaurantLabelById(item.restaurant_id)} | {t("Fase", "Phase")}: {item.phase}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <Button variant="primary" onClick={() => void handleRegisterPresence()} disabled={registeringPresence}>
-                    {registeringPresence ? t("Guardando...", "Saving...") : t("Registrar presencia de supervision", "Register supervisor presence")}
-                  </Button>
-                  <span className="text-xs text-slate-500">
-                    {t("Registros recientes", "Latest records")}: {supervisorPresence.length}
-                  </span>
-                </div>
-
-                {supervisorPresence.length > 0 && (
-                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <p className="mb-2 font-medium text-slate-700">{t("Historial reciente de presencia", "Recent presence history")}</p>
-                    <ul className="space-y-1 text-slate-600">
-                      {supervisorPresence.slice(0, 6).map(item => (
-                        <li key={item.id}>
-                          {formatDateTime(item.recorded_at)} | {t("Restaurante", "Restaurant")}: {getRestaurantLabelById(item.restaurant_id)} | {t("Fase", "Phase")}: {item.phase}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </Card>
             )}
 
@@ -5286,6 +5681,75 @@ function ShiftsPageContent() {
                   ))}
                 </div>
               )}
+              </Card>
+            )}
+
+            {supervisorScreen === "alerts" && (
+              <Card title={t("Gestion de alertas", "Alert management")}>
+                {!shiftOtpReady && (
+                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    {t("Valida OTP para registrar alertas.", "Verify OTP to register alerts.")}
+                  </div>
+                )}
+
+                {loadingSupervisor ? (
+                  <Skeleton className="h-20" />
+                ) : supervisorRows.length === 0 ? (
+                  <p className="text-sm text-slate-500">{t("No hay turnos activos para alertas.", "No active shifts for alerts.")}</p>
+                ) : (
+                  <div className="space-y-3">
+                    {supervisorRows.map(row => (
+                      <div key={`alert-${row.id}`} className="rounded-lg border border-slate-200 px-4 py-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-medium text-slate-800">
+                            {t("Empleado", "Employee")}: {row.employee_id?.slice(0, 8) ?? "-"}
+                          </p>
+                          <span className="text-xs text-slate-500">
+                            {formatDateTime(row.start_time)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {t("Restaurante", "Restaurant")}: {getRestaurantLabelById(row.restaurant_id)}
+                        </p>
+
+                        <div className="mt-3 space-y-2">
+                          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {t("Nueva alerta", "New alert")}
+                          </label>
+                          <textarea
+                            value={incidentNotes[row.id] ?? ""}
+                            onFocus={() => void loadIncidentsForShift(row.id)}
+                            onChange={event =>
+                              setIncidentNotes(prev => ({
+                                ...prev,
+                                [row.id]: event.target.value,
+                              }))
+                            }
+                            rows={3}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                            placeholder={t("Describe la alerta o incidente...", "Describe the alert or incident...")}
+                          />
+                          <Button size="sm" variant="primary" onClick={() => void handleCreateIncident(row.id)}>
+                            {t("Guardar alerta", "Save alert")}
+                          </Button>
+                        </div>
+
+                        {(incidentHistory[row.id] ?? []).length > 0 && (
+                          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                            <p className="mb-2 font-semibold text-slate-600">{t("Alertas recientes", "Recent alerts")}</p>
+                            <ul className="space-y-1">
+                              {incidentHistory[row.id].map(incident => (
+                                <li key={incident.id}>
+                                  {formatDateTime(incident.created_at)} - {incident.note}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </Card>
             )}
 

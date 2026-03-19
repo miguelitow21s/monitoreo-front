@@ -475,11 +475,24 @@ Pendiente de implementación visual, mantener **pantallas simples** y por funci�
 - Dashboard simplificado (sin header/sidebars) con botones grandes.
 - Cada módulo abre pantalla con botón **Volver al inicio**.
 - Gestión restaurante
+  - Crear restaurante (nombre, dirección, ubicación, horas hábiles de trabajo y radio).
 - Gestión usuarios
+  - Crear usuarios (nombre, correo, celular, rol).
+  - Gestionar usuarios (activar/desactivar).
 - Gestión de turnos
-- Gestión de supervisión (evidencias ingreso/limpieza/salida + observaciones + finalizar)
-- Gestión de insumos (desactivado por ahora)
+  - Programar turnos por semana o mes (relaciona usuario-restaurante).
+  - Opción de cargar hoja de Excel/CSV (columnas `start/end` o `scheduled_start/scheduled_end`).
+  - Crear tareas específicas (a petición del cliente) y asociarlas al turno correspondiente.
+- Gestión de supervisión
+  - Tomar foto de ingreso y marcar área/subárea por foto (dropdown + selección).
+  - Registrar inicio.
+  - Pantalla “limpiando” (sticker/imagen) mientras se ejecuta la tarea.
+  - Registrar fin.
+  - Tomar foto de salida y marcar área/subárea por foto.
+  - Observaciones de la tarea especial.
+  - Botón de finalización de turno.
 - Gestión de alertas
+  - Registrar alertas/incidentes por turno activo.
 - Gestión de informes
 
 ## 11) Perfil de superusuario

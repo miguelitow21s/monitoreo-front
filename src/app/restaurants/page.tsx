@@ -992,7 +992,7 @@ export default function RestaurantsPage() {
 
   return (
     <ProtectedRoute>
-      <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
+      <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
         <div className="space-y-5">
           <h1 className="text-2xl font-bold text-slate-900">{t("Restaurantes", "Restaurants")}</h1>
 

@@ -198,7 +198,7 @@ export default function UsersPage() {
 
   return (
     <ProtectedRoute>
-      <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}>
+      <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
         <div className="space-y-4">
           <h1 className="text-2xl font-bold text-slate-900">{t("Usuarios", "Users")}</h1>
 
