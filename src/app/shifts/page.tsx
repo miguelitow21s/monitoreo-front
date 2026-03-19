@@ -4961,15 +4961,19 @@ function ShiftsPageContent() {
                           {t("Supervision", "Supervision")}
                         </Button>
                       )}
-                      <Button variant="secondary" onClick={() => router.push("/restaurants")}>
-                        {t("Restaurantes", "Restaurants")}
-                      </Button>
-                      <Button variant="secondary" onClick={() => router.push("/users")}>
-                        {t("Usuarios", "Users")}
-                      </Button>
-                      <Button variant="secondary" onClick={() => router.push("/reports")}>
-                        {t("Informes", "Reports")}
-                      </Button>
+                      {isSupervisora && (
+                        <>
+                          <Button variant="secondary" onClick={() => router.push("/restaurants")}>
+                            {t("Restaurantes", "Restaurants")}
+                          </Button>
+                          <Button variant="secondary" onClick={() => router.push("/users")}>
+                            {t("Usuarios", "Users")}
+                          </Button>
+                          <Button variant="secondary" onClick={() => router.push("/reports")}>
+                            {t("Informes", "Reports")}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
