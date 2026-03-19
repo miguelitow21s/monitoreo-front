@@ -350,6 +350,7 @@ function ShiftsPageContent() {
   const [supervisorScreen, setSupervisorScreen] = useState<
     "home" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active" | "alerts"
   >("home")
+  const [supervisorScreenHistory, setSupervisorScreenHistory] = useState<Array<typeof supervisorScreen>>(["home"])
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
   const [endEvidenceUploadError, setEndEvidenceUploadError] = useState<string | null>(null)
   const [endShiftError, setEndShiftError] = useState<string | null>(null)
@@ -2561,6 +2562,27 @@ function ShiftsPageContent() {
     }
   }
 
+  const setSupervisorScreenWithHistory = useCallback(
+    (next: typeof supervisorScreen) => {
+      setSupervisorScreenHistory(prev => {
+        const last = prev[prev.length - 1]
+        if (last === next) return prev
+        return [...prev, next]
+      })
+      setSupervisorScreen(next)
+    },
+    []
+  )
+
+  const handleSupervisorBack = useCallback(() => {
+    setSupervisorScreenHistory(prev => {
+      if (prev.length <= 1) return prev
+      const next = prev.slice(0, -1)
+      setSupervisorScreen(next[next.length - 1] ?? "home")
+      return next
+    })
+  }, [])
+
   const handleAssignStaff = async () => {
     if (!staffRestaurantId || !staffUserId) {
       showToast("info", t("Selecciona restaurante y empleado.", "Select restaurant and employee."))
@@ -3032,7 +3054,7 @@ function ShiftsPageContent() {
           <p className="font-medium">
             {t("OTP pendiente para aprobaciones.", "OTP required for approvals.")}
           </p>
-          <Button size="sm" variant="secondary" onClick={() => setSupervisorScreen("otp")}>
+          <Button size="sm" variant="secondary" onClick={() => setSupervisorScreenWithHistory("otp")}>
             {t("Verificar OTP", "Verify OTP")}
           </Button>
         </div>
@@ -3045,9 +3067,31 @@ function ShiftsPageContent() {
       </div>
     ) : null
 
+  const handleShiftBack = useCallback(() => {
+    if (canOperateSupervisor && supervisorScreen !== "home") {
+      handleSupervisorBack()
+      return
+    }
+    if (isEmpleado && employeeView === "profile") {
+      handleEmployeeView("start")
+      return
+    }
+    router.back()
+  }, [canOperateSupervisor, employeeView, handleEmployeeView, handleSupervisorBack, isEmpleado, router, supervisorScreen])
+
   return (
     <ProtectedRoute>
       <div className="space-y-5">
+        {!shiftSuccess && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={handleShiftBack}>
+              {t("Volver atras", "Back")}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => router.push("/dashboard")}>
+              {t("Volver al inicio", "Back to home")}
+            </Button>
+          </div>
+        )}
         {shiftSuccess && (
           <div className={`fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-emerald-500 to-emerald-700 px-4 py-6 text-white ${manrope.className}`}>
             <div className="w-full max-w-md space-y-6 text-center">
@@ -4927,19 +4971,19 @@ function ShiftsPageContent() {
                       </div>
                     )}
                     <div className="space-y-2">
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("active")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("active")}>
                         {t("Turnos activos", "Active shifts")} ({supervisorRows.length})
                       </Button>
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("tasks")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("tasks")}>
                         {t("Monitoreo de tareas", "Task monitoring")} ({supervisorTasks.length})
                       </Button>
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("alerts")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("alerts")}>
                         {t("Alertas", "Alerts")}
                       </Button>
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("schedule")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("schedule")}>
                         {t("Programar turno", "Schedule shift")}
                       </Button>
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreen("scheduled")}>
+                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("scheduled")}>
                         {t("Turnos programados", "Scheduled shifts")} ({supervisionScheduledShifts.length})
                       </Button>
                       {isSupervisora && (
