@@ -480,9 +480,12 @@ function ShiftsPageContent() {
   const canOperateShift = !roleLoading && isEmpleado
   const canOperateSupervisor = !roleLoading && (isSupervisora || isSuperAdmin)
   const canOperateOtp = canOperateShift || canOperateSupervisor
-  const employeeView = searchParams.get("view") ?? "start"
-  const isEmployeeProfileView = isEmpleado && employeeView === "profile"
-  const isEmployeeStartView = isEmpleado && !isEmployeeProfileView
+  const employeeViewRaw = searchParams.get("view") ?? "start"
+  const allowedEmployeeViews = ["start", "start-evidence", "cleaning", "end", "profile"] as const
+  type EmployeeView = (typeof allowedEmployeeViews)[number]
+  const employeeView = (allowedEmployeeViews as readonly string[]).includes(employeeViewRaw as EmployeeView)
+    ? (employeeViewRaw as EmployeeView)
+    : "start"
 
   const displayName = useMemo(() => {
     const raw =
@@ -588,7 +591,7 @@ function ShiftsPageContent() {
     [employeeDashboard]
   )
   const handleEmployeeView = useCallback(
-    (view: "start" | "profile") => {
+    (view: EmployeeView) => {
       router.push(`/shifts?view=${view}`)
     },
     [router]
@@ -642,6 +645,21 @@ function ShiftsPageContent() {
   const endPhotosMeetExpected = expectedEndPhotoCount ? endPhotoCaptures.length >= expectedEndPhotoCount : true
   const gpsReady = !!coords
   const startCameraReady = startPhotoCaptures.length > 0
+  const employeeStage = useMemo(() => {
+    if (!isEmpleado) return null
+    if (activeShift) {
+      if (!hasStartEvidence) return "start-evidence" as const
+      if (cleaningMode && !endEvidenceUploaded) return "cleaning" as const
+      return "end" as const
+    }
+    if (employeeView === "cleaning" || employeeView === "end") return "start"
+    return employeeView
+  }, [activeShift, cleaningMode, employeeView, endEvidenceUploaded, hasStartEvidence, isEmpleado])
+  const isEmployeeStartInfoStage = isEmpleado && employeeStage === "start"
+  const isEmployeeStartEvidenceStage = isEmpleado && employeeStage === "start-evidence"
+  const isEmployeeCleaningStage = isEmpleado && employeeStage === "cleaning"
+  const isEmployeeEndStage = isEmpleado && employeeStage === "end"
+  const isEmployeeProfileStage = isEmpleado && employeeStage === "profile"
 
   useEffect(() => {
     const hadStartEvidence = startEvidenceSeenRef.current
@@ -653,6 +671,13 @@ function ShiftsPageContent() {
     }
     startEvidenceSeenRef.current = hasStartEvidence
   }, [activeShift, endEvidenceUploaded, hasStartEvidence])
+
+  useEffect(() => {
+    if (!isEmpleado || !activeShift || !hasStartEvidence) return
+    if (endIncidentsOccurred === null) setEndIncidentsOccurred(false)
+    if (endAreaDelivered === null) setEndAreaDelivered(true)
+    if (endFitForWork === null) setEndFitForWork(true)
+  }, [activeShift, endAreaDelivered, endFitForWork, endIncidentsOccurred, hasStartEvidence, isEmpleado])
   const employeeTasksForShift = useMemo(() => {
     if (!activeShiftId) return [] as OperationalTask[]
     return employeeTasks.filter(task => String(task.shift_id ?? "") === String(activeShiftId))
@@ -1671,6 +1696,9 @@ function ShiftsPageContent() {
       await loadEmployeeSelfServiceDashboard()
       await loadTasks()
       await loadSupervisorData()
+      if (isEmpleado) {
+        handleEmployeeView("cleaning")
+      }
     } catch (error: unknown) {
       if (startedShiftId) {
         await loadEmployeeData(1)
@@ -3072,12 +3100,26 @@ function ShiftsPageContent() {
       handleSupervisorBack()
       return
     }
-    if (isEmpleado && employeeView === "profile") {
+    if (isEmpleado && isEmployeeProfileStage) {
+      handleEmployeeView("start")
+      return
+    }
+    if (isEmpleado && isEmployeeStartEvidenceStage && !activeShift) {
       handleEmployeeView("start")
       return
     }
     router.back()
-  }, [canOperateSupervisor, employeeView, handleEmployeeView, handleSupervisorBack, isEmpleado, router, supervisorScreen])
+  }, [
+    activeShift,
+    canOperateSupervisor,
+    handleEmployeeView,
+    handleSupervisorBack,
+    isEmpleado,
+    isEmployeeProfileStage,
+    isEmployeeStartEvidenceStage,
+    router,
+    supervisorScreen,
+  ])
 
   return (
     <ProtectedRoute>
@@ -3176,7 +3218,7 @@ function ShiftsPageContent() {
             {otpPanel}
             {isEmpleado && (
               <div className={`space-y-6 ${manrope.className}`}>
-                {isEmployeeStartView && !activeShift && (
+                {isEmployeeStartInfoStage && !activeShift && (
                   <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                     <div className="border-b border-slate-200 bg-white px-6 pb-4 pt-6">
                       <div className="flex items-center justify-between text-sm text-slate-500">
@@ -3200,16 +3242,16 @@ function ShiftsPageContent() {
                         </p>
                         <div className="mt-3 space-y-1 text-sm text-blue-100">
                           <p>
-                            📅{" "}
+                            🟢{" "}
                             {nextScheduledShift
-                              ? formatDateOnly(nextScheduledShift.scheduled_start)
-                              : t("Sin fecha", "No date")}
+                              ? `${t("Inicio", "Start")}: ${formatDateOnly(nextScheduledShift.scheduled_start)} · ${formatTimeOnly(nextScheduledShift.scheduled_start)}`
+                              : t("Inicio: sin fecha", "Start: no date")}
                           </p>
                           <p>
-                            ⏰{" "}
+                            🔵{" "}
                             {nextScheduledShift
-                              ? `${formatTimeOnly(nextScheduledShift.scheduled_start)} - ${formatTimeOnly(nextScheduledShift.scheduled_end)}`
-                              : t("Sin horario", "No schedule")}
+                              ? `${t("Fin", "End")}: ${formatDateOnly(nextScheduledShift.scheduled_end)} · ${formatTimeOnly(nextScheduledShift.scheduled_end)}`
+                              : t("Fin: sin horario", "End: no schedule")}
                           </p>
                           <p>
                             📍{" "}
@@ -3324,131 +3366,17 @@ function ShiftsPageContent() {
                             )}
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <p className="text-xs uppercase tracking-wider text-slate-500">
-                                  {t("Paso 1 de 4", "Step 1 of 4")}
-                                </p>
-                                <p className="text-lg font-semibold text-slate-900">
-                                  {t("Fotos de ingreso (antes)", "Entry photos (before)")}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {t(
-                                    "Toma varias fotos del antes. Luego repetirás las mismas en la salida.",
-                                    "Take multiple before photos. You will repeat the same shots at the end."
-                                  )}
-                                </p>
-                              </div>
-                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                                {startPhotoCaptures.length} {t("fotos", "photos")}
-                              </span>
-                            </div>
-
-                            <div className="mt-4 space-y-3">
-                              <label className="text-xs font-medium text-slate-600">
-                                {t("Area", "Area")}
-                              </label>
-                              <select
-                                value={startAreaKey}
-                                onChange={event => {
-                                  const value = event.target.value
-                                  setStartAreaKey(value)
-                                  setStartSubareaKey("")
-                                  if (value !== "otro") setStartAreaDetail("")
-                                }}
-                                className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
-                              >
-                                <option value="">{t("Selecciona un area", "Select an area")}</option>
-                                {shiftAreaOptions.map(option => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                              {startAreaKey === "otro" && (
-                                <input
-                                  value={startAreaDetail}
-                                  onChange={event => setStartAreaDetail(event.target.value)}
-                                  className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
-                                  placeholder={t("Describe el area", "Describe the area")}
-                                />
-                              )}
-                              {startAreaKey && startAreaKey !== "otro" && (
-                                <select
-                                  value={startSubareaKey}
-                                  onChange={event => setStartSubareaKey(event.target.value)}
-                                  className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
-                                >
-                                  <option value="">{t("Selecciona una subarea", "Select a subarea")}</option>
-                                  {(subareaOptionsByArea.get(startAreaKey) ?? []).map(option => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
-                              <p className="text-xs text-slate-500">
-                                {t("Toca la camara para agregar otra foto.", "Tap the camera to add another photo.")}
-                              </p>
-                              <CameraCapture onCapture={handleCaptureStartPhoto} overlayLines={startOverlayLines} />
-
-                              <div className="flex gap-2 overflow-x-auto pb-2">
-                                {startPhotoCaptures.map(item => (
-                                  <div
-                                    key={item.id}
-                                    className="relative flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-emerald-500 text-[10px] font-semibold text-white"
-                                  >
-                                    <span>✓</span>
-                                    <span className="px-1 text-center">{getAreaLabel(item.areaKey, item.areaDetail, item.subareaKey)}</span>
-                                    <button
-                                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] text-emerald-600 shadow"
-                                      onClick={() => handleRemoveStartPhoto(item.id)}
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                                ))}
-                                <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-400">
-                                  +
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                            <p className="text-xs font-semibold text-slate-600">
-                              {t("Observacion inicial (opcional)", "Initial observation (optional)")}
-                            </p>
-                            <textarea
-                              rows={3}
-                              value={startObservation}
-                              onChange={event => setStartObservation(event.target.value)}
-                              className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                              placeholder={t("Escribe una nota si es necesario.", "Write a note if needed.")}
-                            />
-                      </div>
                     </div>
 
                     <div className="space-y-3 px-6 pb-6">
                       <Button
-                        onClick={() => void handleStart(isSupervisora ? expectedRestaurantId : undefined)}
-                        disabled={!canSubmit}
+                        onClick={() => handleEmployeeView("start-evidence")}
                         variant="primary"
                         fullWidth
                         className="border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500"
                       >
-                        {processing ? t("Almacenando datos...", "Saving data...") : t("REGISTRAR INICIO", "REGISTER START")}
+                        {t("Iniciar turno", "Start shift")}
                       </Button>
-
-                      {submitBlockers.length > 0 && (
-                        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
-                          {submitBlockers.map(item => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      )}
-
                       <Button
                         fullWidth
                         variant="secondary"
@@ -3469,7 +3397,141 @@ function ShiftsPageContent() {
                   </div>
                 )}
 
-                {isEmployeeProfileView && !activeShift && (
+                {isEmployeeStartEvidenceStage && !activeShift && (
+                  <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-200 bg-white px-6 pb-4 pt-6">
+                      <div className="flex items-center justify-between text-sm text-slate-500">
+                        <button
+                          className="text-lg font-semibold text-slate-500"
+                          onClick={() => handleEmployeeView("start")}
+                        >
+                          ←
+                        </button>
+                        <span className="text-base font-semibold text-slate-900">
+                          {t("Fotos de ingreso", "Entry photos")}
+                        </span>
+                        <span className="text-sm font-semibold text-blue-600">{t("Paso 1 de 4", "Step 1 of 4")}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6 px-6 py-5">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wider text-slate-500">
+                              {t("Antes de limpiar", "Before cleaning")}
+                            </p>
+                            <p className="text-lg font-semibold text-slate-900">
+                              {t("Fotos de ingreso (antes)", "Entry photos (before)")}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {t(
+                                "Toma varias fotos del antes. Luego repetirás las mismas en la salida.",
+                                "Take multiple before photos. You will repeat the same shots at the end."
+                              )}
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            {startPhotoCaptures.length} {t("fotos", "photos")}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 space-y-3">
+                          <label className="text-xs font-medium text-slate-600">
+                            {t("Area", "Area")}
+                          </label>
+                          <select
+                            value={startAreaKey}
+                            onChange={event => {
+                              const value = event.target.value
+                              setStartAreaKey(value)
+                              setStartSubareaKey("")
+                              if (value !== "otro") setStartAreaDetail("")
+                            }}
+                            className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
+                          >
+                            <option value="">{t("Selecciona un area", "Select an area")}</option>
+                            {shiftAreaOptions.map(option => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {startAreaKey === "otro" && (
+                            <input
+                              value={startAreaDetail}
+                              onChange={event => setStartAreaDetail(event.target.value)}
+                              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
+                              placeholder={t("Describe el area", "Describe the area")}
+                            />
+                          )}
+                          {startAreaKey && startAreaKey !== "otro" && (
+                            <select
+                              value={startSubareaKey}
+                              onChange={event => setStartSubareaKey(event.target.value)}
+                              className="w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-500"
+                            >
+                              <option value="">{t("Selecciona una subarea", "Select a subarea")}</option>
+                              {(subareaOptionsByArea.get(startAreaKey) ?? []).map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <p className="text-xs text-slate-500">
+                            {t("Toca la camara para agregar otra foto.", "Tap the camera to add another photo.")}
+                          </p>
+                          <CameraCapture onCapture={handleCaptureStartPhoto} overlayLines={startOverlayLines} />
+
+                          <div className="flex gap-2 overflow-x-auto pb-2">
+                            {startPhotoCaptures.map(item => (
+                              <div
+                                key={item.id}
+                                className="relative flex h-16 w-16 flex-shrink-0 flex-col items-center justify-center rounded-2xl bg-emerald-500 text-[10px] font-semibold text-white"
+                              >
+                                <span>✓</span>
+                                <span className="px-1 text-center">{getAreaLabel(item.areaKey, item.areaDetail, item.subareaKey)}</span>
+                                <button
+                                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] text-emerald-600 shadow"
+                                  onClick={() => handleRemoveStartPhoto(item.id)}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-sm text-slate-400">
+                              +
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    <div className="space-y-3 px-6 pb-6">
+                      <Button
+                        onClick={() => void handleStart(isSupervisora ? expectedRestaurantId : undefined)}
+                        disabled={!canSubmit}
+                        variant="primary"
+                        fullWidth
+                        className="border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500"
+                      >
+                        {processing ? t("Almacenando datos...", "Saving data...") : t("REGISTRAR INICIO", "REGISTER START")}
+                      </Button>
+
+                      {submitBlockers.length > 0 && (
+                        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
+                          {submitBlockers.map(item => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {isEmployeeProfileStage && !activeShift && (
                   <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                     <div className="bg-gradient-to-br from-blue-600 to-blue-700 px-6 py-6 text-white">
                       <p className="text-xl font-semibold">
@@ -3483,7 +3545,7 @@ function ShiftsPageContent() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 px-6 py-5">
-                      <Button variant="primary" onClick={() => handleEmployeeView("start")}>
+                      <Button variant="primary" onClick={() => handleEmployeeView("start-evidence")}>
                         {t("Iniciar turno", "Start shift")}
                       </Button>
                       <Button variant="ghost" onClick={() => void logout()}>
@@ -3493,7 +3555,7 @@ function ShiftsPageContent() {
                   </div>
                 )}
 
-                {isEmpleado && isEmployeeProfileView && (
+                {isEmployeeProfileStage && (
                   <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -3532,9 +3594,9 @@ function ShiftsPageContent() {
                   </div>
                 )}
 
-                {loadingData ? <Skeleton className="h-24" /> : null}
+                {isEmployeeProfileStage && loadingData ? <Skeleton className="h-24" /> : null}
 
-                {activeShift && (
+                {isEmployeeEndStage && activeShift && (
                   <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
@@ -3549,7 +3611,7 @@ function ShiftsPageContent() {
                   </div>
                 )}
 
-                {activeShift && !hasStartEvidence && (
+                {isEmployeeStartEvidenceStage && activeShift && !hasStartEvidence && (
                   <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
                     <p className="text-base font-semibold">
                       {t("Evidencia de inicio pendiente", "Start evidence pending")}
@@ -3641,7 +3703,7 @@ function ShiftsPageContent() {
                   </div>
                 )}
 
-                {activeShift && hasStartEvidence && cleaningMode && !endEvidenceUploaded && (
+                {isEmployeeCleaningStage && (
                   <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-sky-500 to-blue-700 px-6 py-8 text-white shadow-lg">
                     <div className="text-center">
                       <div className="text-5xl">🧽✨🧹</div>
@@ -3654,9 +3716,10 @@ function ShiftsPageContent() {
                       <Button
                         variant="secondary"
                         fullWidth
-                        className="border-white text-sky-700"
+                        className="h-16 border-white text-base font-bold text-sky-700"
                         onClick={() => {
                           setCleaningMode(false)
+                          handleEmployeeView("end")
                           const element = document.getElementById("shift-end")
                           if (element) element.scrollIntoView({ behavior: "smooth", block: "start" })
                         }}
@@ -3665,12 +3728,12 @@ function ShiftsPageContent() {
                       </Button>
                     </div>
                     <div className="mt-6 rounded-2xl bg-white/20 px-4 py-3 text-xs text-sky-50">
-                      {t("Mantén la app abierta mientras trabajas.", "Keep the app open while working.")}
+                      {t("No cierres la app mientras limpias.", "Do not close the app while cleaning.")}
                     </div>
                   </div>
                 )}
 
-                {activeShift && hasStartEvidence && (!cleaningMode || endEvidenceUploaded) && (
+                {isEmployeeEndStage && (
                   <div id="shift-end" className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
                     <div className="border-b border-slate-200 bg-white px-6 pb-4 pt-6">
                       <div className="flex items-center justify-between text-sm text-slate-500">
@@ -3686,15 +3749,6 @@ function ShiftsPageContent() {
                     </div>
 
                     <div className="space-y-6 px-6 py-5">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <p className="text-xs font-semibold text-slate-600">
-                          {t("Ubicacion de salida", "End location")}
-                        </p>
-                        <div className="mt-2">
-                          <GPSGuard onLocation={setCoords} />
-                        </div>
-                      </div>
-
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
@@ -3716,6 +3770,15 @@ function ShiftsPageContent() {
                           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                             {endPhotoCaptures.length} {t("fotos", "photos")}
                           </span>
+                        </div>
+
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-semibold text-slate-600">
+                            {t("Ubicacion de salida", "End location")}
+                          </p>
+                          <div className="mt-2">
+                            <GPSGuard onLocation={setCoords} />
+                          </div>
                         </div>
 
                         <div className="mt-4 space-y-3">
@@ -3826,73 +3889,6 @@ function ShiftsPageContent() {
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
-                        <p className="font-semibold text-slate-800">{t("Checklist de validacion de salida", "End validation checklist")}</p>
-                        <div className="mt-2 space-y-2">
-                          <div>
-                            <p className="text-xs text-slate-600">{t("Ocurrieron incidentes o eventos relevantes durante el turno?", "Did incidents or relevant events occur during the shift?")}</p>
-                            <div className="mt-1 flex gap-4">
-                              <label className="flex items-center gap-2">
-                                <input type="radio" name="end-incidents" checked={endIncidentsOccurred === true} onChange={() => setEndIncidentsOccurred(true)} />
-                                {t("Si", "Yes")}
-                              </label>
-                              <label className="flex items-center gap-2">
-                                <input type="radio" name="end-incidents" checked={endIncidentsOccurred === false} onChange={() => setEndIncidentsOccurred(false)} />
-                                {t("No", "No")}
-                              </label>
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-600">{t("Entregaste el area y tareas pendientes a la operacion?", "Did you deliver the area and pending tasks to operation?")}</p>
-                            <div className="mt-1 flex gap-4">
-                              <label className="flex items-center gap-2">
-                                <input type="radio" name="end-delivery" checked={endAreaDelivered === true} onChange={() => setEndAreaDelivered(true)} />
-                                {t("Si", "Yes")}
-                              </label>
-                              <label className="flex items-center gap-2">
-                                <input type="radio" name="end-delivery" checked={endAreaDelivered === false} onChange={() => setEndAreaDelivered(false)} />
-                                {t("No", "No")}
-                              </label>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
-                        <p className="font-medium text-slate-800">
-                          {t("Finalizaste el turno en buenas condiciones?", "Did you finish the shift in good condition?")}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-4">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="end-fit"
-                              checked={endFitForWork === true}
-                              onChange={() => setEndFitForWork(true)}
-                            />
-                            {t("Si", "Yes")}
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="end-fit"
-                              checked={endFitForWork === false}
-                              onChange={() => setEndFitForWork(false)}
-                            />
-                            {t("No", "No")}
-                          </label>
-                        </div>
-                        {endFitForWork === false && (
-                          <textarea
-                            rows={2}
-                            value={endHealthDeclaration}
-                            onChange={event => setEndHealthDeclaration(event.target.value)}
-                            className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                            placeholder={t("Describe condicion de salud o incidente.", "Describe health condition or incident.")}
-                          />
-                        )}
-                      </div>
-
                       {earlyEndReasonRequired && (
                         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm">
                           <p className="font-medium text-amber-900">
@@ -3989,7 +3985,7 @@ function ShiftsPageContent() {
                   </div>
                 )}
 
-                {activeShift && pendingEmployeeTasks.length > 0 && (
+                {isEmployeeEndStage && activeShift && pendingEmployeeTasks.length > 0 && (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                     <p className="font-semibold">
                       {t("Alerta operativa: tienes", "Operational alert: you have")} {pendingEmployeeTasks.length} {t("tarea(s) asignadas por supervision.", "task(s) assigned by supervisor.")}
@@ -4523,7 +4519,7 @@ function ShiftsPageContent() {
             </Card>
           )}
 
-            {isEmpleado && activeShift && (
+            {isEmpleado && activeShift && isEmployeeEndStage && (
               <Card title={t("Registrar incidente", "Register incident")}>
                 <div className="space-y-2">
                   <div className="flex gap-4 text-sm">
@@ -4566,7 +4562,7 @@ function ShiftsPageContent() {
               </Card>
             )}
 
-            {isEmpleado && activeShift && (
+            {isEmpleado && activeShift && isEmployeeEndStage && (
               <Card title={t("Tareas asignadas", "Assigned tasks")}>
               {loadingTasks ? (
                 <Skeleton className="h-24" />
@@ -4738,7 +4734,7 @@ function ShiftsPageContent() {
               </Card>
             )}
 
-            {isEmpleado && isEmployeeProfileView && !activeShift && (
+            {isEmployeeProfileStage && !activeShift && (
               <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -4778,7 +4774,7 @@ function ShiftsPageContent() {
               </div>
             )}
 
-            {isEmpleado && isEmployeeProfileView && (
+            {isEmployeeProfileStage && (
               <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                   {t("Historial de turnos", "Shift history")}
@@ -4881,7 +4877,7 @@ function ShiftsPageContent() {
               </div>
             )}
 
-            {isEmpleado && isEmployeeProfileView && (
+            {isEmployeeProfileStage && (
               <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                   {t("Turnos programados", "Scheduled shifts")}

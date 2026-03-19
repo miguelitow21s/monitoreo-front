@@ -73,7 +73,7 @@ export default function DashboardPage() {
                     onClick={() => router.push("/shifts?view=profile")}
                   >
                     <span className="text-2xl">👤</span>
-                    {t("Ver mi perfil", "View profile")}
+                    {t("Ver perfil", "View profile")}
                   </Button>
 
                   <Button

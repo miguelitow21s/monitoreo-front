@@ -24,7 +24,7 @@ export default function LoginPage() {
   const t = (es: string, en: string) => (language === "en" ? en : es)
 
   const [email, setEmail] = useState("")
-  const [pin, setPin] = useState("")
+  const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -70,18 +70,12 @@ export default function LoginPage() {
       return
     }
 
-    const normalizedPin = pin.trim()
-    if (!/^\d{6}$/.test(normalizedPin)) {
-      setError(t("El PIN debe tener 6 digitos.", "PIN must be 6 digits."))
-      return
-    }
-
     setSubmitting(true)
     setBlockAutoRedirect(true)
 
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
-      password: normalizedPin,
+      password,
     })
 
     if (signInError) {
@@ -262,7 +256,7 @@ export default function LoginPage() {
 
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {t("PIN de 6 digitos", "6-digit PIN")}
+              {t("Contraseña", "Password")}
             </span>
           </div>
 
@@ -271,14 +265,11 @@ export default function LoginPage() {
             <input
               type={showPassword ? "text" : "password"}
               required
-              autoComplete="one-time-code"
-              placeholder={t("PIN de 6 digitos", "6-digit PIN")}
-              inputMode="numeric"
-              maxLength={6}
-              value={pin}
+              autoComplete="current-password"
+              placeholder={t("Contraseña", "Password")}
+              value={password}
               onChange={e => {
-                const next = e.target.value.replace(/\D/g, "").slice(0, 6)
-                setPin(next)
+                setPassword(e.target.value)
                 if (error) setError(null)
               }}
               className="w-full bg-transparent text-base text-slate-800 outline-none"
@@ -286,8 +277,8 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPassword(prev => !prev)}
-              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
-              title={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
+              aria-label={showPassword ? t("Ocultar contraseña", "Hide password") : t("Mostrar contraseña", "Show password")}
+              title={showPassword ? t("Ocultar contraseña", "Hide password") : t("Mostrar contraseña", "Show password")}
               className="absolute right-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
             >
               {showPassword ? (
