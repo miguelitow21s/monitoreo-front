@@ -4966,33 +4966,89 @@ function ShiftsPageContent() {
                         )}
                       </div>
                     )}
-                    <div className="space-y-2">
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("active")}>
-                        {t("Turnos activos", "Active shifts")} ({supervisorRows.length})
-                      </Button>
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("tasks")}>
-                        {t("Monitoreo de tareas", "Task monitoring")} ({supervisorTasks.length})
-                      </Button>
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("alerts")}>
-                        {t("Alertas", "Alerts")}
-                      </Button>
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("schedule")}>
-                        {t("Programar turno", "Schedule shift")}
-                      </Button>
-                      <Button className="w-full justify-between" variant="secondary" onClick={() => setSupervisorScreenWithHistory("scheduled")}>
-                        {t("Turnos programados", "Scheduled shifts")} ({supervisionScheduledShifts.length})
-                      </Button>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => setSupervisorScreenWithHistory("active")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                      >
+                        <span className="text-2xl">📌</span>
+                        <span>{t("Turnos activos", "Active shifts")}</span>
+                        <span className="text-xs font-medium text-slate-500">
+                          {supervisorRows.length} {t("turnos", "shifts")}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSupervisorScreenWithHistory("tasks")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                      >
+                        <span className="text-2xl">🧭</span>
+                        <span>{t("Monitoreo de tareas", "Task monitoring")}</span>
+                        <span className="text-xs font-medium text-slate-500">
+                          {supervisorTasks.length} {t("tareas", "tasks")}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSupervisorScreenWithHistory("alerts")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                      >
+                        <span className="text-2xl">⚠️</span>
+                        <span>{t("Alertas", "Alerts")}</span>
+                        <span className="text-xs font-medium text-slate-500">
+                          {overdueSupervisorTasks.length + pendingPresenceClosures.length} {t("pendientes", "pending")}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSupervisorScreenWithHistory("schedule")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                      >
+                        <span className="text-2xl">🗓️</span>
+                        <span>{t("Programar turno", "Schedule shift")}</span>
+                        <span className="text-xs font-medium text-slate-500">{t("Nuevo", "New")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSupervisorScreenWithHistory("scheduled")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                      >
+                        <span className="text-2xl">📋</span>
+                        <span>{t("Turnos programados", "Scheduled shifts")}</span>
+                        <span className="text-xs font-medium text-slate-500">
+                          {supervisionScheduledShifts.length} {t("activos", "active")}
+                        </span>
+                      </button>
                       {isSupervisora && (
                         <>
-                          <Button className="w-full justify-between" variant="secondary" onClick={() => router.push("/restaurants")}>
-                            {t("Restaurantes", "Restaurants")}
-                          </Button>
-                          <Button className="w-full justify-between" variant="secondary" onClick={() => router.push("/users")}>
-                            {t("Usuarios", "Users")}
-                          </Button>
-                          <Button className="w-full justify-between" variant="secondary" onClick={() => router.push("/reports")}>
-                            {t("Informes", "Reports")}
-                          </Button>
+                          <button
+                            type="button"
+                            onClick={() => router.push("/restaurants")}
+                            className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                          >
+                            <span className="text-2xl">🏬</span>
+                            <span>{t("Restaurantes", "Restaurants")}</span>
+                            <span className="text-xs font-medium text-slate-500">{t("Gestión", "Manage")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => router.push("/users")}
+                            className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                          >
+                            <span className="text-2xl">👥</span>
+                            <span>{t("Usuarios", "Users")}</span>
+                            <span className="text-xs font-medium text-slate-500">{t("Gestión", "Manage")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => router.push("/reports")}
+                            className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                          >
+                            <span className="text-2xl">📊</span>
+                            <span>{t("Informes", "Reports")}</span>
+                            <span className="text-xs font-medium text-slate-500">{t("Historial", "History")}</span>
+                          </button>
                         </>
                       )}
                     </div>

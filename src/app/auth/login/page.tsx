@@ -219,10 +219,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className={`flex min-h-screen items-start justify-center bg-gradient-to-br from-indigo-500 to-purple-600 px-3 pb-6 pt-6 sm:items-center sm:px-4 ${manrope.className}`}>
+    <div
+      className={`relative flex min-h-screen items-start justify-center overflow-hidden bg-gradient-to-br from-[#667eea] to-[#764ba2] px-3 pb-6 pt-6 sm:items-center sm:px-4 ${manrope.className}`}
+    >
+      <div className="pointer-events-none absolute inset-0 opacity-60">
+        <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.12)_1px,_transparent_1px)] bg-[length:56px_56px]" />
+      </div>
       <form
         onSubmit={handleLogin}
-        className="w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-5 shadow-2xl sm:p-7"
+        className="relative w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-5 shadow-2xl backdrop-blur sm:p-7"
       >
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -232,9 +237,11 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-6 text-center">
-          <div className="text-5xl">🧼✨</div>
-          <h1 className="mt-3 text-2xl font-extrabold text-slate-900">CLEAN CONTROL</h1>
-          <p className="mt-1 text-sm text-slate-500">{t("Control de Aseo Pro", "Cleaning Operations")}</p>
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 text-4xl text-white shadow-lg">
+            🧹
+          </div>
+          <h1 className="mt-4 text-2xl font-extrabold text-slate-900">WorkTrace</h1>
+          <p className="mt-1 text-sm text-slate-500">{t("Gestión Profesional de Limpieza", "Professional cleaning management")}</p>
         </div>
 
         <div className="mt-6 space-y-3">
@@ -301,7 +308,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+        <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs text-slate-700">
           <div className="flex items-start gap-2">
             <input
               id="accept-data-treatment"
@@ -315,8 +322,8 @@ export default function LoginPage() {
             />
             <label htmlFor="accept-data-treatment" className="leading-5 break-words text-[11px] sm:text-xs">
               {t(
-                "Autorizo el tratamiento de mis datos personales para control operativo y fines de auditoria legal.",
-                "I authorize personal data processing for operational control and legal audit purposes."
+                "Autorizo el uso de mis datos personales, ubicación GPS y cámara para fines de verificación de turnos laborales.",
+                "I authorize personal data, GPS location, and camera use for shift verification."
               )}
             </label>
           </div>

@@ -107,22 +107,44 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-4 px-6 py-6">
-                <Button
-                  fullWidth
-                  className="h-16 rounded-[24px] border-blue-600 bg-gradient-to-br from-blue-500 to-blue-600 text-lg font-extrabold text-white shadow-lg hover:from-blue-500 hover:to-blue-600"
-                  onClick={() => router.push("/shifts")}
-                >
-                  {t("VER TURNOS", "VIEW SHIFTS")}
-                </Button>
-
-                <Button
-                  fullWidth
-                  variant="secondary"
-                  className="h-14 rounded-2xl text-base"
-                  onClick={() => router.push("/reports")}
-                >
-                  {t("Ver reportes", "View reports")}
-                </Button>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/restaurants")}
+                    className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                  >
+                    <span className="text-2xl">🏬</span>
+                    <span>{t("Restaurantes", "Restaurants")}</span>
+                    <span className="text-xs font-medium text-slate-500">{t("Gestion", "Manage")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/users")}
+                    className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                  >
+                    <span className="text-2xl">👥</span>
+                    <span>{t("Usuarios", "Users")}</span>
+                    <span className="text-xs font-medium text-slate-500">{t("Gestion", "Manage")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/shifts")}
+                    className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                  >
+                    <span className="text-2xl">🗓️</span>
+                    <span>{t("Turnos", "Shifts")}</span>
+                    <span className="text-xs font-medium text-slate-500">{t("Monitoreo", "Monitoring")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/reports")}
+                    className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                  >
+                    <span className="text-2xl">📊</span>
+                    <span>{t("Reportes", "Reports")}</span>
+                    <span className="text-xs font-medium text-slate-500">{t("Historial", "History")}</span>
+                  </button>
+                </div>
 
                 <Button
                   fullWidth
@@ -150,22 +172,48 @@ export default function DashboardPage() {
               <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
             </div>
 
-            <div className="space-y-3 px-6 py-6">
-              <Button fullWidth className="h-16 rounded-2xl text-base" variant="secondary" onClick={() => router.push("/restaurants")}>
-                {t("Restaurantes", "Restaurants")}
-              </Button>
-              <Button fullWidth className="h-16 rounded-2xl text-base" variant="secondary" onClick={() => router.push("/users")}>
-                {t("Usuarios", "Users")}
-              </Button>
-              <Button fullWidth className="h-16 rounded-2xl text-base" variant="secondary" onClick={() => router.push("/reports")}>
-                {t("Reportes", "Reports")}
-              </Button>
-              <Button fullWidth className="h-16 rounded-2xl text-base" variant="secondary" onClick={() => router.push("/shifts")}>
-                {t("Turnos", "Shifts")}
-              </Button>
+            <div className="space-y-4 px-6 py-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => router.push("/restaurants")}
+                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                >
+                  <span className="text-2xl">🏬</span>
+                  <span>{t("Restaurantes", "Restaurants")}</span>
+                  <span className="text-xs font-medium text-slate-500">{t("Gestion", "Manage")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/users")}
+                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                >
+                  <span className="text-2xl">👥</span>
+                  <span>{t("Usuarios", "Users")}</span>
+                  <span className="text-xs font-medium text-slate-500">{t("Gestion", "Manage")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/reports")}
+                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                >
+                  <span className="text-2xl">📊</span>
+                  <span>{t("Reportes", "Reports")}</span>
+                  <span className="text-xs font-medium text-slate-500">{t("Historial", "History")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/shifts")}
+                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
+                >
+                  <span className="text-2xl">🗓️</span>
+                  <span>{t("Turnos", "Shifts")}</span>
+                  <span className="text-xs font-medium text-slate-500">{t("Monitoreo", "Monitoring")}</span>
+                </button>
+              </div>
               <Button
                 fullWidth
-                className="h-16 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50"
+                className="h-12 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50"
                 variant="ghost"
                 onClick={logout}
               >

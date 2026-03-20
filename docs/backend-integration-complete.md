@@ -18,6 +18,7 @@ Este documento consolida **todos los contratos, headers, métodos y flujos** que
 
 ## 1) Autenticación (Supabase)
 - Login: **email/usuario + contraseña**.
+- Contraseña: **PIN numérico de 6 dígitos** (input numérico en UI).
 - Registro eliminado desde login (usuarios los crea admin).
 - Reset de contraseña: flujo estándar de Supabase.
 
