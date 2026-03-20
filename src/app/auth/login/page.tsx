@@ -223,10 +223,7 @@ export default function LoginPage() {
   return (
     <div className={`login-container ${manrope.className}`}>
       <form onSubmit={handleLogin} className="login-box">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {t("Acceso seguro", "Secure access")}
-          </span>
+        <div className="flex justify-end">
           <LanguageSwitch />
         </div>
 
@@ -348,20 +345,6 @@ export default function LoginPage() {
           <Link href="/auth/forgot-password">{t("¿Olvidé mi contraseña?", "Forgot password?")}</Link>
         </div>
 
-        <div className="test-users">
-          <h4>{t("Usuarios de Prueba", "Test Users")}</h4>
-          <div className="mt-2 flex flex-col gap-2">
-            <div>
-              <code>empleado@worktrace.com</code> - {t("Clave", "PIN")}: <code>123456</code> ({t("Empleado", "Employee")})
-            </div>
-            <div>
-              <code>supervisor@worktrace.com</code> - {t("Clave", "PIN")}: <code>123456</code> ({t("Supervisor", "Supervisor")})
-            </div>
-            <div>
-              <code>super@worktrace.com</code> - {t("Clave", "PIN")}: <code>123456</code> ({t("Superusuario", "Superuser")})
-            </div>
-          </div>
-        </div>
       </form>
     </div>
   )

@@ -25,10 +25,6 @@ export default function LayoutShell({ children }: LayoutShellProps) {
     pathname.startsWith("/unauthorized") ||
     pathname.startsWith("/clean-control")
 
-  if (standalonePage) {
-    return <>{children}</>
-  }
-
   const employeeProfileActive =
     pathname.startsWith("/shifts") && searchParams?.get("view") === "profile"
   const employeeHomeActive = pathname === "/dashboard"
@@ -135,6 +131,10 @@ export default function LayoutShell({ children }: LayoutShellProps) {
     : isSupervisora
       ? "WorkTrace Supervisor"
       : "WorkTrace"
+
+  if (standalonePage) {
+    return <>{children}</>
+  }
 
   return (
     <div className="wt-app min-h-screen">
