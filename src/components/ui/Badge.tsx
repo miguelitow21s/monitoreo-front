@@ -9,11 +9,11 @@ type BadgeProps = {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-  neutral: "bg-slate-100 text-slate-700 border-slate-200",
-  success: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  warning: "bg-amber-50 text-amber-700 border-amber-200",
-  danger: "bg-rose-50 text-rose-700 border-rose-200",
-  info: "bg-blue-50 text-blue-700 border-blue-200",
+  neutral: "bg-slate-700/60 text-slate-100 border-white/10",
+  success: "bg-emerald-500/20 text-emerald-200 border-emerald-400/30",
+  warning: "bg-amber-500/20 text-amber-200 border-amber-400/30",
+  danger: "bg-rose-500/20 text-rose-200 border-rose-400/30",
+  info: "bg-sky-500/20 text-sky-200 border-sky-400/30",
 }
 
 export default function Badge({ children, variant = "neutral", className }: BadgeProps) {

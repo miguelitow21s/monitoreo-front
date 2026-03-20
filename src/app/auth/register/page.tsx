@@ -74,6 +74,14 @@ export default function RegisterPage() {
           )
         )
       }
+      if (!/^\d{6}$/.test(password)) {
+        throw new Error(
+          t(
+            "El PIN debe tener 6 digitos numericos.",
+            "PIN must be 6 numeric digits."
+          )
+        )
+      }
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -136,10 +144,13 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#667eea] to-[#764ba2] px-4">
+      <div className="pointer-events-none absolute inset-0 opacity-60">
+        <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.12)_1px,_transparent_1px)] bg-[length:56px_56px]" />
+      </div>
       <form
         onSubmit={handleRegister}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
+        className="relative w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-7 shadow-2xl backdrop-blur"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
           {t("Registro de empleado", "Employee registration")}
@@ -191,18 +202,20 @@ export default function RegisterPage() {
             <input
               type={showPassword ? "text" : "password"}
               required
-              minLength={8}
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]*"
               autoComplete="new-password"
-              placeholder={t("Contrasena (min 8)", "Password (min 8)")}
+              placeholder={t("PIN (6 digitos)", "PIN (6 digits)")}
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-11 text-sm text-slate-800 outline-none transition focus:border-slate-800"
             />
             <button
               type="button"
               onClick={() => setShowPassword(prev => !prev)}
-              aria-label={showPassword ? t("Ocultar contrasena", "Hide password") : t("Mostrar contrasena", "Show password")}
-              title={showPassword ? t("Ocultar contrasena", "Hide password") : t("Mostrar contrasena", "Show password")}
+              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
+              title={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
               className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
             >
               {showPassword ? (
@@ -228,7 +241,7 @@ export default function RegisterPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+          className="mt-5 w-full rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
         >
           {submitting ? t("Registrando...", "Creating account...") : t("Crear cuenta", "Create account")}
         </button>

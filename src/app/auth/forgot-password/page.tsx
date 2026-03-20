@@ -44,17 +44,20 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#667eea] to-[#764ba2] px-4">
+      <div className="pointer-events-none absolute inset-0 opacity-60">
+        <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.12)_1px,_transparent_1px)] bg-[length:56px_56px]" />
+      </div>
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
+        className="relative w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-7 shadow-2xl backdrop-blur"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
           {t("Recuperacion de acceso", "Access recovery")}
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">{t("Olvide mi contrasena", "Forgot my password")}</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">{t("Olvide mi PIN", "Forgot my PIN")}</h1>
         <p className="mt-2 text-sm text-slate-600">
-          {t("Te enviaremos un enlace para restablecerla.", "We will send you a reset link.")}
+          {t("Te enviaremos un enlace para restablecerlo.", "We will send you a reset link.")}
         </p>
 
         <div className="mt-6 space-y-3">
@@ -75,7 +78,7 @@ export default function ForgotPasswordPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+          className="mt-5 w-full rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
         >
           {submitting ? t("Enviando...", "Sending...") : t("Enviar enlace", "Send link")}
         </button>

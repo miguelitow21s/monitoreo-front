@@ -58,7 +58,7 @@ export default function ResetPasswordPage() {
 
         if (data.session) {
           window.history.replaceState(null, document.title, "/auth/reset-password")
-          setMessage(t("Enlace verificado. Puedes crear una nueva contrasena.", "Link verified. You can create a new password."))
+          setMessage(t("Enlace verificado. Puedes crear un nuevo PIN.", "Link verified. You can create a new PIN."))
         } else if (code || hasAccessToken) {
           setError(t("El enlace de recuperacion no es valido o expiro.", "Recovery link is invalid or expired."))
         }
@@ -86,13 +86,13 @@ export default function ResetPasswordPage() {
       return
     }
 
-    if (password.length < 8) {
-      setError(t("La contrasena debe tener al menos 8 caracteres.", "Password must be at least 8 characters long."))
+    if (!/^\d{6}$/.test(password)) {
+      setError(t("El PIN debe tener 6 digitos numericos.", "PIN must be 6 numeric digits."))
       return
     }
 
     if (password !== confirmPassword) {
-      setError(t("Las contrasenas no coinciden.", "Passwords do not match."))
+      setError(t("Los PIN no coinciden.", "PINs do not match."))
       return
     }
 
@@ -102,27 +102,30 @@ export default function ResetPasswordPage() {
       const { error: updateError } = await supabase.auth.updateUser({ password })
       if (updateError) throw updateError
 
-      setMessage(t("Contrasena actualizada. Redirigiendo a inicio de sesion...", "Password updated. Redirecting to sign in..."))
+      setMessage(t("PIN actualizado. Redirigiendo a inicio de sesion...", "PIN updated. Redirecting to sign in..."))
       setTimeout(() => router.replace("/auth/login"), 1200)
     } catch (err: unknown) {
-      setError(errorMessage(err, t("No se pudo actualizar la contrasena.", "Could not update password.")))
+      setError(errorMessage(err, t("No se pudo actualizar el PIN.", "Could not update PIN.")))
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#667eea] to-[#764ba2] px-4">
+      <div className="pointer-events-none absolute inset-0 opacity-60">
+        <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.12)_1px,_transparent_1px)] bg-[length:56px_56px]" />
+      </div>
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
+        className="relative w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-7 shadow-2xl backdrop-blur"
       >
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
           {t("Seguridad de cuenta", "Account security")}
         </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">{t("Restablecer contrasena", "Reset password")}</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">{t("Restablecer PIN", "Reset PIN")}</h1>
         <p className="mt-2 text-sm text-slate-600">
-          {t("Define una nueva contrasena para tu cuenta.", "Set a new password for your account.")}
+          {t("Define un nuevo PIN de 6 digitos.", "Set a new 6-digit PIN.")}
         </p>
 
         {checkingLink && (
@@ -136,11 +139,13 @@ export default function ResetPasswordPage() {
             <input
               type={showPassword ? "text" : "password"}
               required
-              minLength={8}
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]*"
               autoComplete="new-password"
-              placeholder={t("Nueva contrasena (min 8)", "New password (min 8)")}
+              placeholder={t("Nuevo PIN (6 digitos)", "New PIN (6 digits)")}
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
               disabled={checkingLink || !sessionReady}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
             />
@@ -157,11 +162,13 @@ export default function ResetPasswordPage() {
             <input
               type={showConfirmPassword ? "text" : "password"}
               required
-              minLength={8}
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]*"
               autoComplete="new-password"
-              placeholder={t("Confirmar nueva contrasena", "Confirm new password")}
+              placeholder={t("Confirmar PIN", "Confirm PIN")}
               value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
+              onChange={e => setConfirmPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
               disabled={checkingLink || !sessionReady}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
             />
@@ -182,9 +189,9 @@ export default function ResetPasswordPage() {
         <button
           type="submit"
           disabled={submitting || checkingLink || !sessionReady}
-          className="mt-5 w-full rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60"
+          className="mt-5 w-full rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
         >
-          {submitting ? t("Actualizando...", "Updating...") : t("Guardar contrasena", "Save password")}
+          {submitting ? t("Actualizando...", "Updating...") : t("Guardar PIN", "Save PIN")}
         </button>
 
         <div className="mt-4 text-right text-xs">

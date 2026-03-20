@@ -41,7 +41,7 @@ export default function Modal({ open, onClose, children, title }: ModalProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl outline-none"
+        className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-slate-800 p-6 text-slate-100 shadow-xl outline-none"
         onClick={e => e.stopPropagation()}
       >
         <h2 id={titleId} className="sr-only">
@@ -50,7 +50,7 @@ export default function Modal({ open, onClose, children, title }: ModalProps) {
         <button
           onClick={onClose}
           aria-label={t("Cerrar", "Close")}
-          className="absolute right-3 top-3 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+          className="absolute right-3 top-3 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-200 hover:bg-white/10"
         >
           {t("Cerrar", "Close")}
         </button>

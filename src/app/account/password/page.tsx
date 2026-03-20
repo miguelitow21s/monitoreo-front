@@ -42,13 +42,13 @@ export default function AccountPasswordPage() {
       return
     }
 
-    if (newPassword.length < 8) {
-      setError(t("La nueva contrasena debe tener al menos 8 caracteres.", "New password must be at least 8 characters long."))
+    if (!/^\d{6}$/.test(newPassword)) {
+      setError(t("El nuevo PIN debe tener 6 digitos numericos.", "New PIN must be 6 numeric digits."))
       return
     }
 
     if (newPassword !== confirmPassword) {
-      setError(t("La confirmacion no coincide con la nueva contrasena.", "Confirmation does not match new password."))
+      setError(t("La confirmacion no coincide con el nuevo PIN.", "Confirmation does not match new PIN."))
       return
     }
 
@@ -59,7 +59,7 @@ export default function AccountPasswordPage() {
         email: user.email,
         password: currentPassword,
       })
-      if (signInError) throw new Error(t("La contrasena actual es incorrecta.", "Current password is incorrect."))
+      if (signInError) throw new Error(t("El PIN actual es incorrecto.", "Current PIN is incorrect."))
 
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
       if (updateError) throw updateError
@@ -67,9 +67,9 @@ export default function AccountPasswordPage() {
       setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
-      setMessage(t("Contrasena actualizada correctamente.", "Password updated successfully."))
+      setMessage(t("PIN actualizado correctamente.", "PIN updated successfully."))
     } catch (err: unknown) {
-      setError(errorMessage(err, t("No se pudo actualizar la contrasena.", "Could not update password.")))
+      setError(errorMessage(err, t("No se pudo actualizar el PIN.", "Could not update PIN.")))
     } finally {
       setSubmitting(false)
     }
@@ -84,25 +84,28 @@ export default function AccountPasswordPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-100">
                 {t("Seguridad", "Security")}
               </p>
-              <h1 className="mt-2 text-2xl font-extrabold">{t("Cambiar contrasena", "Change password")}</h1>
+              <h1 className="mt-2 text-2xl font-extrabold">{t("Cambiar PIN", "Change PIN")}</h1>
               <p className="mt-1 text-sm text-emerald-100">
-                {t("Actualiza tu acceso y mantiene tu cuenta protegida.", "Update your access and keep your account protected.")}
+                {t("Actualiza tu PIN y mantén tu cuenta protegida.", "Update your PIN and keep your account protected.")}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 px-6 py-6">
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {t("Contrasena actual", "Current password")}
+                  {t("PIN actual", "Current PIN")}
                 </p>
                 <div className="relative rounded-2xl border-2 border-slate-200 bg-white px-3 py-2">
                   <input
                     type={showCurrentPassword ? "text" : "password"}
                     required
                     autoComplete="current-password"
-                    placeholder={t("Escribe tu contrasena actual", "Type your current password")}
+                    inputMode="numeric"
+                    maxLength={6}
+                    pattern="[0-9]*"
+                    placeholder={t("Escribe tu PIN actual", "Type your current PIN")}
                     value={currentPassword}
-                    onChange={e => setCurrentPassword(e.target.value)}
+                    onChange={e => setCurrentPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     className="w-full bg-transparent text-sm text-slate-800 outline-none"
                   />
                   <button
@@ -117,17 +120,19 @@ export default function AccountPasswordPage() {
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {t("Nueva contrasena", "New password")}
+                  {t("Nuevo PIN", "New PIN")}
                 </p>
                 <div className="relative rounded-2xl border-2 border-slate-200 bg-white px-3 py-2">
                   <input
                     type={showNewPassword ? "text" : "password"}
                     required
-                    minLength={8}
                     autoComplete="new-password"
-                    placeholder={t("Minimo 8 caracteres", "At least 8 characters")}
+                    inputMode="numeric"
+                    maxLength={6}
+                    pattern="[0-9]*"
+                    placeholder={t("PIN de 6 digitos", "6-digit PIN")}
                     value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
+                    onChange={e => setNewPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     className="w-full bg-transparent text-sm text-slate-800 outline-none"
                   />
                   <button
@@ -148,11 +153,13 @@ export default function AccountPasswordPage() {
                   <input
                     type={showConfirmPassword ? "text" : "password"}
                     required
-                    minLength={8}
                     autoComplete="new-password"
-                    placeholder={t("Repite la nueva contrasena", "Repeat the new password")}
+                    inputMode="numeric"
+                    maxLength={6}
+                    pattern="[0-9]*"
+                    placeholder={t("Repite el PIN", "Repeat the PIN")}
                     value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
+                    onChange={e => setConfirmPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     className="w-full bg-transparent text-sm text-slate-800 outline-none"
                   />
                   <button
@@ -183,15 +190,15 @@ export default function AccountPasswordPage() {
                 fullWidth
                 className="h-12 rounded-2xl text-sm"
               >
-                {submitting ? t("Guardando...", "Saving...") : t("Guardar nueva contrasena", "Save new password")}
+                {submitting ? t("Guardando...", "Saving...") : t("Guardar nuevo PIN", "Save new PIN")}
               </Button>
             </form>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-xs text-slate-600">
             {t(
-              "Sugerencia: usa una contrasena unica con letras y numeros para mayor seguridad.",
-              "Tip: use a unique password with letters and numbers for better security."
+              "Sugerencia: no compartas tu PIN y cambialo periodicamente.",
+              "Tip: do not share your PIN and update it periodically."
             )}
           </div>
         </div>
