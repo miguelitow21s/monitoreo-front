@@ -1076,7 +1076,7 @@ select:focus {
 
 .input-wrapper .input-icon {
   position: absolute;
-  left: 15px;
+  left: 18px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--gray);
@@ -1110,8 +1110,13 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
 }
 
+.input-wrapper input.form-control {
+  padding-left: 52px;
+  line-height: 1.25;
+}
+
 .input-wrapper .form-control {
-  padding-left: 45px;
+  padding-left: 52px;
 }
 
 .btn {
