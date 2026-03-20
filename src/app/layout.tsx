@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 import "./globals.css"
 
 import ClientProviders from "@/components/ClientProviders"
@@ -18,7 +19,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning className="min-h-screen bg-slate-950 text-slate-100">
         <ClientProviders>
-          <LayoutShell>{children}</LayoutShell>
+          <Suspense fallback={null}>
+            <LayoutShell>{children}</LayoutShell>
+          </Suspense>
         </ClientProviders>
       </body>
     </html>
