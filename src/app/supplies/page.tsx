@@ -93,31 +93,6 @@ export default function SuppliesPage() {
   const { showToast } = useToast()
   const suppliesDisabled = true
 
-  if (suppliesDisabled) {
-    return (
-      <ProtectedRoute>
-        <section className="space-y-4">
-          <div className="page-title">{t("Insumos", "Supplies")}</div>
-          <div className="card text-center">
-            <div className="card-header">
-              <div>
-                <div className="card-title">{t("Módulo de insumos desactivado", "Supplies module disabled")}</div>
-                <div className="card-subtitle">
-                  {t(
-                    "Este módulo no se usará por ahora. Volveremos a activarlo cuando sea necesario.",
-                    "This module is paused for now. We'll enable it again when needed."
-                  )}
-                </div>
-              </div>
-            </div>
-            <Button variant="primary" onClick={() => router.push("/dashboard")}>
-              {t("Volver al inicio", "Back to home")}
-            </Button>
-          </div>
-        </section>
-      </ProtectedRoute>
-    )
-  }
   const [loading, setLoading] = useState(true)
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [supplies, setSupplies] = useState<Supply[]>([])
@@ -138,8 +113,8 @@ export default function SuppliesPage() {
   const [periodFrom, setPeriodFrom] = useState(defaultPeriodStart)
   const [periodTo, setPeriodTo] = useState(defaultPeriodEnd)
   const [analysisRestaurantId, setAnalysisRestaurantId] = useState("")
-  const canCreateSupply = isSuperAdmin
-  const canAccessSupplies = isSuperAdmin || isSupervisora
+  const canCreateSupply = !suppliesDisabled && isSuperAdmin
+  const canAccessSupplies = !suppliesDisabled && (isSuperAdmin || isSupervisora)
 
   const loadData = useCallback(async () => {
     if (!canAccessSupplies) return
@@ -574,6 +549,32 @@ export default function SuppliesPage() {
     } catch (error: unknown) {
       showToast("error", extractError(error, t("No se pudo registrar la entrega.", "Could not register delivery.")))
     }
+  }
+
+  if (suppliesDisabled) {
+    return (
+      <ProtectedRoute>
+        <section className="space-y-4">
+          <div className="page-title">{t("Insumos", "Supplies")}</div>
+          <div className="card text-center">
+            <div className="card-header">
+              <div>
+                <div className="card-title">{t("Módulo de insumos desactivado", "Supplies module disabled")}</div>
+                <div className="card-subtitle">
+                  {t(
+                    "Este módulo no se usará por ahora. Volveremos a activarlo cuando sea necesario.",
+                    "This module is paused for now. We'll enable it again when needed."
+                  )}
+                </div>
+              </div>
+            </div>
+            <Button variant="primary" onClick={() => router.push("/dashboard")}>
+              {t("Volver al inicio", "Back to home")}
+            </Button>
+          </div>
+        </section>
+      </ProtectedRoute>
+    )
   }
 
   return (

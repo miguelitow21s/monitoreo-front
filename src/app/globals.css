@@ -1071,6 +1071,7 @@ select:focus {
 
 .input-wrapper {
   position: relative;
+  width: 100%;
 }
 
 .input-wrapper .input-icon {
@@ -1079,6 +1080,17 @@ select:focus {
   top: 50%;
   transform: translateY(-50%);
   color: var(--gray);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
+
+.input-wrapper .input-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .form-control {

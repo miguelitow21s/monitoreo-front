@@ -101,7 +101,7 @@ export default function CleanControlPage() {
                 <div className={styles.shiftInfo}>
                   <div className={styles.infoRow}>📅 Miércoles 15 de Marzo</div>
                   <div className={styles.infoRow}>⏰ 08:00 - 12:00 (4 horas)</div>
-                  <div className={styles.infoRow}>📍 Restaurante "El Buen Sabor"</div>
+                  <div className={styles.infoRow}>📍 Restaurante &quot;El Buen Sabor&quot;</div>
                 </div>
               </div>
 
@@ -211,7 +211,7 @@ export default function CleanControlPage() {
           <div className={`${styles.screen} ${styles.cleaningScreen}`}>
             <div className={styles.cleaningEmoji}>🧽✨🧹</div>
             <div className={styles.cleaningTitle}>¡LIMPIANDO!</div>
-            <div className={styles.cleaningLocation}>"El Buen Sabor"</div>
+            <div className={styles.cleaningLocation}>&quot;El Buen Sabor&quot;</div>
 
             <div className={styles.timerDisplay}>01:23:45</div>
             <div className={styles.timerLabel}>Tiempo transcurrido</div>
@@ -301,7 +301,7 @@ export default function CleanControlPage() {
             </div>
 
             <div className={styles.successDetails}>
-              <strong>"El Buen Sabor"</strong>
+              <strong>&quot;El Buen Sabor&quot;</strong>
               <br />
               08:00 - 12:15
               <br />

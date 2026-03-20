@@ -19,21 +19,8 @@ export default function DashboardPage() {
   const router = useRouter()
   const { t, formatDate, formatTime } = useI18n()
   const { loading: authLoading, user } = useAuth()
-  const { loading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
-  const [employeeDashboard, setEmployeeDashboard] = useState<EmployeeDashboardData | null>(null)
-  const [employeeLoading, setEmployeeLoading] = useState(false)
-
-  if (loading || authLoading) {
-    return (
-      <ProtectedRoute>
-        <section className="flex min-h-[50vh] items-center justify-center px-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-            {t("Cargando...", "Loading...")}
-          </div>
-        </section>
-      </ProtectedRoute>
-    )
-  }
+  const { loading, isEmpleado, isSuperAdmin } = useRole()
+  const [employeeDashboard, setEmployeeDashboard] = useState<EmployeeDashboardData | null | undefined>(undefined)
 
   const displayName = (() => {
     const metadata = user?.user_metadata as { full_name?: string; name?: string } | undefined
@@ -43,16 +30,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isEmpleado || authLoading || loading) return
     let mounted = true
-    setEmployeeLoading(true)
     getEmployeeSelfDashboard()
       .then(data => {
         if (mounted) setEmployeeDashboard(data)
       })
       .catch(() => {
         if (mounted) setEmployeeDashboard(null)
-      })
-      .finally(() => {
-        if (mounted) setEmployeeLoading(false)
       })
     return () => {
       mounted = false
@@ -62,16 +45,10 @@ export default function DashboardPage() {
   const nextShift = useMemo(() => {
     const shifts = employeeDashboard?.scheduled_shifts ?? []
     if (shifts.length === 0) return null
-    const now = Date.now()
     const sorted = [...shifts].sort(
       (a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
     )
-    return (
-      sorted.find(shift => {
-        const end = new Date(shift.scheduled_end).getTime()
-        return Number.isFinite(end) && end >= now
-      }) ?? sorted[0]
-    )
+    return sorted[0] ?? null
   }, [employeeDashboard])
 
   const restaurantLabel = useMemo(() => {
@@ -104,6 +81,7 @@ export default function DashboardPage() {
     () => employeeDashboard?.pending_tasks_preview ?? [],
     [employeeDashboard]
   )
+  const employeeLoading = isEmpleado && employeeDashboard === undefined
   const showSpecialTasksCard = employeeLoading || pendingSpecialTasks.length > 0
 
   const adminQuickActions = useMemo(
@@ -139,6 +117,18 @@ export default function DashboardPage() {
     ],
     [t]
   )
+
+  if (loading || authLoading) {
+    return (
+      <ProtectedRoute>
+        <section className="flex min-h-[50vh] items-center justify-center px-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+            {t("Cargando...", "Loading...")}
+          </div>
+        </section>
+      </ProtectedRoute>
+    )
+  }
 
   if (!isSuperAdmin) {
     if (isEmpleado) {
