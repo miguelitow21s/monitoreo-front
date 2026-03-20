@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Manrope } from "next/font/google"
 
@@ -7,7 +8,7 @@ import ProtectedRoute from "@/components/ProtectedRoute"
 import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
-import Button from "@/components/ui/Button"
+import { EmployeeDashboardData, getEmployeeSelfDashboard } from "@/services/employeeSelfService.service"
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -16,9 +17,11 @@ const manrope = Manrope({
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { t } = useI18n()
-  const { loading: authLoading, user, logout } = useAuth()
+  const { t, formatDate, formatTime } = useI18n()
+  const { loading: authLoading, user } = useAuth()
   const { loading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
+  const [employeeDashboard, setEmployeeDashboard] = useState<EmployeeDashboardData | null>(null)
+  const [employeeLoading, setEmployeeLoading] = useState(false)
 
   if (loading || authLoading) {
     return (
@@ -37,56 +40,181 @@ export default function DashboardPage() {
     return metadata?.full_name ?? metadata?.name ?? user?.email?.split("@")[0] ?? t("usuario", "user")
   })()
 
+  useEffect(() => {
+    if (!isEmpleado || authLoading || loading) return
+    let mounted = true
+    setEmployeeLoading(true)
+    getEmployeeSelfDashboard()
+      .then(data => {
+        if (mounted) setEmployeeDashboard(data)
+      })
+      .catch(() => {
+        if (mounted) setEmployeeDashboard(null)
+      })
+      .finally(() => {
+        if (mounted) setEmployeeLoading(false)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [authLoading, isEmpleado, loading])
+
+  const nextShift = useMemo(() => {
+    const shifts = employeeDashboard?.scheduled_shifts ?? []
+    if (shifts.length === 0) return null
+    const now = Date.now()
+    const sorted = [...shifts].sort(
+      (a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
+    )
+    return (
+      sorted.find(shift => {
+        const end = new Date(shift.scheduled_end).getTime()
+        return Number.isFinite(end) && end >= now
+      }) ?? sorted[0]
+    )
+  }, [employeeDashboard])
+
+  const restaurantLabel = useMemo(() => {
+    const restaurants = employeeDashboard?.assigned_restaurants ?? []
+    const map = new Map(restaurants.map(item => [item.id, item.name ?? `#${item.id}`]))
+    if (nextShift?.restaurant_id) {
+      return map.get(nextShift.restaurant_id) ?? `#${nextShift.restaurant_id}`
+    }
+    return restaurants[0]?.name ?? t("Sin restaurante", "No restaurant")
+  }, [employeeDashboard, nextShift, t])
+
+  const shiftHours = useMemo(() => {
+    if (!nextShift) return t("Sin turno programado", "No scheduled shift")
+    const start = formatTime(nextShift.scheduled_start, { hour: "2-digit", minute: "2-digit" })
+    const end = formatTime(nextShift.scheduled_end, { hour: "2-digit", minute: "2-digit" })
+    return `${start} - ${end}`
+  }, [formatTime, nextShift, t])
+
+  const shiftDate = useMemo(() => {
+    if (!nextShift) return t("Sin fecha", "No date")
+    return formatDate(nextShift.scheduled_start, {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  }, [formatDate, nextShift, t])
+
+  const pendingSpecialTasks = useMemo(
+    () => employeeDashboard?.pending_tasks_preview ?? [],
+    [employeeDashboard]
+  )
+  const showSpecialTasksCard = employeeLoading || pendingSpecialTasks.length > 0
+
+  const adminQuickActions = useMemo(
+    () => [
+      {
+        key: "restaurants",
+        label: t("Restaurantes", "Restaurants"),
+        helper: t("Gestion", "Manage"),
+        icon: "🏬",
+        href: "/restaurants",
+      },
+      {
+        key: "users",
+        label: t("Usuarios", "Users"),
+        helper: t("Gestion", "Manage"),
+        icon: "👥",
+        href: "/users",
+      },
+      {
+        key: "shifts",
+        label: t("Turnos", "Shifts"),
+        helper: t("Monitoreo", "Monitoring"),
+        icon: "🗓️",
+        href: "/shifts",
+      },
+      {
+        key: "reports",
+        label: t("Informes", "Reports"),
+        helper: t("Historial", "History"),
+        icon: "📊",
+        href: "/reports",
+      },
+    ],
+    [t]
+  )
+
   if (!isSuperAdmin) {
     if (isEmpleado) {
       return (
         <ProtectedRoute>
-          <section className={`flex min-h-[70vh] items-start justify-center px-3 ${manrope.className}`}>
-            <div className="w-full max-w-sm space-y-4">
-                <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-                <div className="bg-gradient-to-br from-blue-600 to-blue-700 px-6 py-6 text-white">
-                  <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
-                  <div className="mt-2 flex items-center gap-2 text-sm text-blue-100">
-                    <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
-                    <span>{t("En linea • Listo para trabajar", "Online • Ready to work")}</span>
-                  </div>
+          <section className={`space-y-5 ${manrope.className}`}>
+            <div className="welcome-banner">
+              <h2>{t("¡Hola", "Hello")}, {displayName}!</h2>
+              <p>{shiftDate}</p>
+            </div>
+
+            <div className="shift-info">
+              <div className="info-item">
+                <div className="info-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                    <path d="M3 9l9-6 9 6v11a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z" />
+                  </svg>
                 </div>
-
-                <div className="space-y-4 px-6 py-6">
-                  <Button
-                    fullWidth
-                    className="h-44 rounded-[28px] border-emerald-600 bg-gradient-to-br from-emerald-500 to-emerald-600 text-xl font-extrabold text-white shadow-lg hover:from-emerald-500 hover:to-emerald-600"
-                    onClick={() => router.push("/shifts?view=start")}
-                  >
-                    <span className="text-4xl">▶️</span>
-                    <span className="leading-tight text-center">
-                      {t("INICIAR", "START")}
-                      <br />
-                      {t("TURNO", "SHIFT")}
-                    </span>
-                  </Button>
-
-                  <Button
-                    fullWidth
-                    variant="secondary"
-                    className="h-16 rounded-2xl text-base"
-                    onClick={() => router.push("/shifts?view=profile")}
-                  >
-                    <span className="text-2xl">👤</span>
-                    {t("Ver perfil", "View profile")}
-                  </Button>
-
-                  <Button
-                    fullWidth
-                    variant="ghost"
-                    className="h-12 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50"
-                    onClick={logout}
-                  >
-                    <span>🚪</span>
-                    {t("Cerrar sesión", "Sign out")}
-                  </Button>
+                <div>
+                  <label>{t("Restaurante", "Restaurant")}</label>
+                  <span className="info-value">{restaurantLabel}</span>
                 </div>
               </div>
+              <div className="info-item">
+                <div className="info-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 3" />
+                  </svg>
+                </div>
+                <div>
+                  <label>{t("Horario", "Schedule")}</label>
+                  <span className="info-value">{shiftHours}</span>
+                </div>
+              </div>
+              <div className="info-item">
+                <div className="info-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                    <path d="M12 22s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                </div>
+                <div>
+                  <label>{t("Ubicación", "Location")}</label>
+                  <span className="info-value">
+                    {nextShift ? t("Restaurante asignado", "Assigned restaurant") : t("Sin turno", "No shift")}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {showSpecialTasksCard && (
+              <div className="task-card">
+                <h4>{t("Tarea especial asignada", "Special task assigned")}</h4>
+                {employeeLoading ? (
+                  <p>{t("Cargando...", "Loading...")}</p>
+                ) : (
+                  <div className="task-observations">
+                    {pendingSpecialTasks.length > 0 ? (
+                      <ul className="space-y-2">
+                        {pendingSpecialTasks.map(task => (
+                          <li key={task.id}>{task.title ?? t("Tarea asignada", "Assigned task")}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>{t("Sin tareas especiales pendientes.", "No special tasks pending.")}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="action-buttons">
+              <button className="btn-large btn-success" type="button" onClick={() => router.push("/shifts?view=start")}>
+                {t("Iniciar Turno", "Start shift")}
+              </button>
             </div>
           </section>
         </ProtectedRoute>
@@ -95,66 +223,41 @@ export default function DashboardPage() {
 
     return (
       <ProtectedRoute>
-        <section className={`flex min-h-[70vh] items-start justify-center px-3 ${manrope.className}`}>
-          <div className="w-full max-w-sm space-y-4">
-            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-              <div className="bg-gradient-to-br from-sky-600 to-blue-700 px-6 py-6 text-white">
-                <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
-                <div className="mt-2 flex items-center gap-2 text-sm text-blue-100">
-                  <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
-                  <span>{t("Supervision lista", "Supervision ready")}</span>
-                </div>
-              </div>
+        <section className={`space-y-5 ${manrope.className}`}>
+          <div className="page-title">{t("Panel de Control", "Dashboard")}</div>
 
-              <div className="space-y-4 px-6 py-6">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/restaurants")}
-                    className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                  >
-                    <span className="text-2xl">🏬</span>
-                    <span>{t("Restaurantes", "Restaurants")}</span>
-                    <span className="text-xs font-medium text-slate-500">{t("Gestion", "Manage")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/users")}
-                    className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                  >
-                    <span className="text-2xl">👥</span>
-                    <span>{t("Usuarios", "Users")}</span>
-                    <span className="text-xs font-medium text-slate-500">{t("Gestion", "Manage")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/shifts")}
-                    className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                  >
-                    <span className="text-2xl">🗓️</span>
-                    <span>{t("Turnos", "Shifts")}</span>
-                    <span className="text-xs font-medium text-slate-500">{t("Monitoreo", "Monitoring")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/reports")}
-                    className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                  >
-                    <span className="text-2xl">📊</span>
-                    <span>{t("Reportes", "Reports")}</span>
-                    <span className="text-xs font-medium text-slate-500">{t("Historial", "History")}</span>
-                  </button>
-                </div>
+          <div className="welcome-banner">
+            <h2>{t("¡Bienvenido, Supervisor!", "Welcome, Supervisor!")}</h2>
+            <p>{t("Gestión de equipos de limpieza", "Cleaning team management")}</p>
+          </div>
 
-                <Button
-                  fullWidth
-                  variant="ghost"
-                  className="h-12 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50"
-                  onClick={logout}
-                >
-                  <span>🚪</span>
-                  {t("Cerrar sesión", "Sign out")}
-                </Button>
+          <div className="quick-actions">
+            {adminQuickActions.map(action => (
+              <button
+                key={action.key}
+                type="button"
+                onClick={() => router.push(action.href)}
+                className="quick-action-btn"
+              >
+                <span className="quick-action-icon">{action.icon}</span>
+                <span>{action.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">{t("Alertas Recientes", "Recent alerts")}</div>
+            </div>
+            <div className="alert alert-warning">
+              <div>
+                <strong>{t("Turno no iniciado", "Shift not started")}</strong>
+                <div className="text-xs">
+                  {t(
+                    "María G. no ha iniciado turno en Restaurant Don Juan (programado 08:00)",
+                    "Maria G. has not started her shift at Restaurant Don Juan (scheduled 08:00)"
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -165,62 +268,39 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <section className={`flex min-h-[70vh] items-start justify-center px-3 ${manrope.className}`}>
-        <div className="w-full max-w-md space-y-4">
-          <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-            <div className="bg-gradient-to-br from-indigo-600 to-blue-700 px-6 py-6 text-white">
-              <p className="text-2xl font-bold">👋 {t("Hola", "Hi")}, {displayName}</p>
-            </div>
+      <section className={`space-y-5 ${manrope.className}`}>
+        <div className="page-title">{t("Panel de Superusuario", "Superuser panel")}</div>
 
-            <div className="space-y-4 px-6 py-6">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => router.push("/restaurants")}
-                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                >
-                  <span className="text-2xl">🏬</span>
-                  <span>{t("Restaurantes", "Restaurants")}</span>
-                  <span className="text-xs font-medium text-slate-500">{t("Gestion", "Manage")}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/users")}
-                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                >
-                  <span className="text-2xl">👥</span>
-                  <span>{t("Usuarios", "Users")}</span>
-                  <span className="text-xs font-medium text-slate-500">{t("Gestion", "Manage")}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/reports")}
-                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                >
-                  <span className="text-2xl">📊</span>
-                  <span>{t("Reportes", "Reports")}</span>
-                  <span className="text-xs font-medium text-slate-500">{t("Historial", "History")}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/shifts")}
-                  className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                >
-                  <span className="text-2xl">🗓️</span>
-                  <span>{t("Turnos", "Shifts")}</span>
-                  <span className="text-xs font-medium text-slate-500">{t("Monitoreo", "Monitoring")}</span>
-                </button>
-              </div>
-              <Button
-                fullWidth
-                className="h-12 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50"
-                variant="ghost"
-                onClick={logout}
-              >
-                <span>🚪</span>
-                {t("Cerrar sesión", "Sign out")}
-              </Button>
+        <div className="welcome-banner" style={{ background: "linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)" }}>
+          <h2>{t("Control Total del Sistema", "Full system control")}</h2>
+          <p>{t("Administración y configuración", "Administration and configuration")}</p>
+        </div>
+
+        <div className="quick-actions">
+          {adminQuickActions.map(action => (
+            <button
+              key={action.key}
+              type="button"
+              onClick={() => router.push(action.href)}
+              className="quick-action-btn"
+            >
+              <span className="quick-action-icon">{action.icon}</span>
+              <span>{action.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">{t("Supervisiones realizadas hoy", "Supervisions completed today")}</div>
+          </div>
+          <div className="employee-list-item">
+            <div className="employee-avatar">JP</div>
+            <div className="employee-info">
+              <h4>{t("Juan Pérez (Supervisor)", "Juan Perez (Supervisor)")}</h4>
+              <p>{t("Restaurant Don Juan - 10:30 AM", "Restaurant Don Juan - 10:30 AM")}</p>
             </div>
+            <small className="text-emerald-300">{t("Verificado en sitio", "Verified on site")}</small>
           </div>
         </div>
       </section>

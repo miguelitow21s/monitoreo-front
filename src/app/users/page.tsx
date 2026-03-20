@@ -200,7 +200,7 @@ export default function UsersPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
         <div className="space-y-4">
-          <h1 className="text-2xl font-bold text-slate-900">{t("Usuarios", "Users")}</h1>
+          <div className="page-title">{t("Gestión de Empleados", "Employee management")}</div>
 
           {loading || authLoading ? (
             <Skeleton className="h-28" />
@@ -285,7 +285,7 @@ export default function UsersPage() {
                   <div className="space-y-3">
                     <div className="space-y-2 md:hidden">
                       {rows.map(item => (
-                        <div key={item.id} className="rounded-lg border border-slate-200 p-3">
+                        <div key={item.id} className="employee-list-item flex-col items-start">
                           <p className="font-medium text-slate-900">{item.full_name ?? t("Sin nombre", "No name")}</p>
                           <p className="mt-1 break-all text-xs text-slate-500">{item.email ?? "-"}</p>
                           <p className="mt-1 text-xs text-slate-600">
@@ -311,20 +311,19 @@ export default function UsersPage() {
                                 </option>
                               ))}
                             </select>
-                            <Button
-                              size="sm"
-                              variant="secondary"
+                            <button
+                              type="button"
                               onClick={() => void handleToggleActive(item.id, item.is_active)}
-                            >
-                              {item.is_active === false ? t("Activar", "Enable") : t("Desactivar", "Disable")}
-                            </Button>
+                              className={`toggle-switch ${item.is_active === false ? "" : "active"}`}
+                              aria-label={item.is_active === false ? t("Activar", "Enable") : t("Desactivar", "Disable")}
+                            />
                           </div>
                         </div>
                       ))}
                     </div>
 
                     <div className="hidden overflow-x-auto md:block">
-                      <table className="min-w-full text-sm">
+                      <table className="data-table">
                         <thead>
                           <tr className="border-b border-slate-200 text-left text-slate-500">
                             <th className="pb-2 pr-3">{t("Usuario", "User")}</th>
@@ -374,13 +373,12 @@ export default function UsersPage() {
                               </td>
                               <td className="py-2 pr-3">{item.is_active === false ? t("Inactivo", "Inactive") : t("Activo", "Active")}</td>
                               <td className="py-2 pr-3">
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
+                                <button
+                                  type="button"
                                   onClick={() => void handleToggleActive(item.id, item.is_active)}
-                                >
-                                  {item.is_active === false ? t("Activar", "Enable") : t("Desactivar", "Disable")}
-                                </Button>
+                                  className={`toggle-switch ${item.is_active === false ? "" : "active"}`}
+                                  aria-label={item.is_active === false ? t("Activar", "Enable") : t("Desactivar", "Disable")}
+                                />
                               </td>
                             </tr>
                           ))}

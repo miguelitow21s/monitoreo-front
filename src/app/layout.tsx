@@ -5,8 +5,8 @@ import ClientProviders from "@/components/ClientProviders"
 import LayoutShell from "@/components/LayoutShell"
 
 export const metadata: Metadata = {
-  title: "Cleaning Operations Control",
-  description: "Hourly operations control platform",
+  title: "WorkTrace - Gestión de Limpieza",
+  description: "Gestión Profesional de Limpieza",
 }
 
 export default function RootLayout({
@@ -16,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning className="min-h-screen bg-slate-100 text-slate-900">
+      <body suppressHydrationWarning className="min-h-screen bg-slate-950 text-slate-100">
         <ClientProviders>
           <LayoutShell>{children}</LayoutShell>
         </ClientProviders>

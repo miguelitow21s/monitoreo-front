@@ -17,8 +17,6 @@ export default function ResetPasswordPage() {
   const { t } = useI18n()
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [checkingLink, setCheckingLink] = useState(true)
   const [sessionReady, setSessionReady] = useState(false)
@@ -112,92 +110,66 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#667eea] to-[#764ba2] px-4">
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.12)_1px,_transparent_1px)] bg-[length:56px_56px]" />
-      </div>
-      <form
-        onSubmit={handleSubmit}
-        className="relative w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-7 shadow-2xl backdrop-blur"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          {t("Seguridad de cuenta", "Account security")}
-        </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">{t("Restablecer PIN", "Reset PIN")}</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          {t("Define un nuevo PIN de 6 digitos.", "Set a new 6-digit PIN.")}
+    <div className="login-container">
+      <form onSubmit={handleSubmit} className="login-box">
+        <div className="logo">
+          <div className="logo-icon">WT</div>
+          <h1>WorkTrace</h1>
+          <p>{t("Seguridad de cuenta", "Account security")}</p>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          {t("Define un nuevo PIN de 6 dígitos.", "Set a new 6-digit PIN.")}
         </p>
 
         {checkingLink && (
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            {t("Validando enlace de recuperacion...", "Validating recovery link...")}
+          <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            {t("Validando enlace de recuperación...", "Validating recovery link...")}
           </div>
         )}
 
-        <div className="mt-6 space-y-3">
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              required
-              inputMode="numeric"
-              maxLength={6}
-              pattern="[0-9]*"
-              autoComplete="new-password"
-              placeholder={t("Nuevo PIN (6 digitos)", "New PIN (6 digits)")}
-              value={password}
-              onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              disabled={checkingLink || !sessionReady}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(prev => !prev)}
-              disabled={checkingLink || !sessionReady}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              {showPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
-            </button>
-          </div>
-          <div className="relative">
-            <input
-              type={showConfirmPassword ? "text" : "password"}
-              required
-              inputMode="numeric"
-              maxLength={6}
-              pattern="[0-9]*"
-              autoComplete="new-password"
-              placeholder={t("Confirmar PIN", "Confirm PIN")}
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              disabled={checkingLink || !sessionReady}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-20 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword(prev => !prev)}
-              disabled={checkingLink || !sessionReady}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              {showConfirmPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
-            </button>
-          </div>
+        <div className="form-group">
+          <label>{t("Nuevo PIN (6 dígitos)", "New PIN (6 digits)")}</label>
+          <input
+            type="password"
+            required
+            inputMode="numeric"
+            maxLength={6}
+            pattern="[0-9]*"
+            autoComplete="new-password"
+            placeholder="••••••"
+            value={password}
+            onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            disabled={checkingLink || !sessionReady}
+            className="form-control"
+          />
         </div>
 
-        {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-        {message && <div className="mt-3 text-sm text-emerald-700">{message}</div>}
+        <div className="form-group">
+          <label>{t("Confirmar PIN", "Confirm PIN")}</label>
+          <input
+            type="password"
+            required
+            inputMode="numeric"
+            maxLength={6}
+            pattern="[0-9]*"
+            autoComplete="new-password"
+            placeholder="••••••"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            disabled={checkingLink || !sessionReady}
+            className="form-control"
+          />
+        </div>
 
-        <button
-          type="submit"
-          disabled={submitting || checkingLink || !sessionReady}
-          className="mt-5 w-full rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
-        >
+        {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+        {message && <div className="mb-3 text-sm text-emerald-700">{message}</div>}
+
+        <button type="submit" disabled={submitting || checkingLink || !sessionReady} className="btn btn-primary">
           {submitting ? t("Actualizando...", "Updating...") : t("Guardar PIN", "Save PIN")}
         </button>
 
-        <div className="mt-4 text-right text-xs">
-          <Link href="/auth/login" className="text-slate-600 underline hover:text-slate-900">
-            {t("Volver al inicio de sesion", "Back to sign in")}
-          </Link>
+        <div className="forgot-password">
+          <Link href="/auth/login">{t("Volver al inicio de sesión", "Back to sign in")}</Link>
         </div>
       </form>
     </div>

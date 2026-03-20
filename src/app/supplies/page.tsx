@@ -96,12 +96,20 @@ export default function SuppliesPage() {
   if (suppliesDisabled) {
     return (
       <ProtectedRoute>
-        <section className="flex min-h-[60vh] items-center justify-center px-4">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 text-center">
-            <h1 className="text-lg font-semibold text-slate-900">{t("Modulo de insumos desactivado", "Supplies module disabled")}</h1>
-            <p className="text-sm text-slate-600">
-              {t("Este modulo no se usara por ahora. Volveremos a activarlo cuando sea necesario.", "This module is paused for now. We'll enable it again when needed.")}
-            </p>
+        <section className="space-y-4">
+          <div className="page-title">{t("Insumos", "Supplies")}</div>
+          <div className="card text-center">
+            <div className="card-header">
+              <div>
+                <div className="card-title">{t("Módulo de insumos desactivado", "Supplies module disabled")}</div>
+                <div className="card-subtitle">
+                  {t(
+                    "Este módulo no se usará por ahora. Volveremos a activarlo cuando sea necesario.",
+                    "This module is paused for now. We'll enable it again when needed."
+                  )}
+                </div>
+              </div>
+            </div>
             <Button variant="primary" onClick={() => router.push("/dashboard")}>
               {t("Volver al inicio", "Back to home")}
             </Button>
@@ -572,7 +580,7 @@ export default function SuppliesPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPERVISORA, ROLES.SUPER_ADMIN]}>
         <div className="space-y-5">
-          <h1 className="text-2xl font-bold text-slate-900">{t("Insumos", "Supplies")}</h1>
+          <div className="page-title">{t("Insumos", "Supplies")}</div>
 
           {loading || authLoading ? (
             <Skeleton className="h-28" />
@@ -698,7 +706,7 @@ export default function SuppliesPage() {
                   <p className="text-sm text-slate-500">{t("Sin datos para el periodo seleccionado.", "No data for selected period.")}</p>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="min-w-full text-sm">
+                    <table className="data-table">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-slate-500">
                           <th className="pb-2 pr-3">{t("Restaurante", "Restaurant")}</th>
@@ -731,7 +739,7 @@ export default function SuppliesPage() {
                   <p className="text-sm text-slate-500">{t("Aun no hay consumo registrado para analizar.", "No registered consumption yet.")}</p>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="min-w-full text-sm">
+                    <table className="data-table">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-slate-500">
                           <th className="pb-2 pr-3">{t("Restaurante", "Restaurant")}</th>
@@ -800,7 +808,7 @@ export default function SuppliesPage() {
                     </div>
 
                     <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
-                      <table className="min-w-full text-sm">
+                      <table className="data-table">
                         <thead>
                           <tr className="border-b border-slate-200 text-left text-slate-500">
                             <th className="pb-2 pr-3">{t("Nombre", "Name")}</th>

@@ -17,7 +17,7 @@ export default function HomePage() {
   }, [loading, session, router])
 
   return (
-    <div className="flex min-h-screen items-center justify-center text-sm text-gray-500">
+    <div className="flex min-h-screen items-center justify-center text-sm text-slate-400">
       {t("Redirigiendo...", "Redirecting...")}
     </div>
   )

@@ -348,7 +348,7 @@ function ShiftsPageContent() {
   const [startEvidencePhotoCount, setStartEvidencePhotoCount] = useState(0)
   const [endEvidencePhotoCount, setEndEvidencePhotoCount] = useState(0)
   const [supervisorScreen, setSupervisorScreen] = useState<
-    "home" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active" | "alerts"
+    "home" | "turnos" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active" | "alerts"
   >("home")
   const [supervisorScreenHistory, setSupervisorScreenHistory] = useState<Array<typeof supervisorScreen>>(["home"])
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
@@ -2611,6 +2611,30 @@ function ShiftsPageContent() {
     })
   }, [])
 
+  useEffect(() => {
+    if (!canOperateSupervisor) return
+    const supervisorParam = searchParams.get("supervisor")
+
+    if (supervisorParam === "presence") {
+      if (supervisorScreen !== "presence") {
+        setSupervisorScreenWithHistory("presence")
+      }
+      return
+    }
+
+    if (supervisorParam === "turnos") {
+      if (supervisorScreen !== "turnos") {
+        setSupervisorScreenWithHistory("turnos")
+      }
+      return
+    }
+
+    if (!supervisorParam && (supervisorScreen === "presence" || supervisorScreen === "turnos")) {
+      setSupervisorScreen("home")
+      setSupervisorScreenHistory(["home"])
+    }
+  }, [canOperateSupervisor, searchParams, setSupervisorScreenHistory, setSupervisorScreenWithHistory, supervisorScreen])
+
   const handleAssignStaff = async () => {
     if (!staffRestaurantId || !staffUserId) {
       showToast("info", t("Selecciona restaurante y empleado.", "Select restaurant and employee."))
@@ -3095,6 +3119,8 @@ function ShiftsPageContent() {
       </div>
     ) : null
 
+  const homeRoute = isSupervisora ? "/shifts" : "/dashboard"
+
   const handleShiftBack = useCallback(() => {
     if (canOperateSupervisor && supervisorScreen !== "home") {
       handleSupervisorBack()
@@ -3129,7 +3155,7 @@ function ShiftsPageContent() {
             <Button size="sm" variant="secondary" onClick={handleShiftBack}>
               {t("Volver atras", "Back")}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => router.push("/dashboard")}>
+            <Button size="sm" variant="ghost" onClick={() => router.push(homeRoute)}>
               {t("Volver al inicio", "Back to home")}
             </Button>
           </div>
@@ -3201,7 +3227,7 @@ function ShiftsPageContent() {
                   className="border border-white/60 text-white hover:bg-white/10"
                   onClick={() => {
                     setShiftSuccess(null)
-                    router.push("/dashboard")
+                    router.push(homeRoute)
                   }}
                 >
                   {t("Volver al inicio", "Back to home")}
@@ -4952,6 +4978,72 @@ function ShiftsPageContent() {
                 {supervisorScreen === "home" && (
                   <div className="space-y-4">
                     {supervisorOtpHint}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => router.push("/restaurants")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-slate-800/70 px-4 py-4 text-center text-sm font-semibold text-slate-100 shadow-sm transition hover:border-white/20 hover:bg-slate-700/70"
+                      >
+                        <span className="text-2xl">🏬</span>
+                        <span>{t("Restaurantes", "Restaurants")}</span>
+                        <span className="text-xs font-medium text-slate-400">{t("Gestión", "Manage")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push("/users")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-slate-800/70 px-4 py-4 text-center text-sm font-semibold text-slate-100 shadow-sm transition hover:border-white/20 hover:bg-slate-700/70"
+                      >
+                        <span className="text-2xl">👥</span>
+                        <span>{t("Empleados", "Employees")}</span>
+                        <span className="text-xs font-medium text-slate-400">{t("Gestión", "Manage")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSupervisorScreenWithHistory("turnos")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-slate-800/70 px-4 py-4 text-center text-sm font-semibold text-slate-100 shadow-sm transition hover:border-white/20 hover:bg-slate-700/70"
+                      >
+                        <span className="text-2xl">🗓️</span>
+                        <span>{t("Turnos", "Shifts")}</span>
+                        <span className="text-xs font-medium text-slate-400">{t("Programar y monitorear", "Schedule & monitor")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push("/reports")}
+                        className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-slate-800/70 px-4 py-4 text-center text-sm font-semibold text-slate-100 shadow-sm transition hover:border-white/20 hover:bg-slate-700/70"
+                      >
+                        <span className="text-2xl">📊</span>
+                        <span>{t("Informes", "Reports")}</span>
+                        <span className="text-xs font-medium text-slate-400">{t("Historial", "History")}</span>
+                      </button>
+                    </div>
+
+                    <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+                      <p className="font-semibold">{t("Alertas recientes", "Recent alerts")}</p>
+                      {overdueSupervisorTasks.length === 0 && pendingPresenceClosures.length === 0 ? (
+                        <p className="mt-2 text-xs text-amber-100/80">
+                          {t("Sin alertas pendientes por ahora.", "No pending alerts right now.")}
+                        </p>
+                      ) : (
+                        <div className="mt-2 space-y-1 text-xs text-amber-100/90">
+                          {overdueSupervisorTasks.length > 0 && (
+                            <p>
+                              {t("Hay", "There are")} {overdueSupervisorTasks.length} {t("tarea(s) vencidas pendientes de cierre.", "overdue task(s) pending closure.")}
+                            </p>
+                          )}
+                          {pendingPresenceClosures.length > 0 && (
+                            <p>
+                              {t("Tienes", "You have")} {pendingPresenceClosures.length} {t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {supervisorScreen === "turnos" && (
+                  <div className="space-y-4">
+                    {supervisorOtpHint}
                     {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
                       <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                         {overdueSupervisorTasks.length > 0 && (
@@ -5020,37 +5112,6 @@ function ShiftsPageContent() {
                           {supervisionScheduledShifts.length} {t("activos", "active")}
                         </span>
                       </button>
-                      {isSupervisora && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => router.push("/restaurants")}
-                            className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                          >
-                            <span className="text-2xl">🏬</span>
-                            <span>{t("Restaurantes", "Restaurants")}</span>
-                            <span className="text-xs font-medium text-slate-500">{t("Gestión", "Manage")}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => router.push("/users")}
-                            className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                          >
-                            <span className="text-2xl">👥</span>
-                            <span>{t("Usuarios", "Users")}</span>
-                            <span className="text-xs font-medium text-slate-500">{t("Gestión", "Manage")}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => router.push("/reports")}
-                            className="group flex flex-col items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-white"
-                          >
-                            <span className="text-2xl">📊</span>
-                            <span>{t("Informes", "Reports")}</span>
-                            <span className="text-xs font-medium text-slate-500">{t("Historial", "History")}</span>
-                          </button>
-                        </>
-                      )}
                     </div>
                   </div>
                 )}

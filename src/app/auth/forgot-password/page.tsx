@@ -44,49 +44,42 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#667eea] to-[#764ba2] px-4">
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.12)_1px,_transparent_1px)] bg-[length:56px_56px]" />
-      </div>
-      <form
-        onSubmit={handleSubmit}
-        className="relative w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-7 shadow-2xl backdrop-blur"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          {t("Recuperacion de acceso", "Access recovery")}
-        </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">{t("Olvide mi PIN", "Forgot my PIN")}</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          {t("Te enviaremos un enlace para restablecerlo.", "We will send you a reset link.")}
+    <div className="login-container">
+      <form onSubmit={handleSubmit} className="login-box">
+        <div className="logo">
+          <div className="logo-icon">WT</div>
+          <h1>WorkTrace</h1>
+          <p>{t("Recuperación de acceso", "Access recovery")}</p>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          {t("Te enviaremos un enlace para restablecer tu PIN.", "We will send you a reset link.")}
         </p>
 
-        <div className="mt-6 space-y-3">
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            placeholder={t("Correo electronico", "Email address")}
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-          />
+        <div className="form-group">
+          <label>{t("Correo Electrónico", "Email address")}</label>
+          <div className="input-wrapper">
+            <span className="input-icon">@</span>
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              placeholder={t("correo@worktrace.com", "email@worktrace.com")}
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="form-control"
+            />
+          </div>
         </div>
 
-        {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-        {message && <div className="mt-3 text-sm text-emerald-700">{message}</div>}
+        {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+        {message && <div className="mb-3 text-sm text-emerald-700">{message}</div>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-5 w-full rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
-        >
+        <button type="submit" disabled={submitting} className="btn btn-primary">
           {submitting ? t("Enviando...", "Sending...") : t("Enviar enlace", "Send link")}
         </button>
 
-        <div className="mt-4 text-right text-xs">
-          <Link href="/auth/login" className="text-slate-600 underline hover:text-slate-900">
-            {t("Volver al inicio de sesion", "Back to sign in")}
-          </Link>
+        <div className="forgot-password">
+          <Link href="/auth/login">{t("Volver al inicio de sesión", "Back to sign in")}</Link>
         </div>
       </form>
     </div>

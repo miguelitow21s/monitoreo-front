@@ -1,6 +1,11 @@
 "use client"
 
-import { usePathname, useRouter } from "next/navigation"
+import { useMemo } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+
+import { useAuth } from "@/hooks/useAuth"
+import { useI18n } from "@/hooks/useI18n"
+import { useRole } from "@/hooks/useRole"
 
 type LayoutShellProps = {
   children: React.ReactNode
@@ -9,6 +14,10 @@ type LayoutShellProps = {
 export default function LayoutShell({ children }: LayoutShellProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { t } = useI18n()
+  const { logout, user, loading: authLoading } = useAuth()
+  const { isEmpleado, isSupervisora, isSuperAdmin, loading: roleLoading } = useRole()
 
   const standalonePage =
     pathname === "/" ||
@@ -20,22 +29,162 @@ export default function LayoutShell({ children }: LayoutShellProps) {
     return <>{children}</>
   }
 
-  const showHome = pathname !== "/dashboard" && !pathname.startsWith("/shifts")
+  const employeeProfileActive =
+    pathname.startsWith("/shifts") && searchParams?.get("view") === "profile"
+  const employeeHomeActive = pathname === "/dashboard"
+
+  const supervisorMode = searchParams?.get("supervisor")
+  const supervisorHomeActive = pathname.startsWith("/shifts") && supervisorMode !== "presence"
+  const supervisorReportsActive = pathname.startsWith("/reports")
+  const superAdminReportsActive = pathname.startsWith("/reports")
+
+  const navItems = useMemo(() => {
+    if (isEmpleado) {
+      return [
+        {
+          key: "home",
+          label: t("Inicio", "Home"),
+          icon: "🏠",
+          href: "/dashboard",
+          active: employeeHomeActive,
+        },
+        {
+          key: "profile",
+          label: t("Perfil", "Profile"),
+          icon: "👤",
+          href: "/shifts?view=profile",
+          active: employeeProfileActive,
+        },
+        {
+          key: "logout",
+          label: t("Salir", "Sign out"),
+          icon: "🚪",
+          action: "logout" as const,
+        },
+      ]
+    }
+
+    if (isSupervisora) {
+      return [
+        {
+          key: "home",
+          label: t("Inicio", "Home"),
+          icon: "🏠",
+          href: "/shifts",
+          active: supervisorHomeActive,
+        },
+        {
+          key: "supervise",
+          label: t("Supervisar", "Supervise"),
+          icon: "✅",
+          href: "/shifts?supervisor=presence",
+          active: supervisorMode === "presence",
+        },
+        {
+          key: "logout",
+          label: t("Salir", "Sign out"),
+          icon: "🚪",
+          action: "logout" as const,
+        },
+      ]
+    }
+
+    if (isSuperAdmin) {
+      return [
+        {
+          key: "home",
+          label: t("Inicio", "Home"),
+          icon: "🏠",
+          href: "/dashboard",
+          active: pathname === "/dashboard",
+        },
+        {
+          key: "reports",
+          label: t("Reportes", "Reports"),
+          icon: "📊",
+          href: "/reports",
+          active: superAdminReportsActive,
+        },
+        {
+          key: "logout",
+          label: t("Salir", "Sign out"),
+          icon: "🚪",
+          action: "logout" as const,
+        },
+      ]
+    }
+
+    return []
+  }, [
+    employeeHomeActive,
+    employeeProfileActive,
+    isEmpleado,
+    isSuperAdmin,
+    isSupervisora,
+    pathname,
+    searchParams,
+    supervisorHomeActive,
+    supervisorMode,
+    superAdminReportsActive,
+    t,
+  ])
+
+  const showChrome = !authLoading && !roleLoading && !!user
+  const brandLabel = isSuperAdmin
+    ? "WorkTrace Admin"
+    : isSupervisora
+      ? "WorkTrace Supervisor"
+      : "WorkTrace"
 
   return (
-    <main className="wt-app min-h-screen px-3 pb-6 pt-6 sm:px-5 lg:px-6">
-      {showHome && (
-        <div className="mx-auto mb-5 flex w-full max-w-[1240px] justify-start">
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard")}
-            className="rounded-full border border-white/10 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:bg-slate-700"
-          >
-            Volver al inicio
-          </button>
-        </div>
+    <div className="wt-app min-h-screen">
+      {showChrome && (
+        <header className="header">
+          <div className="header-brand">
+            <span className="header-brand-icon">WT</span>
+            <span>{brandLabel}</span>
+          </div>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="header-btn"
+              onClick={() => {
+                // Placeholder for notifications
+              }}
+              aria-label={t("Notificaciones", "Notifications")}
+            >
+              🔔
+            </button>
+          </div>
+        </header>
       )}
-      <div className="mx-auto w-full max-w-[1240px]">{children}</div>
-    </main>
+
+      <main className="content">{children}</main>
+
+      {showChrome && navItems.length > 0 && (
+        <nav className="bottom-nav">
+          {navItems.map(item => {
+            const active = item.active
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => {
+                  if (item.action === "logout") {
+                    logout()
+                    return
+                  }
+                  if (item.href) router.push(item.href)
+                }}
+                className={["nav-item", active ? "active" : ""].join(" ")}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+      )}
+    </div>
   )
 }

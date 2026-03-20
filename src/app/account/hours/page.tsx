@@ -200,7 +200,7 @@ export default function AccountHoursPage() {
                   </div>
 
                   <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 md:block">
-                    <table className="min-w-full text-sm">
+                    <table className="data-table">
                       <thead>
                         <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.08em] text-slate-500">
                           <th className="px-4 py-3">{t("Inicio", "Start")}</th>

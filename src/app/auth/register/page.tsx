@@ -33,7 +33,6 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -144,112 +143,94 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#667eea] to-[#764ba2] px-4">
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.12)_1px,_transparent_1px)] bg-[length:56px_56px]" />
-      </div>
-      <form
-        onSubmit={handleRegister}
-        className="relative w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-7 shadow-2xl backdrop-blur"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          {t("Registro de empleado", "Employee registration")}
-        </p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">{t("Crear cuenta", "Create account")}</h1>
-        <p className="mt-2 text-sm text-slate-600">
+    <div className="login-container">
+      <form onSubmit={handleRegister} className="login-box">
+        <div className="logo">
+          <div className="logo-icon">WT</div>
+          <h1>WorkTrace</h1>
+          <p>{t("Registro de empleado", "Employee registration")}</p>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
           {t(
-            "La cuenta se crea con rol empleado. La activacion la controla administracion.",
+            "La cuenta se crea con rol empleado. La activación la controla administración.",
             "The account is created with employee role. Activation is managed by administration."
           )}
         </p>
 
-        <div className="mt-6 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
+        <div className="form-row two-col">
+          <div className="form-group">
+            <label>{t("Nombre", "First name")}</label>
             <input
               required
-              placeholder={t("Nombre", "First name")}
               value={firstName}
               onChange={e => setFirstName(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-            />
-            <input
-              required
-              placeholder={t("Apellido", "Last name")}
-              value={lastName}
-              onChange={e => setLastName(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+              className="form-control"
+              placeholder={t("Nombre", "First name")}
             />
           </div>
+          <div className="form-group">
+            <label>{t("Apellido", "Last name")}</label>
+            <input
+              required
+              value={lastName}
+              onChange={e => setLastName(e.target.value)}
+              className="form-control"
+              placeholder={t("Apellido", "Last name")}
+            />
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>{t("Teléfono", "Phone")}</label>
           <input
             type="tel"
             required
             autoComplete="tel"
-            placeholder={t("Celular (+codigo de pais)", "Phone (+country code)")}
             value={phone}
             onChange={e => setPhone(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+            className="form-control"
+            placeholder={t("Celular +código país", "Phone +country code")}
           />
+        </div>
+
+        <div className="form-group">
+          <label>{t("Correo Electrónico", "Email")}</label>
           <input
             type="email"
             required
             autoComplete="email"
-            placeholder={t("Correo electronico", "Email address")}
             value={email}
             onChange={e => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-800"
+            className="form-control"
+            placeholder={t("correo@worktrace.com", "email@worktrace.com")}
           />
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              required
-              inputMode="numeric"
-              maxLength={6}
-              pattern="[0-9]*"
-              autoComplete="new-password"
-              placeholder={t("PIN (6 digitos)", "PIN (6 digits)")}
-              value={password}
-              onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-11 text-sm text-slate-800 outline-none transition focus:border-slate-800"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(prev => !prev)}
-              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
-              title={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
-              className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
-            >
-              {showPassword ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-                  <path d="M3 3l18 18" />
-                  <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
-                  <path d="M9.4 5.2A10.7 10.7 0 0 1 12 5c5 0 8.7 3.1 10 7-0.5 1.4-1.3 2.6-2.4 3.7" />
-                  <path d="M6.2 6.2C4.3 7.5 2.9 9.4 2 12c1.3 3.9 5 7 10 7 1.9 0 3.6-0.5 5-1.3" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              )}
-            </button>
-          </div>
         </div>
 
-        {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-        {message && <div className="mt-3 text-sm text-emerald-700">{message}</div>}
+        <div className="form-group">
+          <label>{t("PIN numérico (6 dígitos)", "Numeric PIN (6 digits)")}</label>
+          <input
+            type="password"
+            required
+            inputMode="numeric"
+            maxLength={6}
+            pattern="[0-9]*"
+            autoComplete="new-password"
+            value={password}
+            onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            className="form-control"
+            placeholder="••••••"
+          />
+        </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-5 w-full rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
-        >
+        {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+        {message && <div className="mb-3 text-sm text-emerald-700">{message}</div>}
+
+        <button type="submit" disabled={submitting} className="btn btn-primary">
           {submitting ? t("Registrando...", "Creating account...") : t("Crear cuenta", "Create account")}
         </button>
 
-        <div className="mt-4 text-right text-xs">
-          <Link href="/auth/login" className="text-slate-600 underline hover:text-slate-900">
-            {t("Volver al inicio de sesion", "Back to sign in")}
-          </Link>
+        <div className="forgot-password">
+          <Link href="/auth/login">{t("Volver al inicio de sesión", "Back to sign in")}</Link>
         </div>
       </form>
     </div>

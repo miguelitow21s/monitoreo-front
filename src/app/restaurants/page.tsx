@@ -994,7 +994,7 @@ export default function RestaurantsPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
         <div className="space-y-5">
-          <h1 className="text-2xl font-bold text-slate-900">{t("Restaurantes", "Restaurants")}</h1>
+          <div className="page-title">{t("Gestión de Restaurantes", "Restaurant management")}</div>
 
           {loading || authLoading ? (
             <Skeleton className="h-28" />
@@ -1231,7 +1231,7 @@ export default function RestaurantsPage() {
                       const hasMap = typeof lat === "number" && Number.isFinite(lat) && typeof lng === "number" && Number.isFinite(lng)
                       const assignedCount = (assignments[item.id] ?? []).length
                       return (
-                        <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div key={item.id} className="restaurant-card rounded-2xl border border-slate-200 bg-white p-4">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">

@@ -25,7 +25,6 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [acceptedDataTreatment, setAcceptedDataTreatment] = useState(false)
@@ -208,27 +207,22 @@ export default function LoginPage() {
 
   if (loading || (!blockAutoRedirect && session)) {
     return (
-      <div className={`flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 px-4 ${manrope.className}`}>
-        <div className="w-full max-w-md rounded-[28px] border border-white/30 bg-white/90 p-7 text-center shadow-2xl">
-          <p className="text-sm text-slate-600">
-            {t("Validando sesion...", "Validating session...")}
-          </p>
+      <div className={`login-container ${manrope.className}`}>
+        <div className="login-box">
+          <div className="logo">
+            <div className="logo-icon">WT</div>
+            <h1>WorkTrace</h1>
+            <p>{t("Gestión Profesional de Limpieza", "Professional cleaning management")}</p>
+          </div>
+          <p className="text-center text-sm text-slate-600">{t("Validando sesión...", "Validating session...")}</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div
-      className={`relative flex min-h-screen items-start justify-center overflow-hidden bg-gradient-to-br from-[#667eea] to-[#764ba2] px-3 pb-6 pt-6 sm:items-center sm:px-4 ${manrope.className}`}
-    >
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.12)_1px,_transparent_1px)] bg-[length:56px_56px]" />
-      </div>
-      <form
-        onSubmit={handleLogin}
-        className="relative w-full max-w-md rounded-[28px] border border-white/40 bg-white/95 p-5 shadow-2xl backdrop-blur sm:p-7"
-      >
+    <div className={`login-container ${manrope.className}`}>
+      <form onSubmit={handleLogin} className="login-box">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             {t("Acceso seguro", "Secure access")}
@@ -236,112 +230,95 @@ export default function LoginPage() {
           <LanguageSwitch />
         </div>
 
-        <div className="mt-6 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 text-4xl text-white shadow-lg">
-            🧹
-          </div>
-          <h1 className="mt-4 text-2xl font-extrabold text-slate-900">WorkTrace</h1>
-          <p className="mt-1 text-sm text-slate-500">{t("Gestión Profesional de Limpieza", "Professional cleaning management")}</p>
+        <div className="logo">
+          <div className="logo-icon">WT</div>
+          <h1>WorkTrace</h1>
+          <p>{t("Gestión Profesional de Limpieza", "Professional cleaning management")}</p>
         </div>
 
-        <div className="mt-6 space-y-3">
-          <div className="flex items-center gap-3 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm">
-            <span className="text-lg">📧</span>
+        <div className="consent-box">
+          <label>
             <input
-              type="text"
-              required
-              autoComplete="username"
-              placeholder={t("Correo o usuario", "Email or username")}
-              value={email}
-              onChange={e => {
-                setEmail(e.target.value)
-                if (error) setError(null)
-              }}
-              className="w-full bg-transparent text-base text-slate-800 outline-none"
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {t("PIN (6 digitos)", "PIN (6 digits)")}
-            </span>
-          </div>
-
-          <div className="relative flex items-center gap-3 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm">
-            <span className="text-lg">🔒</span>
-            <input
-              type={showPassword ? "text" : "password"}
-              required
-              autoComplete="current-password"
-              inputMode="numeric"
-              maxLength={6}
-              pattern="[0-9]*"
-              placeholder={t("PIN de 6 digitos", "6-digit PIN")}
-              value={password}
-              onChange={e => {
-                setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))
-                if (error) setError(null)
-              }}
-              className="w-full bg-transparent text-base text-slate-800 outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(prev => !prev)}
-              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
-              title={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Mostrar PIN", "Show PIN")}
-              className="absolute right-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100"
-            >
-              {showPassword ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-                  <path d="M3 3l18 18" />
-                  <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
-                  <path d="M9.4 5.2A10.7 10.7 0 0 1 12 5c5 0 8.7 3.1 10 7-0.5 1.4-1.3 2.6-2.4 3.7" />
-                  <path d="M6.2 6.2C4.3 7.5 2.9 9.4 2 12c1.3 3.9 5 7 10 7 1.9 0 3.6-0.5 5-1.3" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              )}
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs text-slate-700">
-          <div className="flex items-start gap-2">
-            <input
-              id="accept-data-treatment"
               type="checkbox"
               checked={acceptedDataTreatment}
               onChange={e => {
                 setAcceptedDataTreatment(e.target.checked)
                 if (error) setError(null)
               }}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900"
             />
-            <label htmlFor="accept-data-treatment" className="leading-5 break-words text-[11px] sm:text-xs">
+            <span>
               {t(
-                "Autorizo el uso de mis datos personales, ubicación GPS y cámara para fines de verificación de turnos laborales.",
-                "I authorize personal data, GPS location, and camera use for shift verification."
+                "Autorizo el uso de mis datos personales, ubicación GPS y cámara para fines de verificación de turnos laborales. Acepto los términos y condiciones del servicio.",
+                "I authorize the use of my personal data, GPS location, and camera for shift verification. I accept the service terms and conditions."
               )}
-            </label>
-          </div>
-
+            </span>
+          </label>
           {needsBackendConsent && (
             <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
               {t(
-                "Tienes sesion iniciada, pero falta aceptar los terminos activos en backend.",
+                "Tienes sesión iniciada, pero falta aceptar los términos activos en backend.",
                 "Session is active, but backend legal terms still need your acceptance."
               )}
             </div>
           )}
         </div>
 
-        {error && <div className="mt-3 break-words text-sm text-red-600">{error}</div>}
+        <div className="form-group">
+          <label>{t("Correo Electrónico", "Email")}</label>
+          <div className="input-wrapper">
+            <span className="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
+                <path d="M3 7l9 6 9-6" />
+              </svg>
+            </span>
+            <input
+              type="email"
+              className="form-control"
+              placeholder={t("usuario@worktrace.com", "user@worktrace.com")}
+              required
+              autoComplete="username"
+              value={email}
+              onChange={e => {
+                setEmail(e.target.value)
+                if (error) setError(null)
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>{t("Contraseña Numérica", "Numeric PIN")}</label>
+          <div className="input-wrapper">
+            <span className="input-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                <rect x="4" y="11" width="16" height="9" rx="2" />
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+            </span>
+            <input
+              type="password"
+              className="form-control"
+              placeholder="••••••"
+              pattern="[0-9]*"
+              inputMode="numeric"
+              maxLength={6}
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={e => {
+                setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))
+                if (error) setError(null)
+              }}
+            />
+          </div>
+        </div>
+
+        {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
 
         <button
           type="submit"
+          className="btn btn-primary"
           disabled={
             submitting ||
             loading ||
@@ -350,28 +327,40 @@ export default function LoginPage() {
             processingBackendConsent ||
             needsBackendConsent
           }
-          className="mt-5 w-full rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 py-3 text-sm font-semibold text-white transition hover:from-blue-500 hover:to-blue-700 disabled:opacity-60"
         >
-          {submitting ? t("Ingresando...", "Signing in...") : t("Ingresar", "Sign in")}
+          {submitting ? t("Ingresando...", "Signing in...") : t("Iniciar Sesión", "Sign in")}
         </button>
 
         {needsBackendConsent && (
           <button
             type="button"
+            className="btn btn-secondary"
             onClick={() => void handleAcceptBackendConsent()}
             disabled={processingBackendConsent}
-            className="mt-3 w-full rounded-2xl border border-slate-300 bg-white py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60"
           >
             {processingBackendConsent
-              ? t("Aceptando terminos...", "Accepting terms...")
-              : t("Aceptar terminos y continuar", "Accept terms and continue")}
+              ? t("Aceptando términos...", "Accepting terms...")
+              : t("Aceptar términos y continuar", "Accept terms and continue")}
           </button>
         )}
 
-        <div className="mt-4 flex items-center justify-between text-xs">
-          <Link href="/auth/forgot-password" className="text-slate-600 underline hover:text-slate-900">
-            {t("Olvide mi contrasena", "Forgot password")}
-          </Link>
+        <div className="forgot-password">
+          <Link href="/auth/forgot-password">{t("¿Olvidé mi contraseña?", "Forgot password?")}</Link>
+        </div>
+
+        <div className="test-users">
+          <h4>{t("Usuarios de Prueba", "Test Users")}</h4>
+          <div className="mt-2 flex flex-col gap-2">
+            <div>
+              <code>empleado@worktrace.com</code> - {t("Clave", "PIN")}: <code>123456</code> ({t("Empleado", "Employee")})
+            </div>
+            <div>
+              <code>supervisor@worktrace.com</code> - {t("Clave", "PIN")}: <code>123456</code> ({t("Supervisor", "Supervisor")})
+            </div>
+            <div>
+              <code>super@worktrace.com</code> - {t("Clave", "PIN")}: <code>123456</code> ({t("Superusuario", "Superuser")})
+            </div>
+          </div>
         </div>
       </form>
     </div>

@@ -537,12 +537,12 @@ export default function ReportsPage() {
     <ProtectedRoute>
       <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.SUPERVISORA]}>
         <div className="space-y-5">
-          <h1 className="text-2xl font-bold text-slate-900">{t("Reportes", "Reports")}</h1>
+          <div className="page-title">{t("Informes y Reportes", "Reports")}</div>
 
           <Card
             title={t("Filtros del reporte", "Report filters")}
           >
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="report-filters mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               <input
                 type="date"
                 value={fromDate}
@@ -650,7 +650,7 @@ export default function ReportsPage() {
           </Card>
 
           <Card title={t("Resumen", "Summary")}>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="stats-grid mt-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Turnos totales", "Total shifts")}: {rows.length}</div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Finalizados", "Completed")}: {totalCompleted}</div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">{t("Activos", "Active")}: {totalActive}</div>
@@ -720,7 +720,7 @@ export default function ReportsPage() {
                 </div>
 
                 <div className="hidden overflow-x-auto rounded-xl border border-slate-200 md:block">
-                  <table className="min-w-full text-sm">
+                  <table className="data-table">
                     <thead className="bg-slate-50">
                       <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                         {visibleColumns.map(column => (
@@ -773,7 +773,7 @@ export default function ReportsPage() {
               <div className="space-y-3">
                 <div className="hidden md:block">
                   <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="min-w-full text-sm">
+                    <table className="data-table">
                       <thead className="bg-slate-50">
                         <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                           <th className="px-4 py-3 whitespace-nowrap">{t("Reporte", "Report")}</th>
