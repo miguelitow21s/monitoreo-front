@@ -35,6 +35,7 @@ const DEBUG_ENDPOINTS = new Set([
   "shifts_reject",
   "evidence_upload",
   "incidents_create",
+  "supervisor_presence_manage",
   "health_ping",
 ])
 
