@@ -315,15 +315,33 @@ export async function createOperationalTask(payload: CreateOperationalTaskPayloa
 }
 
 export async function markTaskInProgress(taskId: number) {
-  const { data, error } = await supabase
-    .from("operational_tasks")
-    .update({ status: "in_progress" })
-    .eq("id", taskId)
-    .select("*")
-    .single()
+  const response = await invokeEdge<{ task_id?: number }>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "mark_in_progress",
+      task_id: taskId,
+    },
+  })
 
-  if (error) throw error
-  return data as OperationalTask
+  const resolvedTaskId = toNullableNumber(response?.task_id) ?? taskId
+
+  try {
+    const supervised = await listSupervisorOperationalTasks(200)
+    const found = supervised.find(item => item.id === resolvedTaskId)
+    if (found) return found
+  } catch {
+    // ignore
+  }
+
+  try {
+    const mine = await listMyOperationalTasks(200)
+    const found = mine.find(item => item.id === resolvedTaskId)
+    if (found) return found
+  } catch {
+    // ignore
+  }
+
+  return { id: resolvedTaskId } as OperationalTask
 }
 
 export async function updateOperationalTaskDetails(payload: UpdateOperationalTaskPayload) {
@@ -368,25 +386,35 @@ export async function updateOperationalTaskDetails(payload: UpdateOperationalTas
   return { id: resolvedTaskId } as OperationalTask
 }
 
-async function updateOperationalTaskStatus(taskId: number, status: TaskStatus) {
-  const updates = {
-    status,
-    resolved_at: new Date().toISOString(),
+export async function closeOperationalTask(taskId: number, reason?: string | null) {
+  const response = await invokeEdge<{ task_id?: number }>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "close",
+      task_id: taskId,
+      ...(reason ? { reason } : {}),
+    },
+  })
+
+  const resolvedTaskId = toNullableNumber(response?.task_id) ?? taskId
+
+  try {
+    const supervised = await listSupervisorOperationalTasks(200)
+    const found = supervised.find(item => item.id === resolvedTaskId)
+    if (found) return found
+  } catch {
+    // ignore
   }
 
-  const { data, error } = await supabase
-    .from("operational_tasks")
-    .update(updates)
-    .eq("id", taskId)
-    .select("*")
-    .single()
+  try {
+    const mine = await listMyOperationalTasks(200)
+    const found = mine.find(item => item.id === resolvedTaskId)
+    if (found) return found
+  } catch {
+    // ignore
+  }
 
-  if (error) throw error
-  return data as OperationalTask
-}
-
-export async function closeOperationalTask(taskId: number) {
-  return updateOperationalTaskStatus(taskId, "completed")
+  return { id: resolvedTaskId } as OperationalTask
 }
 
 export async function cancelOperationalTask(taskId: number, reason?: string | null) {

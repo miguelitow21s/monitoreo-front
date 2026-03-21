@@ -278,6 +278,40 @@ async function sha256Hex(blob: Blob) {
     .join("")
 }
 
+async function reverseAddressFromCoordinates(lat: number, lng: number) {
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    lat: String(lat),
+    lon: String(lng),
+    zoom: "18",
+    addressdetails: "1",
+  })
+
+  const controller = new AbortController()
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), 9000)
+  let response: Response
+  try {
+    response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    })
+  } finally {
+    globalThis.clearTimeout(timeoutId)
+  }
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+
+  const payload = (await response.json()) as { display_name?: string }
+  if (typeof payload?.display_name === "string" && payload.display_name.trim()) {
+    return payload.display_name.trim()
+  }
+  return ""
+}
+
 function toDateInputValue(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, "0")
@@ -342,6 +376,9 @@ function ShiftsPageContent() {
   const [gpsMessage, setGpsMessage] = useState("")
   const [presenceGpsStatus, setPresenceGpsStatus] = useState<"idle" | "checking" | "valid" | "invalid">("idle")
   const [presenceGpsMessage, setPresenceGpsMessage] = useState("")
+  const [coordsAddress, setCoordsAddress] = useState("")
+  const [taskAddress, setTaskAddress] = useState("")
+  const [presenceAddress, setPresenceAddress] = useState("")
   const [startAreaKey, setStartAreaKey] = useState("")
   const [startAreaDetail, setStartAreaDetail] = useState("")
   const [startSubareaKey, setStartSubareaKey] = useState("")
@@ -543,14 +580,6 @@ function ShiftsPageContent() {
       return subLabel ? `${base} · ${subLabel}` : base
     },
     [areaLabelByKey, subareaLabelByArea, t]
-  )
-  const startAreaLabel = useMemo(
-    () => getAreaLabel(startAreaKey, startAreaDetail, startSubareaKey),
-    [getAreaLabel, startAreaDetail, startAreaKey, startSubareaKey]
-  )
-  const endAreaLabel = useMemo(
-    () => getAreaLabel(endAreaKey, endAreaDetail, endSubareaKey),
-    [getAreaLabel, endAreaDetail, endAreaKey, endSubareaKey]
   )
   const supervisionSubareas = useMemo(
     () => subareaOptionsByArea.get(supervisionAreaKey) ?? [],
@@ -947,6 +976,18 @@ function ShiftsPageContent() {
     [knownRestaurantsById]
   )
 
+  const getRestaurantWatermarkLabelById = useCallback(
+    (restaurantId: number | null | undefined) => {
+      if (!restaurantId) return "-"
+      const restaurant = knownRestaurantsById.get(Number(restaurantId))
+      if (!restaurant) return `#${restaurantId}`
+      const addressLine = typeof restaurant.address_line === "string" ? restaurant.address_line.trim() : ""
+      const name = restaurant.name || `#${restaurantId}`
+      return addressLine ? `${name} (${addressLine})` : name
+    },
+    [knownRestaurantsById]
+  )
+
   const getSupervisorStatusBadge = useCallback(
     (status: string | null | undefined) => {
       const normalized = (status ?? "").toLowerCase()
@@ -1286,21 +1327,13 @@ function ShiftsPageContent() {
     : t("inicio-turno", "shift-start")
 
   const shiftOverlayLines = [
-    `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-    `${t("Empleado", "Employee")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-    `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(expectedRestaurantId)}`,
-    `${t("Turno", "Shift")}: ${activeShift ? `#${activeShift.id}` : t("inicio", "start")}`,
-    `${t("Fase", "Phase")}: ${shiftEvidencePhase}`,
-    coords ? `GPS: ${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : t("GPS: pendiente", "GPS: pending"),
+    coordsAddress
+      ? `${t("Direccion", "Address")}: ${coordsAddress}`
+      : t("Direccion: pendiente", "Address: pending"),
+    `${t("Restaurante", "Restaurant")}: ${getRestaurantWatermarkLabelById(expectedRestaurantId)}`,
   ]
-  const startOverlayLines = useMemo(
-    () => [...shiftOverlayLines, `${t("Area", "Area")}: ${startAreaLabel}`],
-    [shiftOverlayLines, startAreaLabel, t]
-  )
-  const endOverlayLines = useMemo(
-    () => [...shiftOverlayLines, `${t("Area", "Area")}: ${endAreaLabel}`],
-    [shiftOverlayLines, endAreaLabel, t]
-  )
+  const startOverlayLines = useMemo(() => [...shiftOverlayLines], [shiftOverlayLines])
+  const endOverlayLines = useMemo(() => [...shiftOverlayLines], [shiftOverlayLines])
 
   const loadEmployeeData = useCallback(async (page: number) => {
     setLoadingData(true)
@@ -1616,6 +1649,61 @@ function ShiftsPageContent() {
     if (roleLoading) return
     void loadEmployeeSelfServiceDashboard()
   }, [loadEmployeeSelfServiceDashboard, roleLoading])
+
+  const addressCacheRef = useRef<Map<string, string>>(new Map())
+
+  const resolveAddressLabel = useCallback(async (location: Coordinates | null, setter: (value: string) => void) => {
+    if (!location) {
+      setter("")
+      return
+    }
+
+    const key = `${location.lat.toFixed(5)}|${location.lng.toFixed(5)}`
+    const cached = addressCacheRef.current.get(key)
+    if (cached !== undefined) {
+      setter(cached)
+      return
+    }
+
+    try {
+      const label = await reverseAddressFromCoordinates(location.lat, location.lng)
+      addressCacheRef.current.set(key, label)
+      setter(label)
+    } catch {
+      addressCacheRef.current.set(key, "")
+      setter("")
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    void resolveAddressLabel(coords, value => {
+      if (active) setCoordsAddress(value)
+    })
+    return () => {
+      active = false
+    }
+  }, [coords?.lat, coords?.lng, resolveAddressLabel])
+
+  useEffect(() => {
+    let active = true
+    void resolveAddressLabel(taskCoords, value => {
+      if (active) setTaskAddress(value)
+    })
+    return () => {
+      active = false
+    }
+  }, [taskCoords?.lat, taskCoords?.lng, resolveAddressLabel])
+
+  useEffect(() => {
+    let active = true
+    void resolveAddressLabel(presenceCoords, value => {
+      if (active) setPresenceAddress(value)
+    })
+    return () => {
+      active = false
+    }
+  }, [presenceCoords?.lat, presenceCoords?.lng, resolveAddressLabel])
 
   const uploadEvidence = async (
     prefix: string,
@@ -4808,15 +4896,8 @@ function ShiftsPageContent() {
                           <CameraCapture
                             onCapture={setTaskPhotoClose}
                             overlayLines={[
-                              `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
-                              `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
-                              `${t("Tarea", "Task")}: ${selectedTaskId}`,
-                              `${t("Toma", "Shot")}: close_up`,
-                              taskCoords
-                                ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                : t("GPS: pendiente", "GPS: pending"),
+                              `${t("Direccion", "Address")}: ${taskAddress || t("pendiente", "pending")}`,
+                              `${t("Restaurante", "Restaurant")}: ${getRestaurantWatermarkLabelById(selectedTask?.restaurant_id)}`,
                             ]}
                           />
                         </div>
@@ -4828,15 +4909,8 @@ function ShiftsPageContent() {
                               <CameraCapture
                                 onCapture={setTaskPhotoMid}
                                 overlayLines={[
-                                  `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                                  `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
-                                  `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
-                                  `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
-                                  `${t("Tarea", "Task")}: ${selectedTaskId}`,
-                                  `${t("Toma", "Shot")}: mid_range`,
-                                  taskCoords
-                                    ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                    : t("GPS: pendiente", "GPS: pending"),
+                                  `${t("Direccion", "Address")}: ${taskAddress || t("pendiente", "pending")}`,
+                                  `${t("Restaurante", "Restaurant")}: ${getRestaurantWatermarkLabelById(selectedTask?.restaurant_id)}`,
                                 ]}
                               />
                             </div>
@@ -4846,15 +4920,8 @@ function ShiftsPageContent() {
                               <CameraCapture
                                 onCapture={setTaskPhotoWide}
                                 overlayLines={[
-                                  `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                                  `${t("Empleado", "Employee")}: ${selectedTask?.assigned_employee_id ?? currentUserId ?? t("desconocido", "unknown")}`,
-                                  `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(selectedTask?.restaurant_id)}`,
-                                  `${t("Turno", "Shift")}: ${selectedTask?.shift_id ?? "-"}`,
-                                  `${t("Tarea", "Task")}: ${selectedTaskId}`,
-                                  `${t("Toma", "Shot")}: wide_general`,
-                                  taskCoords
-                                    ? `GPS: ${taskCoords.lat.toFixed(6)}, ${taskCoords.lng.toFixed(6)}`
-                                    : t("GPS: pendiente", "GPS: pending"),
+                                  `${t("Direccion", "Address")}: ${taskAddress || t("pendiente", "pending")}`,
+                                  `${t("Restaurante", "Restaurant")}: ${getRestaurantWatermarkLabelById(selectedTask?.restaurant_id)}`,
                                 ]}
                               />
                             </div>
@@ -5673,12 +5740,8 @@ function ShiftsPageContent() {
                           <CameraCapture
                             onCapture={handleCaptureSupervisionPhoto}
                             overlayLines={[
-                              `${t("Usuario", "User")}: ${currentUserId ?? t("desconocido", "unknown")}`,
-                              `${t("Restaurante", "Restaurant")}: ${getRestaurantLabelById(presenceRestaurantId)}`,
-                              `${t("Fase", "Phase")}: ${supervisionStep === "start" ? t("Ingreso", "Entry") : t("Salida", "Exit")}`,
-                              presenceCoords
-                                ? `GPS: ${presenceCoords.lat.toFixed(6)}, ${presenceCoords.lng.toFixed(6)}`
-                                : t("GPS: pendiente", "GPS: pending"),
+                              `${t("Direccion", "Address")}: ${presenceAddress || t("pendiente", "pending")}`,
+                              `${t("Restaurante", "Restaurant")}: ${getRestaurantWatermarkLabelById(presenceRestaurantId)}`,
                             ]}
                           />
                           <button type="button" className="btn btn-secondary" onClick={() => setSupervisionCameraOpen(false)}>

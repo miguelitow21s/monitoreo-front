@@ -36,7 +36,7 @@ function drawEvidenceOverlay(
 }
 
 export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCaptureProps) {
-  const { formatDateTime, t } = useI18n()
+  const { t } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -118,13 +118,19 @@ export default function CameraCapture({ onCapture, overlayLines = [] }: CameraCa
       return
     }
 
+    const now = new Date()
+    const pad = (value: number) => value.toString().padStart(2, "0")
+    const capturedAtLabel = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
+      now.getHours()
+    )}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+
     ctx.drawImage(video, 0, 0)
     drawEvidenceOverlay(
       ctx,
       canvas.width,
       canvas.height,
       overlayLines,
-      `${t("Capturada", "Captured")}: ${formatDateTime(new Date(), { hour12: false })}`
+      `${t("Capturada", "Captured")}: ${capturedAtLabel}`
     )
 
     canvas.toBlob(
