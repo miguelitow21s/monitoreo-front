@@ -29,29 +29,28 @@ export default function AdminPage() {
           </div>
 
           <div className="quick-actions">
-            <button className="quick-action-btn" onClick={() => router.push("/restaurants")}>
+            <button className="quick-action-btn" onClick={() => router.push("/shifts")}>
               <svg className="quick-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l9-6 9 6v11a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z" />
+                <path d="M16 11c0 2.2-1.8 4-4 4s-4-1.8-4-4" />
+                <circle cx="12" cy="11" r="8" />
+                <path d="M12 15v6" />
               </svg>
-              <span>{t("Restaurantes", "Restaurants")}</span>
+              <span>{t("Funciones Supervisor", "Supervisor tools")}</span>
             </button>
             <button className="quick-action-btn" onClick={() => router.push("/users")}>
               <svg className="quick-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                <path d="M16 11c0 2.2-1.8 4-4 4s-4-1.8-4-4" />
+                <path d="M21 20c-1.5-3-4.5-4-9-4s-7.5 1-9 4" />
+                <path d="M19 8l2 2-2 2" />
               </svg>
-              <span>{t("Empleados", "Employees")}</span>
+              <span>{t("Gestionar Supervisores", "Manage supervisors")}</span>
             </button>
-            <button className="quick-action-btn" onClick={() => router.push("/shifts")}>
+            <button className="quick-action-btn" onClick={() => router.push("/account/password")}>
               <svg className="quick-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" />
-                <path d="M16 2v4" />
-                <path d="M8 2v4" />
-                <path d="M3 10h18" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c0 .7.4 1.3 1.1 1.5H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z" />
               </svg>
-              <span>{t("Turnos", "Shifts")}</span>
+              <span>{t("Configuración", "Configuration")}</span>
             </button>
             <button className="quick-action-btn" onClick={() => router.push("/reports")}>
               <svg className="quick-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -60,7 +59,7 @@ export default function AdminPage() {
                 <path d="M12 16V5" />
                 <path d="M17 16v-7" />
               </svg>
-              <span>{t("Informes", "Reports")}</span>
+              <span>{t("Auditoría", "Audit logs")}</span>
             </button>
           </div>
         </section>

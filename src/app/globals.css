@@ -955,6 +955,94 @@ select:focus {
   animation: pulse 1.5s infinite;
 }
 
+.profile-header {
+  text-align: center;
+  padding: 30px 0;
+}
+
+.profile-avatar {
+  width: 100px;
+  height: 100px;
+  background: var(--gradient-2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  margin: 0 auto 15px;
+  border: 4px solid var(--dark-light);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.3);
+}
+
+.profile-name {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.profile-role {
+  color: var(--primary);
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+.success-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--dark);
+  z-index: 2000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+}
+
+.success-screen.active {
+  display: flex;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.success-icon {
+  width: 120px;
+  height: 120px;
+  background: var(--secondary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60px;
+  margin-bottom: 30px;
+  animation: pulse 2s infinite;
+}
+
+.success-screen h2 {
+  font-size: 32px;
+  margin-bottom: 15px;
+}
+
+.success-screen p {
+  color: var(--gray);
+  margin-bottom: 30px;
+  max-width: 400px;
+}
+
+.success-actions {
+  display: grid;
+  gap: 15px;
+  width: 100%;
+  max-width: 360px;
+}
+
+@media (min-width: 520px) {
+  .success-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .login-container {
   min-height: 100vh;
   display: flex;
@@ -1086,6 +1174,7 @@ select:focus {
   width: 20px;
   height: 20px;
   pointer-events: none;
+  z-index: 1;
 }
 
 .input-wrapper .input-icon svg {
@@ -1093,7 +1182,9 @@ select:focus {
   height: 18px;
 }
 
-.form-control {
+input.form-control,
+select.form-control,
+textarea.form-control {
   width: 100%;
   padding: 14px;
   border: 2px solid var(--light-gray);
@@ -1102,9 +1193,12 @@ select:focus {
   transition: all 0.3s;
   background: var(--white);
   color: var(--dark);
+  min-height: 48px;
 }
 
-.form-control:focus {
+input.form-control:focus,
+select.form-control:focus,
+textarea.form-control:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
@@ -1117,6 +1211,8 @@ select:focus {
 
 .input-wrapper .form-control {
   padding-left: 52px;
+  position: relative;
+  z-index: 0;
 }
 
 .btn {
