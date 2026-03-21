@@ -4726,9 +4726,6 @@ function ShiftsPageContent() {
                   </Button>
                 </div>
               </Card>
-                  </div>
-                </details>
-              </div>
             )}
 
             {isEmpleado && activeShift && isEmployeeEndStage && (
@@ -5106,10 +5103,7 @@ function ShiftsPageContent() {
                     </Button>
                   </div>
                 </div>
-                    </Card>
-                  </div>
-                </details>
-              </div>
+              </Card>
             )}
 
             {supervisorScreen === "schedule" && (
