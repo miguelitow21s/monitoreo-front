@@ -1352,7 +1352,6 @@ export default function RestaurantsPage() {
                   </div>
                 )}
                 </Card>
-              )}
             </>
           )}
         </div>
