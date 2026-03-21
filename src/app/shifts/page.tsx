@@ -706,20 +706,6 @@ function ShiftsPageContent() {
   }, [activeShift, endAreaDelivered, endFitForWork, endIncidentsOccurred, hasStartEvidence, isEmpleado])
 
   useEffect(() => {
-    if (!isEmpleado) return
-    if (isEmployeeStartInfoStage && gpsStatus === "idle") {
-      verifyEmployeeGps()
-    }
-  }, [gpsStatus, isEmpleado, isEmployeeStartInfoStage, verifyEmployeeGps])
-
-  useEffect(() => {
-    if (!canOperateSupervisor || supervisorScreen !== "presence") return
-    if (presenceGpsStatus === "idle") {
-      verifyPresenceGps()
-    }
-  }, [canOperateSupervisor, presenceGpsStatus, supervisorScreen, verifyPresenceGps])
-
-  useEffect(() => {
     setSupervisionCameraOpen(false)
   }, [supervisionStep])
   const employeeTasksForShift = useMemo(() => {
@@ -1141,6 +1127,20 @@ function ShiftsPageContent() {
       }
     )
   }, [t])
+
+  useEffect(() => {
+    if (!isEmpleado) return
+    if (isEmployeeStartInfoStage && gpsStatus === "idle") {
+      verifyEmployeeGps()
+    }
+  }, [gpsStatus, isEmpleado, isEmployeeStartInfoStage, verifyEmployeeGps])
+
+  useEffect(() => {
+    if (!canOperateSupervisor || supervisorScreen !== "presence") return
+    if (presenceGpsStatus === "idle") {
+      verifyPresenceGps()
+    }
+  }, [canOperateSupervisor, presenceGpsStatus, supervisorScreen, verifyPresenceGps])
 
   const selectedTask = useMemo(
     () => employeeTasksForShift.find(task => task.id === selectedTaskId) ?? null,
