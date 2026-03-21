@@ -774,28 +774,6 @@ function ShiftsPageContent() {
     [history]
   )
   const monthHoursValue = useMemo(() => Math.round(totalWorkedMinutes / 60), [totalWorkedMinutes])
-  const summaryDurationLabel = useMemo(() => {
-    if (!activeShift?.start_time) return "-"
-    const totalMinutes = Math.max(0, Math.floor(elapsedShiftMs / 60000))
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
-    if (hours === 0 && minutes === 0) return "0h"
-    if (minutes === 0) return `${hours}h`
-    return `${hours}h ${minutes}m`
-  }, [activeShift?.start_time, elapsedShiftMs])
-  const summaryScheduleLabel = useMemo(() => {
-    if (activeScheduledShift?.scheduled_start && activeScheduledShift?.scheduled_end) {
-      return `${formatTimeOnly(activeScheduledShift.scheduled_start)} - ${formatTimeOnly(activeScheduledShift.scheduled_end)}`
-    }
-    if (activeShift?.start_time) {
-      return `${formatTimeOnly(activeShift.start_time)} - ${formatTimeOnly(new Date().toISOString())}`
-    }
-    return "-"
-  }, [activeScheduledShift?.scheduled_end, activeScheduledShift?.scheduled_start, activeShift?.start_time])
-  const summaryDateLabel = useMemo(() => {
-    if (activeShift?.start_time) return formatDateOnly(activeShift.start_time)
-    return formatDateOnly(new Date().toISOString())
-  }, [activeShift?.start_time])
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setClockMs(Date.now()), 1000)
@@ -868,6 +846,31 @@ function ShiftsPageContent() {
     if (best) return best.shift
     return null
   }, [activeShift, scheduledShifts])
+
+  const summaryDurationLabel = useMemo(() => {
+    if (!activeShift?.start_time) return "-"
+    const totalMinutes = Math.max(0, Math.floor(elapsedShiftMs / 60000))
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (hours === 0 && minutes === 0) return "0h"
+    if (minutes === 0) return `${hours}h`
+    return `${hours}h ${minutes}m`
+  }, [activeShift?.start_time, elapsedShiftMs])
+
+  const summaryScheduleLabel = useMemo(() => {
+    if (activeScheduledShift?.scheduled_start && activeScheduledShift?.scheduled_end) {
+      return `${formatTimeOnly(activeScheduledShift.scheduled_start)} - ${formatTimeOnly(activeScheduledShift.scheduled_end)}`
+    }
+    if (activeShift?.start_time) {
+      return `${formatTimeOnly(activeShift.start_time)} - ${formatTimeOnly(new Date().toISOString())}`
+    }
+    return "-"
+  }, [activeScheduledShift?.scheduled_end, activeScheduledShift?.scheduled_start, activeShift?.start_time])
+
+  const summaryDateLabel = useMemo(() => {
+    if (activeShift?.start_time) return formatDateOnly(activeShift.start_time)
+    return formatDateOnly(new Date().toISOString())
+  }, [activeShift?.start_time])
 
   const currentScheduledRestaurant = useMemo(() => {
     const currentRestaurantId = currentScheduledShift?.restaurant_id ?? null
