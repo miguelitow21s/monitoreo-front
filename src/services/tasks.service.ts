@@ -283,6 +283,35 @@ export async function listSupervisorOperationalTasks(limit = 50, restaurantId?: 
   return normalizeTaskRowsFromEnvelope(payload)
 }
 
+function shouldFallbackToDirectDb(error: unknown) {
+  if (typeof error !== "object" || error === null) return true
+
+  const status = (error as { status?: unknown }).status
+  if (typeof status === "number") {
+    if (status === 404 || status === 503) return true
+    return false
+  }
+
+  const message =
+    typeof (error as { message?: unknown }).message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : ""
+
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("cors") ||
+    message.includes("temporarily unavailable")
+  )
+}
+
+async function invokeTasksManage<T>(body: Record<string, unknown>) {
+  return invokeEdge<T>("operational_tasks_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body,
+  })
+}
+
 export async function createOperationalTask(payload: CreateOperationalTaskPayload) {
   const created = await invokeEdge<unknown>("operational_tasks_manage", {
     idempotencyKey: crypto.randomUUID(),
@@ -314,6 +343,20 @@ export async function createOperationalTask(payload: CreateOperationalTaskPayloa
 }
 
 export async function markTaskInProgress(taskId: number) {
+  try {
+    const payload = await invokeTasksManage<unknown>({
+      action: "update",
+      task_id: taskId,
+      status: "in_progress",
+    })
+
+    const normalized = normalizeTaskRow(payload)
+    if (normalized) return normalized
+    return { id: taskId } as OperationalTask
+  } catch (error: unknown) {
+    if (!shouldFallbackToDirectDb(error)) throw error
+  }
+
   const { data, error } = await supabase
     .from("operational_tasks")
     .update({ status: "in_progress" })
@@ -337,6 +380,19 @@ export async function updateOperationalTaskDetails(payload: UpdateOperationalTas
     throw new Error("No task updates provided.")
   }
 
+  try {
+    const response = await invokeTasksManage<unknown>({
+      action: "update",
+      task_id: payload.taskId,
+      ...updates,
+    })
+    const normalized = normalizeTaskRow(response)
+    if (normalized) return normalized
+    return { id: payload.taskId } as OperationalTask
+  } catch (error: unknown) {
+    if (!shouldFallbackToDirectDb(error)) throw error
+  }
+
   const { data, error } = await supabase
     .from("operational_tasks")
     .update(updates)
@@ -352,6 +408,19 @@ async function updateOperationalTaskStatus(taskId: number, status: TaskStatus) {
   const updates = {
     status,
     resolved_at: new Date().toISOString(),
+  }
+
+  try {
+    const response = await invokeTasksManage<unknown>({
+      action: "update",
+      task_id: taskId,
+      ...updates,
+    })
+    const normalized = normalizeTaskRow(response)
+    if (normalized) return normalized
+    return { id: taskId } as OperationalTask
+  } catch (error: unknown) {
+    if (!shouldFallbackToDirectDb(error)) throw error
   }
 
   const { data, error } = await supabase
@@ -374,6 +443,16 @@ export async function cancelOperationalTask(taskId: number) {
 }
 
 export async function deleteOperationalTask(taskId: number) {
+  try {
+    await invokeTasksManage({
+      action: "delete",
+      task_id: taskId,
+    })
+    return
+  } catch (error: unknown) {
+    if (!shouldFallbackToDirectDb(error)) throw error
+  }
+
   const { error } = await supabase.from("operational_tasks").delete().eq("id", taskId)
   if (error) throw error
 }

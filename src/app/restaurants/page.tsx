@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
+import { useRole } from "@/hooks/useRole"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import RoleGuard from "@/components/RoleGuard"
 import { useToast } from "@/components/toast/ToastProvider"
@@ -361,6 +362,7 @@ async function reverseCountryFromCoordinates(lat: number, lng: number) {
 export default function RestaurantsPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
   const { t } = useI18n()
+  const { isSuperAdmin } = useRole()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<Restaurant[]>([])
@@ -471,8 +473,11 @@ export default function RestaurantsPage() {
     setLoading(true)
     try {
       const [restaurantRows, profileRows] = await Promise.all([
-        listRestaurants({ includeInactive: true, useAdminApi: true }),
-        listUserProfiles({ useAdminApi: true }),
+        listRestaurants({
+          includeInactive: isSuperAdmin,
+          ...(isSuperAdmin ? { useAdminApi: true } : {}),
+        }),
+        listUserProfiles(isSuperAdmin ? { useAdminApi: true } : undefined),
       ])
       setRows(restaurantRows)
       setProfiles(profileRows)
@@ -508,7 +513,7 @@ export default function RestaurantsPage() {
     } finally {
       setLoading(false)
     }
-  }, [assignRoleFilter, showToast, t])
+  }, [assignRoleFilter, isSuperAdmin, showToast, t])
 
   useEffect(() => {
     const assignable = profiles.filter(
@@ -518,6 +523,12 @@ export default function RestaurantsPage() {
     )
     setAssignUser(assignable[0]?.id ?? "")
   }, [assignRoleFilter, profiles])
+
+  useEffect(() => {
+    if (!isSuperAdmin && assignRoleFilter !== "employee") {
+      setAssignRoleFilter("employee")
+    }
+  }, [assignRoleFilter, isSuperAdmin])
 
   useEffect(() => {
     if (authLoading) return
@@ -848,6 +859,10 @@ export default function RestaurantsPage() {
   }
 
   const handleCreate = async () => {
+    if (!isSuperAdmin) {
+      showToast("info", t("Solo super admin puede crear restaurantes.", "Only super admin can create restaurants."))
+      return
+    }
     const parsedLat = parseNullableNumber(lat)
     const parsedLng = parseNullableNumber(lng)
     const parsedRadius = parseNullableNumber(radius)
@@ -918,6 +933,10 @@ export default function RestaurantsPage() {
   }
 
   const handleRadiusUpdate = async (restaurant: Restaurant, newRadius: string) => {
+    if (!isSuperAdmin) {
+      showToast("info", t("Solo super admin puede editar restaurantes.", "Only super admin can edit restaurants."))
+      return
+    }
     const parsed = parseNullableNumber(newRadius)
     try {
       const updated = await updateRestaurant(restaurant.id, { geofence_radius_m: parsed })
@@ -970,6 +989,10 @@ export default function RestaurantsPage() {
   }
 
   const handleToggleRestaurantActive = async (restaurant: Restaurant) => {
+    if (!isSuperAdmin) {
+      showToast("info", t("Solo super admin puede activar o desactivar restaurantes.", "Only super admin can activate/deactivate restaurants."))
+      return
+    }
     const current = restaurant.is_active !== false
     try {
       const updated = await updateRestaurantStatus(restaurant.id, !current)
@@ -1000,7 +1023,8 @@ export default function RestaurantsPage() {
             <Skeleton className="h-28" />
           ) : (
             <>
-              <Card title={t("Crear restaurante", "Create restaurant")}>
+              {isSuperAdmin && (
+                <Card title={t("Crear restaurante", "Create restaurant")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   <input
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1148,9 +1172,10 @@ export default function RestaurantsPage() {
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={assignRoleFilter}
                     onChange={event => setAssignRoleFilter(event.target.value as AssignmentRoleFilter)}
+                    disabled={!isSuperAdmin}
                   >
                     <option value="employee">{t("Empleado", "Employee")}</option>
-                    <option value="supervisor">{t("Supervisora", "Supervisor")}</option>
+                    {isSuperAdmin && <option value="supervisor">{t("Supervisora", "Supervisor")}</option>}
                   </select>
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -1264,7 +1289,8 @@ export default function RestaurantsPage() {
                                 <input
                                   defaultValue={String(item.geofence_radius_m ?? 100)}
                                   className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
-                                  onBlur={event => void handleRadiusUpdate(item, event.target.value)}
+                                  onBlur={isSuperAdmin ? event => void handleRadiusUpdate(item, event.target.value) : undefined}
+                                  disabled={!isSuperAdmin}
                                 />
                                 <span className="text-xs text-slate-500">m</span>
                               </div>
@@ -1272,6 +1298,7 @@ export default function RestaurantsPage() {
                                 size="sm"
                                 variant={item.is_active === false ? "secondary" : "ghost"}
                                 onClick={() => void handleToggleRestaurantActive(item)}
+                                disabled={!isSuperAdmin}
                               >
                                 {item.is_active === false ? t("Activar", "Enable") : t("Desactivar", "Disable")}
                               </Button>
@@ -1323,7 +1350,8 @@ export default function RestaurantsPage() {
                     })}
                   </div>
                 )}
-              </Card>
+                </Card>
+              )}
             </>
           )}
         </div>
