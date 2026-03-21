@@ -1165,6 +1165,7 @@ export default function RestaurantsPage() {
                   </div>
                 ) : null}
               </Card>
+              )}
 
               <Card title={t("Asignaciones", "Assignments")}>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
