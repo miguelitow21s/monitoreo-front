@@ -730,7 +730,6 @@ function ShiftsPageContent() {
     const metadata = user?.user_metadata as { phone?: string; phone_number?: string } | undefined
     return metadata?.phone ?? metadata?.phone_number ?? t("Sin teléfono", "No phone")
   }, [t, user?.user_metadata])
-  const monthHoursValue = useMemo(() => Math.round(totalWorkedMinutes / 60), [totalWorkedMinutes])
   const upcomingShiftsCount = scheduledShifts.length
   const pendingTasksCount = employeeDashboard?.pending_tasks_count ?? pendingEmployeeTasks.length
   const scheduleHoursValue = useMemo(() => {
@@ -774,6 +773,7 @@ function ShiftsPageContent() {
     () => history.reduce((acc, item) => acc + durationMinutes(item.start_time, item.end_time), 0),
     [history]
   )
+  const monthHoursValue = useMemo(() => Math.round(totalWorkedMinutes / 60), [totalWorkedMinutes])
   const summaryDurationLabel = useMemo(() => {
     if (!activeShift?.start_time) return "-"
     const totalMinutes = Math.max(0, Math.floor(elapsedShiftMs / 60000))
