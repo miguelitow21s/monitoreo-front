@@ -57,7 +57,6 @@ import {
   closeOperationalTask,
   completeOperationalTask,
   createOperationalTask,
-  deleteOperationalTask,
   fetchTaskEvidenceManifest,
   listMyOperationalTasks,
   listSupervisorOperationalTasks,
@@ -419,7 +418,7 @@ function ShiftsPageContent() {
   const [editingTaskDueAt, setEditingTaskDueAt] = useState("")
   const [savingTaskEditId, setSavingTaskEditId] = useState<number | null>(null)
   const [closingTaskId, setClosingTaskId] = useState<number | null>(null)
-  const [deletingTaskId, setDeletingTaskId] = useState<number | null>(null)
+  const [cancelingTaskId, setCancelingTaskId] = useState<number | null>(null)
   const [newTaskByShift, setNewTaskByShift] = useState<Record<string, { title: string; description: string; priority: TaskPriority; dueAt: string }>>({})
   const [creatingTaskForShift, setCreatingTaskForShift] = useState<string | null>(null)
 
@@ -2559,25 +2558,16 @@ function ShiftsPageContent() {
     }
   }
 
-  const handleDeleteSupervisorTask = async (taskId: number) => {
-    setDeletingTaskId(taskId)
+  const handleCancelSupervisorTask = async (taskId: number) => {
+    setCancelingTaskId(taskId)
     try {
-      await deleteOperationalTask(taskId)
-      showToast("success", t("Tarea eliminada.", "Task deleted."))
+      await cancelOperationalTask(taskId)
+      showToast("success", t("Tarea cancelada.", "Task cancelled."))
       await loadTasks()
     } catch (error: unknown) {
-      try {
-        await cancelOperationalTask(taskId)
-        showToast(
-          "info",
-          t("No se pudo eliminar. La tarea quedo cancelada.", "Could not delete. Task was cancelled.")
-        )
-        await loadTasks()
-      } catch (innerError: unknown) {
-        showToast("error", extractErrorMessage(innerError, t("No se pudo eliminar la tarea.", "Could not delete task.")))
-      }
+      showToast("error", extractErrorMessage(error, t("No se pudo cancelar la tarea.", "Could not cancel task.")))
     } finally {
-      setDeletingTaskId(null)
+      setCancelingTaskId(null)
     }
   }
 
@@ -5829,10 +5819,10 @@ function ShiftsPageContent() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => void handleDeleteSupervisorTask(task.id)}
-                              disabled={deletingTaskId === task.id}
+                              onClick={() => void handleCancelSupervisorTask(task.id)}
+                              disabled={cancelingTaskId === task.id}
                             >
-                              {deletingTaskId === task.id ? t("Eliminando...", "Deleting...") : t("Eliminar", "Delete")}
+                              {cancelingTaskId === task.id ? t("Cancelando...", "Cancelling...") : t("Cancelar", "Cancel")}
                             </Button>
                           </div>
                         )
