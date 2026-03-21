@@ -2849,11 +2849,7 @@ function ShiftsPageContent() {
       return
     }
 
-    if (!supervisorParam && (supervisorScreen === "presence" || supervisorScreen === "turnos")) {
-      setSupervisorScreen("home")
-      setSupervisorScreenHistory(["home"])
-    }
-  }, [canOperateSupervisor, searchParams, setSupervisorScreenHistory, setSupervisorScreenWithHistory, supervisorScreen])
+  }, [canOperateSupervisor, searchParams, setSupervisorScreenWithHistory, supervisorScreen])
 
   const handleAssignStaff = async () => {
     if (!staffRestaurantId || !staffUserId) {
