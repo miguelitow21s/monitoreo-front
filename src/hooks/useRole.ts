@@ -77,30 +77,40 @@ export function useRole() {
 
       setLoadingRole(true)
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role,is_active")
-        .eq("id", user.id)
-        .maybeSingle()
+      const roleFromMetadata = normalizeRole(
+        (user.user_metadata?.role as string | undefined) ?? (user.app_metadata?.role as string | undefined)
+      )
+      const isActiveFromMetadata =
+        typeof user.user_metadata?.is_active === "boolean"
+          ? user.user_metadata.is_active
+          : typeof (user.app_metadata as { is_active?: unknown })?.is_active === "boolean"
+            ? (user.app_metadata as { is_active?: boolean }).is_active
+            : undefined
 
       if (!mounted) return
 
-      debugLog("role.profile_fetch", {
+      debugLog("role.metadata_fetch", {
         userId: user.id,
-        hasProfileRow: !!data,
-        dataRole: data?.role ?? null,
-        isActive: data?.is_active ?? null,
-        error: toErrorSnapshot(error),
+        role: roleFromMetadata ?? null,
+        isActive: isActiveFromMetadata ?? null,
       })
 
-      if (error) {
+      if (isActiveFromMetadata === false) {
         setLastProfileFetchUserId(user.id)
         setProfileRole(null)
+        await supabase.auth.signOut()
         setLoadingRole(false)
         return
       }
 
-      if (!data && !bootstrapAttemptedRef.current) {
+      if (roleFromMetadata) {
+        setLastProfileFetchUserId(user.id)
+        setProfileRole(roleFromMetadata)
+        setLoadingRole(false)
+        return
+      }
+
+      if (!bootstrapAttemptedRef.current) {
         bootstrapAttemptedRef.current = true
         debugLog("role.bootstrap_attempt", { userId: user.id })
 
@@ -109,56 +119,10 @@ export function useRole() {
         } catch (bootstrapError: unknown) {
           debugLog("role.bootstrap_error", { userId: user.id, error: toErrorSnapshot(bootstrapError) })
         }
-
-        if (!mounted) return
-
-        const { data: retryData, error: retryError } = await supabase
-          .from("profiles")
-          .select("role,is_active")
-          .eq("id", user.id)
-          .maybeSingle()
-
-        if (!mounted) return
-
-        debugLog("role.profile_retry", {
-          userId: user.id,
-          hasProfileRow: !!retryData,
-          dataRole: retryData?.role ?? null,
-          isActive: retryData?.is_active ?? null,
-          error: toErrorSnapshot(retryError),
-        })
-
-        if (retryError) {
-          setLastProfileFetchUserId(user.id)
-          setProfileRole(null)
-          setLoadingRole(false)
-          return
-        }
-
-        if (retryData?.is_active === false) {
-          setLastProfileFetchUserId(user.id)
-          setProfileRole(null)
-          await supabase.auth.signOut()
-          setLoadingRole(false)
-          return
-        }
-
-        setLastProfileFetchUserId(user.id)
-        setProfileRole(normalizeRole(retryData?.role) ?? null)
-        setLoadingRole(false)
-        return
-      }
-
-      if (data?.is_active === false) {
-        setLastProfileFetchUserId(user.id)
-        setProfileRole(null)
-        await supabase.auth.signOut()
-        setLoadingRole(false)
-        return
       }
 
       setLastProfileFetchUserId(user.id)
-      setProfileRole(normalizeRole(data?.role) ?? null)
+      setProfileRole(null)
       setLoadingRole(false)
     }
 
@@ -167,12 +131,12 @@ export function useRole() {
     return () => {
       mounted = false
     }
-  }, [user?.id])
+  }, [user?.id, user?.user_metadata?.role, user?.app_metadata?.role])
 
-  const metadataRole = normalizeRole(user?.user_metadata?.role)
-  // Source of truth is profiles.role for authenticated users.
-  // Metadata fallback is only used before authentication is established.
-  const role = user?.id ? profileRole ?? undefined : metadataRole ?? undefined
+  const metadataRole = normalizeRole(
+    (user?.user_metadata?.role as string | undefined) ?? (user?.app_metadata?.role as string | undefined)
+  )
+  const role = profileRole ?? metadataRole ?? undefined
   const pendingRole = !!user?.id && lastProfileFetchUserId !== user.id
   const combinedLoading = loading || loadingRole || pendingRole
 

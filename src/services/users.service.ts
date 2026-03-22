@@ -40,12 +40,19 @@ function isBootstrapSkippableError(error: unknown) {
 
   return (
     status === 400 ||
+    status === 409 ||
     status === 404 ||
     status === 405 ||
+    message.includes("conflict") ||
+    message.includes("already exists") ||
     message.includes("method not allowed") ||
     message.includes("metodo no permitido") ||
+    details.includes("conflict") ||
+    details.includes("already exists") ||
     details.includes("method not allowed") ||
     details.includes("metodo no permitido") ||
+    hint.includes("conflict") ||
+    hint.includes("already exists") ||
     hint.includes("method not allowed") ||
     hint.includes("metodo no permitido")
   )
@@ -217,6 +224,16 @@ export async function bootstrapMyUserProfile() {
   } = await supabase.auth.getUser()
 
   if (!user?.id) return
+  const roleFromMetadata =
+    (typeof user.user_metadata?.role === "string" ? user.user_metadata.role : null) ??
+    (typeof (user.app_metadata as { role?: unknown })?.role === "string"
+      ? ((user.app_metadata as { role?: string }).role ?? null)
+      : null)
+
+  if (roleFromMetadata) {
+    bootstrapEdgeUnavailable = true
+    return
+  }
 
   try {
     await invokeEdge("users_bootstrap", {
