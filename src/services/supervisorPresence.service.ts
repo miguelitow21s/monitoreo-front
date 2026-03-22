@@ -17,6 +17,17 @@ export interface SupervisorPresenceLog {
   notes: string | null
 }
 
+export interface SupervisorPresenceSummary {
+  id: string
+  supervisor_id: string | null
+  supervisor_name?: string | null
+  restaurant_id: number | null
+  restaurant_name?: string | null
+  phase: PresencePhase
+  recorded_at: string
+  notes?: string | null
+}
+
 interface RegisterSupervisorPresencePayload {
   restaurantId: number
   phase: PresencePhase
@@ -72,6 +83,26 @@ export async function listSupervisorPresenceByRestaurant(restaurantId: number, l
   return unwrapPresenceItems(payload)
 }
 
+export async function listSupervisorPresenceToday(limit = 20) {
+  const payload = await invokeEdge<unknown>("supervisor_presence_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list_today",
+      limit,
+    },
+  })
+
+  const items = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown }).items)
+      ? (payload as { items: unknown[] }).items
+      : []
+
+  return items
+    .map(raw => normalizePresenceSummary(raw))
+    .filter((row): row is SupervisorPresenceSummary => row !== null)
+}
+
 function unwrapPresenceItems(payload: unknown) {
   const items = Array.isArray(payload)
     ? payload
@@ -80,4 +111,37 @@ function unwrapPresenceItems(payload: unknown) {
       : []
 
   return items as SupervisorPresenceLog[]
+}
+
+function normalizePresenceSummary(raw: unknown): SupervisorPresenceSummary | null {
+  if (!raw || typeof raw !== "object") return null
+  const row = raw as Record<string, unknown>
+  const idRaw = row.id
+  const id =
+    typeof idRaw === "number"
+      ? String(idRaw)
+      : typeof idRaw === "string" && idRaw.trim().length > 0
+        ? idRaw
+        : null
+  const recordedAt = typeof row.recorded_at === "string" ? row.recorded_at : null
+  const phase = typeof row.phase === "string" ? (row.phase as PresencePhase) : null
+  if (!id || !recordedAt || !phase) return null
+
+  const restaurantId =
+    typeof row.restaurant_id === "number"
+      ? row.restaurant_id
+      : typeof row.restaurant_id === "string"
+        ? Number(row.restaurant_id)
+        : null
+
+  return {
+    id,
+    supervisor_id: typeof row.supervisor_id === "string" ? row.supervisor_id : row.supervisor_id ? String(row.supervisor_id) : null,
+    supervisor_name: typeof row.supervisor_name === "string" ? row.supervisor_name : null,
+    restaurant_id: Number.isFinite(restaurantId ?? NaN) ? (restaurantId as number) : null,
+    restaurant_name: typeof row.restaurant_name === "string" ? row.restaurant_name : null,
+    phase,
+    recorded_at: recordedAt,
+    notes: typeof row.notes === "string" ? row.notes : null,
+  }
 }

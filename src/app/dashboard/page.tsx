@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
 import { EmployeeDashboardData, getEmployeeSelfDashboard } from "@/services/employeeSelfService.service"
+import { listSupervisorPresenceToday, SupervisorPresenceSummary } from "@/services/supervisorPresence.service"
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -21,6 +22,8 @@ export default function DashboardPage() {
   const { loading: authLoading, user } = useAuth()
   const { loading, isEmpleado, isSuperAdmin } = useRole()
   const [employeeDashboard, setEmployeeDashboard] = useState<EmployeeDashboardData | null | undefined>(undefined)
+  const [todaySupervisions, setTodaySupervisions] = useState<SupervisorPresenceSummary[]>([])
+  const [loadingTodaySupervisions, setLoadingTodaySupervisions] = useState(false)
 
   const displayName = (() => {
     const metadata = user?.user_metadata as { full_name?: string; name?: string } | undefined
@@ -41,6 +44,26 @@ export default function DashboardPage() {
       mounted = false
     }
   }, [authLoading, isEmpleado, loading])
+
+  useEffect(() => {
+    if (!isSuperAdmin || authLoading || loading) return
+    let mounted = true
+    setLoadingTodaySupervisions(true)
+    listSupervisorPresenceToday(20)
+      .then(items => {
+        if (mounted) setTodaySupervisions(items)
+      })
+      .catch(() => {
+        if (mounted) setTodaySupervisions([])
+      })
+      .finally(() => {
+        if (mounted) setLoadingTodaySupervisions(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [authLoading, isSuperAdmin, loading])
 
   const nextShift = useMemo(() => {
     const shifts = employeeDashboard?.scheduled_shifts ?? []
@@ -117,6 +140,30 @@ export default function DashboardPage() {
     ],
     [t]
   )
+
+  const supervisionStatusLabel = (phase: SupervisorPresenceSummary["phase"]) => {
+    if (phase === "end") return t("Verificado en sitio", "Verified on site")
+    return t("Inicio verificado", "Start verified")
+  }
+
+  const supervisionLine = (item: SupervisorPresenceSummary) => {
+    const restaurant = item.restaurant_name ?? (item.restaurant_id ? `#${item.restaurant_id}` : t("Sin restaurante", "No restaurant"))
+    const time = formatTime(item.recorded_at, { hour: "2-digit", minute: "2-digit" })
+    return `${restaurant} - ${time}`
+  }
+
+  const supervisorDisplayName = (item: SupervisorPresenceSummary) => {
+    if (item.supervisor_name) return item.supervisor_name
+    if (item.supervisor_id) return `Supervisor ${item.supervisor_id.slice(0, 8)}`
+    return t("Supervisor", "Supervisor")
+  }
+
+  const supervisorInitials = (name: string) => {
+    const chunks = name.split(" ").filter(Boolean)
+    if (chunks.length === 0) return "SV"
+    if (chunks.length === 1) return chunks[0].slice(0, 2).toUpperCase()
+    return `${chunks[0][0]}${chunks[1][0]}`.toUpperCase()
+  }
 
   if (loading || authLoading) {
     return (
@@ -284,14 +331,27 @@ export default function DashboardPage() {
           <div className="card-header">
             <div className="card-title">{t("Supervisiones realizadas hoy", "Supervisions completed today")}</div>
           </div>
-          <div className="employee-list-item">
-            <div className="employee-avatar">JP</div>
-            <div className="employee-info">
-              <h4>{t("Juan Pérez (Supervisor)", "Juan Perez (Supervisor)")}</h4>
-              <p>{t("Restaurant Don Juan - 10:30 AM", "Restaurant Don Juan - 10:30 AM")}</p>
+          {loadingTodaySupervisions ? (
+            <div className="text-sm text-slate-500">{t("Cargando...", "Loading...")}</div>
+          ) : todaySupervisions.length === 0 ? (
+            <div className="text-sm text-slate-500">{t("Sin supervisiones registradas hoy.", "No supervision records today.")}</div>
+          ) : (
+            <div className="space-y-2">
+              {todaySupervisions.slice(0, 6).map(item => {
+                const name = supervisorDisplayName(item)
+                return (
+                  <div key={item.id} className="employee-list-item">
+                    <div className="employee-avatar">{supervisorInitials(name)}</div>
+                    <div className="employee-info">
+                      <h4>{name}</h4>
+                      <p>{supervisionLine(item)}</p>
+                    </div>
+                    <small className="text-emerald-300">{supervisionStatusLabel(item.phase)}</small>
+                  </div>
+                )
+              })}
             </div>
-            <small className="text-emerald-300">{t("Verificado en sitio", "Verified on site")}</small>
-          </div>
+          )}
         </div>
       </section>
     </ProtectedRoute>
