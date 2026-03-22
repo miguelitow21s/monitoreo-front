@@ -1,4 +1,5 @@
 import { invokeEdge } from "@/services/edgeClient"
+import { supabase } from "@/services/supabaseClient"
 
 export interface Restaurant {
   id: string
@@ -145,6 +146,18 @@ export async function listRestaurants(options?: { includeInactive?: boolean; use
   }
 
   if (options?.useAdminApi) {
+    return callAdmin()
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const roleFromMetadata =
+    (typeof session?.user?.user_metadata?.role === "string" ? session?.user?.user_metadata?.role : null) ??
+    (typeof (session?.user?.app_metadata as { role?: unknown })?.role === "string"
+      ? ((session?.user?.app_metadata as { role?: string }).role ?? null)
+      : null)
+  if (roleFromMetadata && roleFromMetadata.toLowerCase().includes("admin")) {
     return callAdmin()
   }
 
