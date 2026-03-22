@@ -3062,6 +3062,14 @@ function ShiftsPageContent() {
     if (!canOperateSupervisor) return
     const supervisorParam = searchParams.get("supervisor")
 
+    if (supervisorParam === "home") {
+      if (supervisorScreen !== "home") {
+        setSupervisorScreenHistory(["home"])
+        setSupervisorScreen("home")
+      }
+      return
+    }
+
     if (supervisorParam === "presence") {
       if (supervisorScreen !== "presence") {
         setSupervisorScreenWithHistory("presence")
