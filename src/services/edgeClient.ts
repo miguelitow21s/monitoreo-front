@@ -15,6 +15,14 @@ interface BackendEnvelope<T> {
   request_id?: string
 }
 
+type ExtractedErrorContext = {
+  message: string
+  status?: number
+  code?: string
+  requestId?: string
+  details?: unknown
+}
+
 type EdgeInvokeOptions = {
   body?: Record<string, unknown> | string | Blob | ArrayBuffer | FormData
   idempotencyKey?: string
@@ -74,15 +82,10 @@ function toError(message: string, status?: number, code?: string, requestId?: st
   return err
 }
 
-async function extractErrorContext(error: unknown) {
+async function extractErrorContext(error: unknown): Promise<ExtractedErrorContext> {
   const fallbackMessage = "Edge Function request failed."
   if (!error || typeof error !== "object") {
-    return { message: fallbackMessage } as {
-      message: string
-      status?: number
-      code?: string
-      requestId?: string
-    }
+    return { message: fallbackMessage, details: undefined }
   }
 
   const err = error as {
