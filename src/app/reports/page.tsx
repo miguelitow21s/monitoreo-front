@@ -39,6 +39,10 @@ function toEndOfDayIso(value: string) {
   return new Date(`${value}T23:59:59`).toISOString()
 }
 
+function toInputDate(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
 function formatHistoryFilters(filters: Record<string, unknown> | null) {
   if (!filters) return "-"
   const entries = Object.entries(filters).filter(([, value]) => value !== null && value !== undefined && value !== "")
@@ -105,6 +109,17 @@ export default function ReportsPage() {
   const [historyLimit, setHistoryLimit] = useState(20)
   const [tableFilter, setTableFilter] = useState("")
 
+  useEffect(() => {
+    if (authLoading) return
+    if (!isAuthenticated || !session?.access_token) return
+    if (fromDate || toDate) return
+    const end = new Date()
+    const start = new Date()
+    start.setDate(end.getDate() - 30)
+    setFromDate(toInputDate(start))
+    setToDate(toInputDate(end))
+  }, [authLoading, fromDate, isAuthenticated, session?.access_token, toDate])
+
   const employeeOptions = useMemo(
     () => employees.filter(item => item.role === ROLES.EMPLEADO && item.is_active !== false),
     [employees]
@@ -158,6 +173,11 @@ export default function ReportsPage() {
 
   const loadReport = useCallback(async () => {
     if (isSupervisora && !restaurantId) {
+      setRows([])
+      setLoading(false)
+      return
+    }
+    if (!fromDate || !toDate) {
       setRows([])
       setLoading(false)
       return
