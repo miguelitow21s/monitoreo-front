@@ -1,5 +1,4 @@
 import { invokeEdge } from "@/services/edgeClient"
-import { supabase } from "@/services/supabaseClient"
 
 type PresencePhase = "start" | "end"
 
@@ -49,12 +48,19 @@ export async function registerSupervisorPresence(payload: RegisterSupervisorPres
 }
 
 export async function listMySupervisorPresence(limit = 20) {
-  const { data, error } = await supabase
-    .from("supervisor_presence_logs")
-    .select("*")
-    .order("recorded_at", { ascending: false })
-    .limit(limit)
+  const payload = await invokeEdge<unknown>("supervisor_presence_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list_my",
+      limit,
+    },
+  })
 
-  if (error) throw error
-  return (data ?? []) as SupervisorPresenceLog[]
+  const items = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown }).items)
+      ? (payload as { items: unknown[] }).items
+      : []
+
+  return items as SupervisorPresenceLog[]
 }

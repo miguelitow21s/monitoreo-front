@@ -200,11 +200,66 @@ export interface ShiftHistoryResult {
 function normalizeActiveShift(data: unknown): ShiftRecord | null {
   if (!data) return null
 
+  if (typeof data === "object" && data !== null && "active_shift" in (data as Record<string, unknown>)) {
+    return normalizeActiveShift((data as Record<string, unknown>).active_shift)
+  }
+
   if (Array.isArray(data)) {
     return (data[0] as ShiftRecord | undefined) ?? null
   }
 
   return data as ShiftRecord
+}
+
+function unwrapHistoryItems(payload: unknown) {
+  if (!payload || typeof payload !== "object") return [] as Array<Record<string, unknown>>
+  const wrapped = payload as { items?: unknown; rows?: unknown; history?: unknown }
+  const rows = Array.isArray(wrapped.items)
+    ? wrapped.items
+    : Array.isArray(wrapped.rows)
+      ? wrapped.rows
+      : Array.isArray(wrapped.history)
+        ? wrapped.history
+        : []
+  return rows as Array<Record<string, unknown>>
+}
+
+function normalizeShiftHistoryRow(raw: Record<string, unknown>): ShiftRecord | null {
+  const idRaw = raw.shift_id ?? raw.id
+  const id =
+    typeof idRaw === "string" && idRaw.trim().length > 0
+      ? idRaw
+      : typeof idRaw === "number" && Number.isFinite(idRaw)
+        ? String(idRaw)
+        : null
+  if (!id) return null
+
+  const startTime =
+    typeof raw.start_time === "string"
+      ? raw.start_time
+      : typeof raw.date === "string"
+        ? raw.date
+        : null
+  if (!startTime) return null
+
+  const endTime = typeof raw.end_time === "string" ? raw.end_time : null
+  const status = typeof raw.status === "string" ? raw.status : endTime ? "completed" : "active"
+
+  const restaurantIdRaw =
+    typeof raw.restaurant_id === "number"
+      ? raw.restaurant_id
+      : typeof raw.restaurant_id === "string"
+        ? Number(raw.restaurant_id)
+        : null
+  const restaurantId = Number.isFinite(restaurantIdRaw ?? NaN) ? (restaurantIdRaw as number) : undefined
+
+  return {
+    id,
+    start_time: startTime,
+    end_time: endTime,
+    status,
+    restaurant_id: restaurantId,
+  }
 }
 
 export async function startShift(payload: StartShiftPayload) {
@@ -276,38 +331,46 @@ export async function endShift(payload: EndShiftPayload) {
 }
 
 export async function getMyActiveShift() {
-  const { data, error } = await supabase.rpc("get_my_active_shift", {})
-  if (error) throw error
-  return normalizeActiveShift(data)
+  const payload = await invokeEdge<unknown>("employee_self_service", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "my_active_shift",
+    },
+  })
+  return normalizeActiveShift(payload)
 }
 
 export async function getMyShiftHistory(page = 1, pageSize = 8): Promise<ShiftHistoryResult> {
   const safePage = Math.max(1, page)
   const safePageSize = Math.max(1, pageSize)
-  const from = (safePage - 1) * safePageSize
-  const to = from + safePageSize - 1
+  const now = new Date()
+  const periodEnd = now.toISOString().slice(0, 10)
+  const periodStartDate = new Date(now)
+  periodStartDate.setDate(periodStartDate.getDate() - 365)
+  const periodStart = periodStartDate.toISOString().slice(0, 10)
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-  if (userError) throw userError
-  if (!user?.id) throw new Error("Authenticated user not found.")
+  const payload = await invokeEdge<unknown>("employee_self_service", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "my_hours_history",
+      period_start: periodStart,
+      period_end: periodEnd,
+      limit: Math.max(50, safePage * safePageSize),
+    },
+  })
 
-  const { data, error, count } = await supabase
-    .from("shifts")
-    .select("id,start_time,end_time,status", { count: "exact" })
-    .eq("employee_id", user.id)
-    .order("start_time", { ascending: false })
-    .range(from, to)
+  const rows = unwrapHistoryItems(payload)
+    .map(normalizeShiftHistoryRow)
+    .filter((row): row is ShiftRecord => row !== null)
+    .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
 
-  if (error) throw error
-
-  const total = count ?? 0
+  const total = rows.length
   const totalPages = Math.max(1, Math.ceil(total / safePageSize))
+  const from = (safePage - 1) * safePageSize
+  const pagedRows = rows.slice(from, from + safePageSize)
 
   return {
-    rows: (data as ShiftRecord[]) ?? [],
+    rows: pagedRows,
     total,
     page: safePage,
     pageSize: safePageSize,

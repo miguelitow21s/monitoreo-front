@@ -87,6 +87,65 @@ export interface GeneratedBackendReportResult {
   url_excel: string | null
 }
 
+function toStringId(value: unknown) {
+  if (typeof value === "string" && value.trim().length > 0) return value
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  return null
+}
+
+function toNullableString(value: unknown) {
+  return typeof value === "string" ? value : null
+}
+
+function toNumberValue(value: unknown, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
+function unwrapItems(payload: unknown) {
+  if (Array.isArray(payload)) return payload
+  if (!payload || typeof payload !== "object") return [] as unknown[]
+  const wrapped = payload as { items?: unknown }
+  return Array.isArray(wrapped.items) ? wrapped.items : []
+}
+
+function normalizeReportRow(raw: unknown): ReportRow | null {
+  if (!raw || typeof raw !== "object") return null
+  const row = raw as Record<string, unknown>
+  const id = toStringId(row.id ?? row.shift_id)
+  if (!id) return null
+
+  const startTime = toNullableString(row.start_time)
+  if (!startTime) return null
+
+  const endTime = toNullableString(row.end_time)
+  const durationRaw = row.duration_minutes ?? row.duration ?? null
+  const durationMinutes =
+    typeof durationRaw === "number" && Number.isFinite(durationRaw)
+      ? durationRaw
+      : typeof durationRaw === "string" && durationRaw.trim().length > 0 && Number.isFinite(Number(durationRaw))
+        ? Number(durationRaw)
+        : buildDurationMinutes(startTime, endTime)
+
+  return {
+    id,
+    restaurant_id: toStringId(row.restaurant_id),
+    employee_id: toNullableString(row.employee_id),
+    supervisor_id: toNullableString(row.supervisor_id),
+    start_time: startTime,
+    end_time: endTime,
+    status: typeof row.status === "string" ? row.status : "unknown",
+    incidents_count: toNumberValue(row.incidents_count ?? row.incidents, 0),
+    duration_minutes: durationMinutes,
+    start_evidence_path: toNullableString(row.start_evidence_path ?? row.start_evidence),
+    end_evidence_path: toNullableString(row.end_evidence_path ?? row.end_evidence),
+  }
+}
+
 function normalizeReportHistoryRow(row: Record<string, unknown>): GeneratedReportHistory {
   return {
     id: String(row.id ?? ""),
@@ -178,103 +237,38 @@ export async function fetchShiftsReport(filters: ReportFilters = {}) {
   const resultLimit = Math.max(1, Math.min(filters.limit ?? 500, 5000))
 
   return withRetry(async () => {
-    let query = supabase
-      .from("shifts")
-      .select("id,restaurant_id,employee_id,start_time,end_time,status,start_evidence_path,end_evidence_path")
-      .order("start_time", { ascending: false })
-
-    if (fromIso) query = query.gte("start_time", fromIso)
-    if (toIso) query = query.lte("start_time", toIso)
-    if (restaurantId) query = query.eq("restaurant_id", restaurantId)
-    if (employeeId) query = query.eq("employee_id", employeeId)
-    if (status) query = query.eq("status", status)
-
-    const { data, error } = await query.limit(resultLimit)
-    if (error) throw error
-
-    const baseRows = (data ?? []) as Array<{
-      id: string | number
-      restaurant_id: string | number | null
-      employee_id: string | null
-      start_time: string
-      end_time: string | null
-      status: string
-      start_evidence_path: string | null
-      end_evidence_path: string | null
-    }>
-
-    if (baseRows.length === 0) return [] as ReportRow[]
-
-    const shiftIds = baseRows.map(item => item.id)
-    const incidentCounter = new Map<string, number>()
-    const supervisorByShift = new Map<string, string>()
-
-    const [incidentsResult, scheduledResult] = await Promise.all([
-      supabase.from("shift_incidents").select("shift_id").in("shift_id", shiftIds),
-      supabase.from("scheduled_shifts").select("started_shift_id,created_by").in("started_shift_id", shiftIds),
-    ])
-
-    if (!incidentsResult.error) {
-      for (const row of incidentsResult.data ?? []) {
-        const shiftId = String(row.shift_id)
-        incidentCounter.set(shiftId, (incidentCounter.get(shiftId) ?? 0) + 1)
-      }
-    }
-
-    if (!scheduledResult.error) {
-      for (const row of scheduledResult.data ?? []) {
-        const shiftId = String(row.started_shift_id)
-        if (!supervisorByShift.has(shiftId) && row.created_by) {
-          supervisorByShift.set(shiftId, String(row.created_by))
-        }
-      }
-    }
-
-    const filteredRows = supervisorId
-      ? baseRows.filter(item => (supervisorByShift.get(String(item.id)) ?? null) === supervisorId)
-      : baseRows
-
-    return filteredRows.map(item => {
-      const shiftId = String(item.id)
-      return {
-        id: shiftId,
-        restaurant_id: item.restaurant_id ? String(item.restaurant_id) : null,
-        employee_id: item.employee_id,
-        supervisor_id: supervisorByShift.get(shiftId) ?? null,
-        start_time: item.start_time,
-        end_time: item.end_time,
-        status: item.status,
-        incidents_count: incidentCounter.get(shiftId) ?? 0,
-        duration_minutes: buildDurationMinutes(item.start_time, item.end_time),
-        start_evidence_path: item.start_evidence_path,
-        end_evidence_path: item.end_evidence_path,
-      } satisfies ReportRow
+    const payload = await invokeEdge<unknown>("reports_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "list_shifts",
+        ...(fromIso ? { from: fromIso } : {}),
+        ...(toIso ? { to: toIso } : {}),
+        ...(restaurantId ? { restaurant_id: Number(restaurantId) } : {}),
+        ...(employeeId ? { employee_id: employeeId } : {}),
+        ...(supervisorId ? { supervisor_id: supervisorId } : {}),
+        ...(status ? { status } : {}),
+        limit: resultLimit,
+      },
     })
+
+    return unwrapItems(payload)
+      .map(normalizeReportRow)
+      .filter((row): row is ReportRow => row !== null)
   })
 }
 
 export async function fetchGeneratedReportsHistory(limit = 20) {
   return withRetry(async () => {
-    const preferred = await supabase
-      .from("reports")
-      .select("id,restaurant_id,generated_at,generado_por,file_path,hash_documento,filtros_json,created_at")
-      .order("generated_at", { ascending: false, nullsFirst: false })
-      .limit(limit)
+    const payload = await invokeEdge<unknown>("reports_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "list_history",
+        limit,
+      },
+    })
 
-    if (!preferred.error) {
-      return (preferred.data ?? []).map(item =>
-        normalizeReportHistoryRow(item as Record<string, unknown>)
-      )
-    }
-
-    const fallback = await supabase
-      .from("reports")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(limit)
-
-    if (fallback.error) throw fallback.error
-    return (fallback.data ?? []).map(item => normalizeReportHistoryRow(item as Record<string, unknown>))
+    return unwrapItems(payload)
+      .map(item => normalizeReportHistoryRow(item as Record<string, unknown>))
   })
 }
 

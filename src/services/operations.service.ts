@@ -1,4 +1,3 @@
-import { supabase } from "@/services/supabaseClient"
 import { createEvidenceSignedUrl } from "@/services/storageEvidence.service"
 import { invokeEdge } from "@/services/edgeClient"
 import { getShiftOtpToken } from "@/services/securityContext.service"
@@ -23,6 +22,66 @@ export interface ShiftIncident {
   created_at: string
 }
 
+function toStringId(value: unknown) {
+  if (typeof value === "string" && value.trim()) return value
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  return null
+}
+
+function unwrapItems(payload: unknown) {
+  if (Array.isArray(payload)) return payload
+  if (!payload || typeof payload !== "object") return [] as unknown[]
+  const wrapped = payload as { items?: unknown }
+  return Array.isArray(wrapped.items) ? wrapped.items : []
+}
+
+function normalizeSupervisorShift(raw: unknown): SupervisorShiftRow | null {
+  if (!raw || typeof raw !== "object") return null
+  const row = raw as Record<string, unknown>
+
+  const id = toStringId(row.id ?? row.shift_id)
+  const startTime = typeof row.start_time === "string" ? row.start_time : null
+
+  if (!id || !startTime) return null
+
+  const restaurantIdRaw =
+    typeof row.restaurant_id === "number"
+      ? row.restaurant_id
+      : typeof row.restaurant_id === "string"
+        ? Number(row.restaurant_id)
+        : null
+  const restaurantId = Number.isFinite(restaurantIdRaw ?? NaN) ? (restaurantIdRaw as number) : null
+
+  return {
+    id,
+    employee_id: toStringId(row.employee_id),
+    restaurant_id: restaurantId,
+    start_time: startTime,
+    end_time: typeof row.end_time === "string" ? row.end_time : null,
+    status: typeof row.status === "string" ? row.status : "active",
+    start_evidence_path: typeof row.start_evidence_path === "string" ? row.start_evidence_path : null,
+    end_evidence_path: typeof row.end_evidence_path === "string" ? row.end_evidence_path : null,
+  }
+}
+
+function normalizeIncident(raw: unknown): ShiftIncident | null {
+  if (!raw || typeof raw !== "object") return null
+  const row = raw as Record<string, unknown>
+  const id = toStringId(row.id)
+  const shiftId = toStringId(row.shift_id)
+  const note = typeof row.note === "string" ? row.note : typeof row.description === "string" ? row.description : null
+  const createdAt = typeof row.created_at === "string" ? row.created_at : null
+
+  if (!id || !shiftId || !note || !createdAt) return null
+
+  return {
+    id,
+    shift_id: shiftId,
+    note,
+    created_at: createdAt,
+  }
+}
+
 function parseShiftId(shiftId: string) {
   const parsed = Number(shiftId)
   if (!Number.isFinite(parsed)) {
@@ -45,15 +104,17 @@ async function getShiftSecureHeaders() {
 }
 
 export async function getActiveShiftsForSupervision(limit = 20) {
-  const { data, error } = await supabase
-    .from("shifts")
-    .select("*")
-    .is("end_time", null)
-    .order("start_time", { ascending: false })
-    .limit(limit)
+  const payload = await invokeEdge<unknown>("shifts_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list_active",
+      limit,
+    },
+  })
 
-  if (error) throw error
-  return (data ?? []) as SupervisorShiftRow[]
+  return unwrapItems(payload)
+    .map(normalizeSupervisorShift)
+    .filter((row): row is SupervisorShiftRow => row !== null)
 }
 
 export async function updateShiftStatus(shiftId: string, status: string) {
@@ -79,8 +140,7 @@ export async function updateShiftStatus(shiftId: string, status: string) {
     return
   }
 
-  const { error } = await supabase.from("shifts").update({ status }).eq("id", shiftId)
-  if (error) throw error
+  throw new Error("Shift status updates are only supported for approved/rejected from the frontend.")
 }
 
 export async function createShiftIncident(shiftId: string, note: string) {
@@ -107,14 +167,17 @@ export async function createShiftIncident(shiftId: string, note: string) {
 }
 
 export async function getShiftIncidents(shiftId: string) {
-  const { data, error } = await supabase
-    .from("shift_incidents")
-    .select("id,shift_id,note,created_at")
-    .eq("shift_id", shiftId)
-    .order("created_at", { ascending: false })
+  const payload = await invokeEdge<unknown>("incidents_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list_by_shift",
+      shift_id: parseShiftId(shiftId),
+    },
+  })
 
-  if (error) throw error
-  return (data ?? []) as ShiftIncident[]
+  return unwrapItems(payload)
+    .map(normalizeIncident)
+    .filter((row): row is ShiftIncident => row !== null)
 }
 
 export async function resolveEvidenceUrl(path: string | null | undefined, expiresInSeconds = 3600) {

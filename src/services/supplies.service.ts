@@ -1,5 +1,4 @@
 import { invokeEdge } from "@/services/edgeClient"
-import { supabase } from "@/services/supabaseClient"
 
 export interface Supply {
   id: string
@@ -25,28 +24,6 @@ export interface SupplyDeliveryFilters {
   limit?: number
 }
 
-function shouldFallbackToDirectDb(error: unknown) {
-  if (typeof error !== "object" || error === null) return true
-
-  const status = (error as { status?: unknown }).status
-  if (typeof status === "number") {
-    if (status === 404 || status === 503) return true
-    return false
-  }
-
-  const message =
-    typeof (error as { message?: unknown }).message === "string"
-      ? (error as { message: string }).message.toLowerCase()
-      : ""
-
-  return (
-    message.includes("failed to fetch") ||
-    message.includes("network") ||
-    message.includes("cors") ||
-    message.includes("temporarily unavailable")
-  )
-}
-
 function toStringId(value: unknown) {
   if (typeof value === "string" && value.trim().length > 0) return value
   if (typeof value === "number" && Number.isFinite(value)) return String(value)
@@ -69,10 +46,15 @@ function unwrapItems(payload: unknown) {
   return Array.isArray(wrapped.items) ? wrapped.items : []
 }
 
-function hasItemsPayload(payload: unknown) {
-  if (Array.isArray(payload)) return true
-  if (!payload || typeof payload !== "object") return false
-  return Array.isArray((payload as { items?: unknown }).items)
+function unwrapSingle(payload: unknown) {
+  if (!payload || typeof payload !== "object") return payload
+  if ("item" in (payload as Record<string, unknown>)) {
+    return (payload as Record<string, unknown>).item
+  }
+  if ("supply" in (payload as Record<string, unknown>)) {
+    return (payload as Record<string, unknown>).supply
+  }
+  return payload
 }
 
 function normalizeSupplyFromEdge(raw: unknown): Supply | null {
@@ -116,43 +98,54 @@ function normalizeDeliveryFromEdge(raw: unknown): SupplyDelivery | null {
 export async function listSupplies(options?: { restaurantId?: string; limit?: number; search?: string }) {
   // Backend contract caps list limits at 200 for supplies.
   const edgeLimit = Math.max(1, Math.min(options?.limit ?? 200, 200))
-  try {
-    const payload = await invokeEdge<unknown>("supplies_deliver", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "list_supplies",
-        ...(options?.restaurantId ? { restaurant_id: Number(options.restaurantId) } : {}),
-        ...(options?.search ? { search: options.search } : {}),
-        limit: edgeLimit,
-      },
-    })
+  const payload = await invokeEdge<unknown>("supplies_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list",
+      ...(options?.restaurantId ? { restaurant_id: Number(options.restaurantId) } : {}),
+      ...(options?.search ? { search: options.search } : {}),
+      limit: edgeLimit,
+    },
+  })
 
-    const rows = unwrapItems(payload)
-      .map(normalizeSupplyFromEdge)
-      .filter((item): item is Supply => item !== null)
-
-    if (hasItemsPayload(payload)) {
-      return rows
-    }
-  } catch (error: unknown) {
-    if (!shouldFallbackToDirectDb(error)) throw error
-  }
-
-  const { data, error } = await supabase.from("supplies").select("*").order("name")
-  if (error) throw error
-  return (data ?? []) as Supply[]
+  return unwrapItems(payload)
+    .map(normalizeSupplyFromEdge)
+    .filter((item): item is Supply => item !== null)
 }
 
 export async function createSupply(payload: Omit<Supply, "id">) {
-  const { data, error } = await supabase.from("supplies").insert(payload).select("*").single()
-  if (error) throw error
-  return data as Supply
+  const response = await invokeEdge<unknown>("supplies_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "create",
+      ...payload,
+      restaurant_id: payload.restaurant_id ? Number(payload.restaurant_id) : null,
+    },
+  })
+
+  const normalized = normalizeSupplyFromEdge(unwrapSingle(response))
+  if (!normalized) {
+    throw new Error("Invalid supply payload from supplies_manage.create.")
+  }
+  return normalized
 }
 
 export async function updateSupply(id: string, payload: Partial<Omit<Supply, "id">>) {
-  const { data, error } = await supabase.from("supplies").update(payload).eq("id", id).select("*").single()
-  if (error) throw error
-  return data as Supply
+  const response = await invokeEdge<unknown>("supplies_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "update",
+      supply_id: id,
+      ...payload,
+      ...(payload.restaurant_id ? { restaurant_id: Number(payload.restaurant_id) } : {}),
+    },
+  })
+
+  const normalized = normalizeSupplyFromEdge(unwrapSingle(response))
+  if (!normalized) {
+    throw new Error("Invalid supply payload from supplies_manage.update.")
+  }
+  return normalized
 }
 
 export async function registerSupplyDelivery(payload: {
@@ -161,70 +154,41 @@ export async function registerSupplyDelivery(payload: {
   quantity: number
   delivered_at?: string
 }) {
-  try {
-    const deliveredAt = payload.delivered_at ?? new Date().toISOString()
-    const created = await invokeEdge<unknown>("supplies_deliver", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "deliver",
-        supply_id: payload.supply_id,
-        restaurant_id: Number(payload.restaurant_id),
-        quantity: payload.quantity,
-        delivered_at: deliveredAt,
-      },
-    })
+  const deliveredAt = payload.delivered_at ?? new Date().toISOString()
+  const created = await invokeEdge<unknown>("supplies_deliver", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "deliver",
+      supply_id: payload.supply_id,
+      restaurant_id: Number(payload.restaurant_id),
+      quantity: payload.quantity,
+      delivered_at: deliveredAt,
+    },
+  })
 
-    const normalized = normalizeDeliveryFromEdge(created)
-    if (normalized) {
-      return normalized
-    }
-  } catch (error: unknown) {
-    if (!shouldFallbackToDirectDb(error)) throw error
+  const normalized = normalizeDeliveryFromEdge(created)
+  if (!normalized) {
+    throw new Error("Invalid supply delivery payload from supplies_deliver.deliver.")
   }
-
-  const { data, error } = await supabase
-    .from("supply_deliveries")
-    .insert(payload)
-    .select("*")
-    .single()
-
-  if (error) throw error
-  return data as SupplyDelivery
+  return normalized
 }
 
 export async function listSupplyDeliveries(limit = 30, options?: { restaurantId?: string; deliveredBy?: string }) {
   // Backend contract caps list limits at 200 for deliveries.
   const edgeLimit = Math.max(1, Math.min(limit, 200))
-  try {
-    const payload = await invokeEdge<unknown>("supplies_deliver", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "list_deliveries",
-        ...(options?.restaurantId ? { restaurant_id: Number(options.restaurantId) } : {}),
-        ...(options?.deliveredBy ? { delivered_by: options.deliveredBy } : {}),
-        limit: edgeLimit,
-      },
-    })
+  const payload = await invokeEdge<unknown>("supplies_deliver", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list_deliveries",
+      ...(options?.restaurantId ? { restaurant_id: Number(options.restaurantId) } : {}),
+      ...(options?.deliveredBy ? { delivered_by: options.deliveredBy } : {}),
+      limit: edgeLimit,
+    },
+  })
 
-    const rows = unwrapItems(payload)
-      .map(normalizeDeliveryFromEdge)
-      .filter((item): item is SupplyDelivery => item !== null)
-
-    if (hasItemsPayload(payload)) {
-      return rows
-    }
-  } catch (error: unknown) {
-    if (!shouldFallbackToDirectDb(error)) throw error
-  }
-
-  const { data, error } = await supabase
-    .from("supply_deliveries")
-    .select("*")
-    .order("delivered_at", { ascending: false })
-    .limit(edgeLimit)
-
-  if (error) throw error
-  return (data ?? []) as SupplyDelivery[]
+  return unwrapItems(payload)
+    .map(normalizeDeliveryFromEdge)
+    .filter((item): item is SupplyDelivery => item !== null)
 }
 
 export async function listSupplyDeliveriesByPeriod(filters: SupplyDeliveryFilters = {}) {

@@ -3,8 +3,8 @@ import { invokeEdge } from "@/services/edgeClient"
 import { ROLES, Role } from "@/utils/permissions"
 import { normalizePhoneForOtp } from "@/utils/phone"
 
-let bootstrapRpcUnavailable = false
-let bootstrapRpcAttempted = false
+let bootstrapEdgeUnavailable = false
+let bootstrapEdgeAttempted = false
 
 function isRpcUnavailableError(error: unknown) {
   if (!error || typeof error !== "object") return false
@@ -107,15 +107,29 @@ function normalizeUserProfiles(payload: unknown) {
   return source.map(normalizeUserProfile).filter((item): item is UserProfile => item !== null)
 }
 
-export async function listUserProfiles(options?: { useAdminApi?: boolean }) {
-  if (!options?.useAdminApi) {
-    throw new Error("admin_users_manage is required to list user profiles.")
+export async function listUserProfiles(options?: {
+  useAdminApi?: boolean
+  restaurantId?: number | string | null
+  limit?: number
+}) {
+  if (options?.useAdminApi) {
+    const payload = await invokeEdge<unknown>("admin_users_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "list",
+      },
+    })
+
+    const rows = normalizeUserProfiles(payload)
+    return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
   }
 
-  const payload = await invokeEdge<unknown>("admin_users_manage", {
+  const payload = await invokeEdge<unknown>("restaurant_staff_manage", {
     idempotencyKey: crypto.randomUUID(),
     body: {
-      action: "list",
+      action: "list_assignable_employees",
+      ...(options?.restaurantId ? { restaurant_id: Number(options.restaurantId) } : {}),
+      ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
     },
   })
 
@@ -195,8 +209,8 @@ export async function createAdminUser(payload: {
 }
 
 export async function bootstrapMyUserProfile() {
-  if (bootstrapRpcUnavailable || bootstrapRpcAttempted) return
-  bootstrapRpcAttempted = true
+  if (bootstrapEdgeUnavailable || bootstrapEdgeAttempted) return
+  bootstrapEdgeAttempted = true
 
   const {
     data: { user },
@@ -204,21 +218,16 @@ export async function bootstrapMyUserProfile() {
 
   if (!user?.id) return
 
-  const { data: existingProfile } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("id", user.id)
-    .maybeSingle()
-
-  if (existingProfile?.id) {
-    bootstrapRpcUnavailable = true
-    return
-  }
-
-  const { error } = await supabase.rpc("bootstrap_my_user", {})
-  if (error) {
+  try {
+    await invokeEdge("users_bootstrap", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "bootstrap_my_user",
+      },
+    })
+  } catch (error: unknown) {
     if (isRpcUnavailableError(error) || isBootstrapSkippableError(error)) {
-      bootstrapRpcUnavailable = true
+      bootstrapEdgeUnavailable = true
       return
     }
     throw error

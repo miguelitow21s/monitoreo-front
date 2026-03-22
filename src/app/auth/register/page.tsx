@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 
 import { useI18n } from "@/hooks/useI18n"
 import { supabase } from "@/services/supabaseClient"
+import { invokeEdge } from "@/services/edgeClient"
 import { normalizePhoneForOtp } from "@/utils/phone"
 
 function errorMessage(error: unknown, fallback: string) {
@@ -102,30 +103,22 @@ export default function RegisterPage() {
       const userEmail = data.user?.email ?? email
 
       if (userId) {
-        let { error: registerError } = await supabase.rpc("register_employee", {
-          p_user_id: userId,
-          p_email: userEmail,
-          p_full_name: fullName,
-          p_first_name: normalizedFirstName,
-          p_last_name: normalizedLastName,
-          p_phone_number: normalizedPhone,
-        })
-
-        // Backward compatibility while database migration is being applied.
-        if (
-          registerError &&
-          typeof registerError.message === "string" &&
-          registerError.message.toLowerCase().includes("does not exist")
-        ) {
-          const fallback = await supabase.rpc("register_employee", {
-            p_user_id: userId,
-            p_email: userEmail,
-            p_full_name: fullName,
+        try {
+          await invokeEdge("auth_register", {
+            idempotencyKey: crypto.randomUUID(),
+            body: {
+              action: "register_employee",
+              p_user_id: userId,
+              p_email: userEmail,
+              p_full_name: fullName,
+              p_first_name: normalizedFirstName,
+              p_last_name: normalizedLastName,
+              p_phone_number: normalizedPhone,
+            },
           })
-          registerError = fallback.error
+        } catch (registerError: unknown) {
+          if (!canDeferProfileBootstrap(registerError)) throw registerError
         }
-
-        if (registerError && !canDeferProfileBootstrap(registerError)) throw registerError
       }
 
       setMessage(
