@@ -70,13 +70,19 @@ export async function listMySupervisorPresence(limit = 20) {
   return unwrapPresenceItems(payload)
 }
 
-export async function listSupervisorPresenceByRestaurant(restaurantId: number, limit = 50) {
+export async function listSupervisorPresenceByRestaurant(
+  restaurantId: number,
+  limit = 50,
+  range?: { from?: string; to?: string }
+) {
   const payload = await invokeEdge<unknown>("supervisor_presence_manage", {
     idempotencyKey: crypto.randomUUID(),
     body: {
       action: "list_by_restaurant",
       restaurant_id: restaurantId,
       limit,
+      ...(range?.from ? { from: range.from } : {}),
+      ...(range?.to ? { to: range.to } : {}),
     },
   })
 

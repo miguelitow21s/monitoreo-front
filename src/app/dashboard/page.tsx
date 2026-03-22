@@ -8,13 +8,19 @@ import ProtectedRoute from "@/components/ProtectedRoute"
 import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
+import tzLookup from "tz-lookup"
+
 import { EmployeeDashboardData, getEmployeeSelfDashboard } from "@/services/employeeSelfService.service"
-import { listSupervisorPresenceToday, SupervisorPresenceSummary } from "@/services/supervisorPresence.service"
+import { listSupervisorPresenceByRestaurant, SupervisorPresenceSummary } from "@/services/supervisorPresence.service"
+import { listRestaurants, Restaurant } from "@/services/restaurants.service"
+import { listUserProfiles } from "@/services/users.service"
 
 const manrope = Manrope({
   subsets: ["latin"],
   weight: ["400", "600", "700", "800"],
 })
+
+const PRESENCE_FETCH_CONCURRENCY = 4
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -49,8 +55,64 @@ export default function DashboardPage() {
     if (!isSuperAdmin || authLoading || loading) return
     let mounted = true
     setLoadingTodaySupervisions(true)
-    const range = buildDayRangeForTimeZone(resolveDashboardTimeZone())
-    listSupervisorPresenceToday(20, range)
+    const fetchPresence = async () => {
+      const [restaurants, profiles] = await Promise.all([
+        listRestaurants({ includeInactive: false, useAdminApi: true }),
+        listUserProfiles({ useAdminApi: true }),
+      ])
+
+      const supervisorNameById = profiles.reduce((acc, profile) => {
+        acc.set(profile.id, profile.full_name ?? profile.email ?? profile.id)
+        return acc
+      }, new Map<string, string>())
+
+      const restaurantById = restaurants.reduce((acc, restaurant) => {
+        acc.set(Number(restaurant.id), restaurant)
+        return acc
+      }, new Map<number, Restaurant>())
+
+      const restaurantQueue = restaurants
+        .map(item => ({
+          ...item,
+          id: Number(item.id),
+        }))
+        .filter(item => Number.isFinite(item.id))
+
+      const fallbackTimezone = resolveDashboardTimeZone()
+      const results: SupervisorPresenceSummary[] = []
+
+      const workers = Array.from({ length: Math.min(PRESENCE_FETCH_CONCURRENCY, restaurantQueue.length) }, () =>
+        (async () => {
+          while (restaurantQueue.length > 0) {
+            const restaurant = restaurantQueue.shift()
+            if (!restaurant) return
+            const timeZone = resolveRestaurantTimeZone(restaurant, fallbackTimezone)
+            const range = buildDayRangeForTimeZone(timeZone)
+            const logs = await listSupervisorPresenceByRestaurant(restaurant.id, 50, range)
+            for (const log of logs) {
+              const restaurantInfo = restaurantById.get(log.restaurant_id)
+              const supervisorName = log.supervisor_id ? supervisorNameById.get(log.supervisor_id) : null
+              results.push({
+                id: String(log.id),
+                supervisor_id: log.supervisor_id,
+                supervisor_name: supervisorName ?? null,
+                restaurant_id: log.restaurant_id,
+                restaurant_name: restaurantInfo?.name ?? null,
+                phase: log.phase,
+                recorded_at: log.recorded_at,
+                notes: log.notes ?? null,
+              })
+            }
+          }
+        })()
+      )
+
+      await Promise.all(workers)
+      results.sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime())
+      return results
+    }
+
+    fetchPresence()
       .then(items => {
         if (mounted) setTodaySupervisions(items)
       })
@@ -216,6 +278,17 @@ export default function DashboardPage() {
     const to = `${tomorrowParts.year}-${String(tomorrowParts.month).padStart(2, "0")}-${String(tomorrowParts.day).padStart(2, "0")}T00:00:00${tomorrowOffsetLabel}`
 
     return { from, to }
+  }
+
+  const resolveRestaurantTimeZone = (restaurant: Restaurant, fallback: string) => {
+    if (typeof restaurant.lat === "number" && typeof restaurant.lng === "number") {
+      try {
+        return tzLookup(restaurant.lat, restaurant.lng)
+      } catch {
+        return fallback
+      }
+    }
+    return fallback
   }
 
   const supervisionStatusLabel = (phase: SupervisorPresenceSummary["phase"]) => {
