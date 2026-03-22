@@ -514,6 +514,65 @@ function ShiftsPageContent() {
   } | null>(null)
   const [cleaningMode, setCleaningMode] = useState(true)
   const startEvidenceSeenRef = useRef(false)
+  type EvidenceCachePayload = { shiftId: string; photoCount: number }
+  const evidenceStorageKeySuffix = useMemo(
+    () => (currentUserId ?? user?.id ?? "anon"),
+    [currentUserId, user?.id]
+  )
+  const startEvidenceStorageKey = useMemo(
+    () => `wt.shift.startEvidence.${evidenceStorageKeySuffix}`,
+    [evidenceStorageKeySuffix]
+  )
+  const endEvidenceStorageKey = useMemo(
+    () => `wt.shift.endEvidence.${evidenceStorageKeySuffix}`,
+    [evidenceStorageKeySuffix]
+  )
+  const readEvidenceCache = useCallback((key: string): EvidenceCachePayload | null => {
+    if (typeof window === "undefined") return null
+    try {
+      const raw = window.localStorage.getItem(key)
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as { shiftId?: unknown; photoCount?: unknown } | null
+      if (!parsed || typeof parsed !== "object") return null
+      const shiftId = typeof parsed.shiftId === "string" ? parsed.shiftId : String(parsed.shiftId ?? "")
+      const photoCount =
+        typeof parsed.photoCount === "number" && Number.isFinite(parsed.photoCount)
+          ? parsed.photoCount
+          : Number(parsed.photoCount)
+      if (!shiftId || !Number.isFinite(photoCount) || photoCount <= 0) return null
+      return { shiftId, photoCount }
+    } catch {
+      return null
+    }
+  }, [])
+  const writeEvidenceCache = useCallback((key: string, payload: EvidenceCachePayload | null) => {
+    if (typeof window === "undefined") return
+    try {
+      if (!payload) {
+        window.localStorage.removeItem(key)
+        return
+      }
+      window.localStorage.setItem(key, JSON.stringify(payload))
+    } catch {
+      // Best effort only.
+    }
+  }, [])
+  const readStartEvidenceCache = useCallback(
+    () => readEvidenceCache(startEvidenceStorageKey),
+    [readEvidenceCache, startEvidenceStorageKey]
+  )
+  const writeStartEvidenceCache = useCallback(
+    (payload: EvidenceCachePayload | null) => writeEvidenceCache(startEvidenceStorageKey, payload),
+    [startEvidenceStorageKey, writeEvidenceCache]
+  )
+  const readEndEvidenceCache = useCallback(
+    () => readEvidenceCache(endEvidenceStorageKey),
+    [endEvidenceStorageKey, readEvidenceCache]
+  )
+  const writeEndEvidenceCache = useCallback(
+    (payload: EvidenceCachePayload | null) => writeEvidenceCache(endEvidenceStorageKey, payload),
+    [endEvidenceStorageKey, writeEvidenceCache]
+  )
 
   const healthAnswered = activeShift ? endFitForWork !== null : startFitForWork !== null
   const healthDeclarationRequired =
@@ -1424,10 +1483,64 @@ function ShiftsPageContent() {
   }, [historyPage, canOperateShift, loadEmployeeData, roleLoading])
 
   useEffect(() => {
-    if (!activeShift) {
+    if (!activeShift && !employeeDashboard?.active_shift) {
       setLocalStartEvidenceShiftId(null)
     }
-  }, [activeShift])
+  }, [activeShift, employeeDashboard?.active_shift])
+
+  useEffect(() => {
+    if (!activeShift?.id) return
+    const cached = readStartEvidenceCache()
+    if (!cached) return
+    if (String(cached.shiftId) !== String(activeShift.id)) return
+    if (!localStartEvidenceShiftId) {
+      setLocalStartEvidenceShiftId(cached.shiftId)
+    }
+    if (startEvidencePhotoCount === 0 && cached.photoCount > 0) {
+      setStartEvidencePhotoCount(cached.photoCount)
+    }
+  }, [activeShift?.id, localStartEvidenceShiftId, readStartEvidenceCache, startEvidencePhotoCount])
+
+  useEffect(() => {
+    if (!activeShift?.id) return
+    if (!localStartEvidenceShiftId || startEvidencePhotoCount <= 0) return
+    if (String(localStartEvidenceShiftId) !== String(activeShift.id)) return
+    writeStartEvidenceCache({ shiftId: String(activeShift.id), photoCount: startEvidencePhotoCount })
+  }, [activeShift?.id, localStartEvidenceShiftId, startEvidencePhotoCount, writeStartEvidenceCache])
+
+  useEffect(() => {
+    if (!activeShift?.id) return
+    const cached = readEndEvidenceCache()
+    if (!cached) return
+    if (String(cached.shiftId) !== String(activeShift.id)) return
+    if (!endEvidenceUploadedShiftId) {
+      setEndEvidenceUploadedShiftId(activeShift.id)
+    }
+    if (endEvidencePhotoCount === 0 && cached.photoCount > 0) {
+      setEndEvidencePhotoCount(cached.photoCount)
+    }
+  }, [activeShift?.id, endEvidencePhotoCount, endEvidenceUploadedShiftId, readEndEvidenceCache])
+
+  useEffect(() => {
+    if (!activeShift?.id) return
+    if (!endEvidenceUploadedShiftId || endEvidencePhotoCount <= 0) return
+    if (String(endEvidenceUploadedShiftId) !== String(activeShift.id)) return
+    writeEndEvidenceCache({ shiftId: String(activeShift.id), photoCount: endEvidencePhotoCount })
+  }, [activeShift?.id, endEvidenceUploadedShiftId, endEvidencePhotoCount, writeEndEvidenceCache])
+
+  useEffect(() => {
+    if (loadingData) return
+    if (activeShift || !employeeDashboard?.active_shift) return
+    const fallbackId = employeeDashboard.active_shift.id
+    if (!fallbackId) return
+    setActiveShift({
+      id: String(fallbackId),
+      start_time: employeeDashboard.active_shift.start_time ?? new Date().toISOString(),
+      end_time: null,
+      status: "active",
+      restaurant_id: employeeDashboard.active_shift.restaurant_id ?? null,
+    })
+  }, [activeShift, employeeDashboard?.active_shift, loadingData])
 
   useEffect(() => {
     if (roleLoading) return
@@ -2132,6 +2245,8 @@ function ShiftsPageContent() {
       showToast("success", t("Turno finalizado correctamente.", "Shift ended successfully."))
       resetEvidenceAndLocation()
       setLocalStartEvidenceShiftId(null)
+      writeStartEvidenceCache(null)
+      writeEndEvidenceCache(null)
       setEndObservation("")
       setEndFitForWork(null)
       setEndIncidentsOccurred(null)
@@ -2159,6 +2274,8 @@ function ShiftsPageContent() {
         )
         resetEvidenceAndLocation()
         setLocalStartEvidenceShiftId(null)
+        writeStartEvidenceCache(null)
+        writeEndEvidenceCache(null)
         setEndObservation("")
         setEndFitForWork(null)
         setEndIncidentsOccurred(null)
