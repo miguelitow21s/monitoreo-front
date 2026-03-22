@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { useAuth } from "@/hooks/useAuth"
 import { supabase } from "@/services/supabaseClient"
 import { debugLog } from "@/services/debug"
-import { bootstrapMyUserProfile } from "@/services/users.service"
+import { getMyUserProfile } from "@/services/users.service"
 import { ROLES, Role } from "@/utils/permissions"
 
 function normalizeRole(value: unknown): Role | undefined {
@@ -60,9 +60,9 @@ function toErrorSnapshot(error: unknown) {
 export function useRole() {
   const { user, loading } = useAuth()
   const [profileRole, setProfileRole] = useState<Role | null>(null)
+  const [profileIsActive, setProfileIsActive] = useState<boolean | null>(null)
   const [loadingRole, setLoadingRole] = useState(true)
   const [lastProfileFetchUserId, setLastProfileFetchUserId] = useState<string | null>(null)
-  const bootstrapAttemptedRef = useRef(false)
 
   useEffect(() => {
     let mounted = true
@@ -70,6 +70,7 @@ export function useRole() {
     const loadRoleFromProfile = async () => {
       if (!user?.id) {
         setProfileRole(null)
+        setProfileIsActive(null)
         setLoadingRole(false)
         setLastProfileFetchUserId(null)
         return
@@ -77,52 +78,36 @@ export function useRole() {
 
       setLoadingRole(true)
 
-      const roleFromMetadata = normalizeRole(
-        (user.user_metadata?.role as string | undefined) ?? (user.app_metadata?.role as string | undefined)
-      )
-      const isActiveFromMetadata =
-        typeof user.user_metadata?.is_active === "boolean"
-          ? user.user_metadata.is_active
-          : typeof (user.app_metadata as { is_active?: unknown })?.is_active === "boolean"
-            ? (user.app_metadata as { is_active?: boolean }).is_active
-            : undefined
-
-      if (!mounted) return
-
-      debugLog("role.metadata_fetch", {
-        userId: user.id,
-        role: roleFromMetadata ?? null,
-        isActive: isActiveFromMetadata ?? null,
-      })
-
-      if (isActiveFromMetadata === false) {
-        setLastProfileFetchUserId(user.id)
-        setProfileRole(null)
-        await supabase.auth.signOut()
+      if (lastProfileFetchUserId === user.id) {
         setLoadingRole(false)
         return
       }
 
-      if (roleFromMetadata) {
-        setLastProfileFetchUserId(user.id)
-        setProfileRole(roleFromMetadata)
-        setLoadingRole(false)
-        return
-      }
+      try {
+        const profile = await getMyUserProfile()
+        if (!mounted) return
 
-      if (!bootstrapAttemptedRef.current) {
-        bootstrapAttemptedRef.current = true
-        debugLog("role.bootstrap_attempt", { userId: user.id })
+        const normalizedRole = normalizeRole(profile.role)
+        setProfileRole(normalizedRole ?? null)
+        setProfileIsActive(profile.is_active ?? null)
 
-        try {
-          await bootstrapMyUserProfile()
-        } catch (bootstrapError: unknown) {
-          debugLog("role.bootstrap_error", { userId: user.id, error: toErrorSnapshot(bootstrapError) })
+        if (profile.is_active === false) {
+          setLastProfileFetchUserId(user.id)
+          await supabase.auth.signOut()
+          setLoadingRole(false)
+          return
         }
+
+        setLastProfileFetchUserId(user.id)
+        setLoadingRole(false)
+        return
+      } catch (error: unknown) {
+        debugLog("role.me_error", { userId: user.id, error: toErrorSnapshot(error) })
       }
 
       setLastProfileFetchUserId(user.id)
       setProfileRole(null)
+      setProfileIsActive(null)
       setLoadingRole(false)
     }
 
@@ -131,7 +116,7 @@ export function useRole() {
     return () => {
       mounted = false
     }
-  }, [user?.id, user?.user_metadata?.role, user?.app_metadata?.role])
+  }, [user?.id, lastProfileFetchUserId])
 
   const metadataRole = normalizeRole(
     (user?.user_metadata?.role as string | undefined) ?? (user?.app_metadata?.role as string | undefined)
@@ -144,12 +129,13 @@ export function useRole() {
     debugLog("role.snapshot", {
       userId: user?.id ?? null,
       profileRole,
+      profileIsActive,
       metadataRole,
       role,
       pendingRole,
       loading: combinedLoading,
     })
-  }, [combinedLoading, metadataRole, pendingRole, profileRole, role, user?.id])
+  }, [combinedLoading, metadataRole, pendingRole, profileIsActive, profileRole, role, user?.id])
 
   return {
     role,

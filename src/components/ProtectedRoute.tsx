@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 
 import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
-import { bootstrapMyUserProfile } from "@/services/users.service"
+import { getMyUserProfile } from "@/services/users.service"
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -34,7 +34,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       }
 
       try {
-        await bootstrapMyUserProfile()
+        await getMyUserProfile()
       } catch {
         // If backend still lacks the RPC, page access continues.
       } finally {

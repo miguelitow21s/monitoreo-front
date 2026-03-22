@@ -84,12 +84,14 @@ function normalizeUserProfile(raw: unknown): UserProfile | null {
   const id = toNullableString(row.id)
   if (!id) return null
 
+  const phoneNumber = toNullableString(row.phone_number ?? row.phone_e164)
+
   return {
     id,
     full_name: toNullableString(row.full_name),
     first_name: toNullableString(row.first_name),
     last_name: toNullableString(row.last_name),
-    phone_number: toNullableString(row.phone_number),
+    phone_number: phoneNumber,
     email: toNullableString(row.email),
     role: (toNullableString(row.role) as Role | null) ?? null,
     is_active: typeof row.is_active === "boolean" ? row.is_active : null,
@@ -118,6 +120,22 @@ function normalizeUserProfiles(payload: unknown) {
   const wrapped = payload as UsersManageEnvelope
   const source = Array.isArray(wrapped.items) ? wrapped.items : []
   return source.map(normalizeUserProfile).filter((item): item is UserProfile => item !== null)
+}
+
+export async function getMyUserProfile() {
+  const payload = await invokeEdge<unknown>("users_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "me",
+    },
+  })
+
+  const normalized = normalizeUserProfile(payload)
+  if (!normalized) {
+    throw new Error("Invalid user payload from users_manage.")
+  }
+
+  return normalized
 }
 
 export async function listUserProfiles(options?: {
