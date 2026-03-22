@@ -75,14 +75,14 @@ export async function listSupervisorPresenceByRestaurant(
   limit = 50,
   range?: { from?: string; to?: string }
 ) {
+  const normalizedRange = normalizePresenceRange(range)
   const payload = await invokeEdge<unknown>("supervisor_presence_manage", {
     idempotencyKey: crypto.randomUUID(),
     body: {
       action: "list_by_restaurant",
       restaurant_id: restaurantId,
       limit,
-      ...(range?.from ? { from: range.from } : {}),
-      ...(range?.to ? { to: range.to } : {}),
+      ...(normalizedRange ? { from: normalizedRange.from, to: normalizedRange.to } : {}),
     },
   })
 
@@ -93,13 +93,13 @@ export async function listSupervisorPresenceToday(
   limit = 20,
   range?: { from?: string; to?: string }
 ) {
+  const normalizedRange = normalizePresenceRange(range)
   const payload = await invokeEdge<unknown>("supervisor_presence_manage", {
     idempotencyKey: crypto.randomUUID(),
     body: {
       action: "list_today",
       limit,
-      ...(range?.from ? { from: range.from } : {}),
-      ...(range?.to ? { to: range.to } : {}),
+      ...(normalizedRange ? { from: normalizedRange.from, to: normalizedRange.to } : {}),
     },
   })
 
@@ -155,4 +155,13 @@ function normalizePresenceSummary(raw: unknown): SupervisorPresenceSummary | nul
     recorded_at: recordedAt,
     notes: typeof row.notes === "string" ? row.notes : null,
   }
+}
+
+function normalizePresenceRange(range?: { from?: string; to?: string }) {
+  if (!range?.from || !range?.to) return null
+  const fromMs = Date.parse(range.from)
+  const toMs = Date.parse(range.to)
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null
+  if (fromMs >= toMs) return null
+  return { from: range.from, to: range.to }
 }

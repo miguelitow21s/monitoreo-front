@@ -103,6 +103,12 @@ function unwrapUserPayload(payload: unknown) {
   return payload
 }
 
+function isForbiddenError(error: unknown) {
+  if (!error || typeof error !== "object") return false
+  const status = (error as { status?: unknown }).status
+  return typeof status === "number" && status === 403
+}
+
 function normalizeUserProfiles(payload: unknown) {
   if (Array.isArray(payload)) {
     return payload.map(normalizeUserProfile).filter((item): item is UserProfile => item !== null)
@@ -119,7 +125,7 @@ export async function listUserProfiles(options?: {
   restaurantId?: number | string | null
   limit?: number
 }) {
-  if (options?.useAdminApi) {
+  const callAdmin = async () => {
     const payload = await invokeEdge<unknown>("admin_users_manage", {
       idempotencyKey: crypto.randomUUID(),
       body: {
@@ -131,17 +137,26 @@ export async function listUserProfiles(options?: {
     return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
   }
 
-  const payload = await invokeEdge<unknown>("restaurant_staff_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
-      action: "list_assignable_employees",
-      ...(options?.restaurantId ? { restaurant_id: Number(options.restaurantId) } : {}),
-      ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
-    },
-  })
+  if (options?.useAdminApi) {
+    return callAdmin()
+  }
 
-  const rows = normalizeUserProfiles(payload)
-  return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
+  try {
+    const payload = await invokeEdge<unknown>("restaurant_staff_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "list_assignable_employees",
+        ...(options?.restaurantId ? { restaurant_id: Number(options.restaurantId) } : {}),
+        ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
+      },
+    })
+
+    const rows = normalizeUserProfiles(payload)
+    return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
+  } catch (error: unknown) {
+    if (!isForbiddenError(error)) throw error
+    return callAdmin()
+  }
 }
 
 export async function updateUserProfileRole(id: string, role: Role) {

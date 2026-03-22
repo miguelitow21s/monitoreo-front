@@ -84,6 +84,12 @@ function normalizeRestaurantsPayload(payload: unknown) {
   return rows.map(normalizeRestaurantRow).filter((item): item is Restaurant => item !== null)
 }
 
+function isForbiddenError(error: unknown) {
+  if (!error || typeof error !== "object") return false
+  const status = (error as { status?: unknown }).status
+  return typeof status === "number" && status === 403
+}
+
 function normalizeStaffItems(payload: unknown, role: "employee" | "supervisor") {
   if (!payload || typeof payload !== "object") return [] as RestaurantEmployee[]
   const rawItems = Array.isArray((payload as { items?: unknown }).items)
@@ -127,7 +133,7 @@ function normalizeStaffItems(payload: unknown, role: "employee" | "supervisor") 
 export async function listRestaurants(options?: { includeInactive?: boolean; useAdminApi?: boolean }) {
   const includeInactive = options?.includeInactive === true
 
-  if (options?.useAdminApi) {
+  const callAdmin = async () => {
     const payload = await invokeEdge<unknown>("admin_restaurants_manage", {
       idempotencyKey: crypto.randomUUID(),
       body: {
@@ -135,19 +141,26 @@ export async function listRestaurants(options?: { includeInactive?: boolean; use
         ...(includeInactive ? {} : { is_active: true }),
       },
     })
-
     return normalizeRestaurantsPayload(payload)
   }
 
-  const payload = await invokeEdge<unknown>("restaurant_staff_manage", {
-    idempotencyKey: crypto.randomUUID(),
-    body: {
-      action: "list_my_restaurants",
-      ...(includeInactive ? {} : { is_active: true }),
-    },
-  })
+  if (options?.useAdminApi) {
+    return callAdmin()
+  }
 
-  return normalizeRestaurantsPayload(payload)
+  try {
+    const payload = await invokeEdge<unknown>("restaurant_staff_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "list_my_restaurants",
+        ...(includeInactive ? {} : { is_active: true }),
+      },
+    })
+    return normalizeRestaurantsPayload(payload)
+  } catch (error: unknown) {
+    if (!isForbiddenError(error)) throw error
+    return callAdmin()
+  }
 }
 
 export async function createRestaurant(payload: Omit<Restaurant, "id">) {
