@@ -113,6 +113,15 @@ function unwrapItems(payload: unknown) {
   return Array.isArray(wrapped.items) ? wrapped.items : []
 }
 
+function normalizeReportRange(fromIso?: string, toIso?: string) {
+  if (!fromIso || !toIso) return null
+  const fromMs = Date.parse(fromIso)
+  const toMs = Date.parse(toIso)
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null
+  if (fromMs >= toMs) return null
+  return { from: fromIso, to: toIso }
+}
+
 function normalizeReportRow(raw: unknown): ReportRow | null {
   if (!raw || typeof raw !== "object") return null
   const row = raw as Record<string, unknown>
@@ -235,14 +244,14 @@ export function getReportColumnValue(row: ReportRow, column: ReportColumnKey) {
 export async function fetchShiftsReport(filters: ReportFilters = {}) {
   const { fromIso, toIso, restaurantId, employeeId, supervisorId, status } = filters
   const resultLimit = Math.max(1, Math.min(filters.limit ?? 500, 5000))
+  const range = normalizeReportRange(fromIso, toIso)
 
   return withRetry(async () => {
     const payload = await invokeEdge<unknown>("reports_manage", {
       idempotencyKey: crypto.randomUUID(),
       body: {
         action: "list_shifts",
-        ...(fromIso ? { from: fromIso } : {}),
-        ...(toIso ? { to: toIso } : {}),
+        ...(range ? { from: range.from, to: range.to } : {}),
         ...(restaurantId ? { restaurant_id: Number(restaurantId) } : {}),
         ...(employeeId ? { employee_id: employeeId } : {}),
         ...(supervisorId ? { supervisor_id: supervisorId } : {}),
