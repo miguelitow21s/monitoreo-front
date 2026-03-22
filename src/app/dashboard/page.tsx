@@ -262,8 +262,7 @@ export default function DashboardPage() {
       utcMidnight = baseUtc - offset * 60000
     }
 
-    const offsetLabel = formatOffset(offset)
-    const from = `${todayParts.year}-${String(todayParts.month).padStart(2, "0")}-${String(todayParts.day).padStart(2, "0")}T00:00:00${offsetLabel}`
+    const from = new Date(utcMidnight).toISOString()
 
     const tomorrow = new Date(utcMidnight + 24 * 60 * 60 * 1000)
     const tomorrowParts = getTimeZoneParts(tomorrow, timeZone)
@@ -275,8 +274,7 @@ export default function DashboardPage() {
       tomorrowOffset = recalculatedTomorrowOffset
       tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
     }
-    const tomorrowOffsetLabel = formatOffset(tomorrowOffset)
-    const to = `${tomorrowParts.year}-${String(tomorrowParts.month).padStart(2, "0")}-${String(tomorrowParts.day).padStart(2, "0")}T00:00:00${tomorrowOffsetLabel}`
+    const to = new Date(tomorrowUtcMidnight).toISOString()
 
     return { from, to }
   }

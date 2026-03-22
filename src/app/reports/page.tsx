@@ -87,7 +87,7 @@ const COLUMN_LABELS: Record<ReportColumnKey, { es: string; en: string }> = {
 
 export default function ReportsPage() {
   const { loading: authLoading, isAuthenticated, session } = useAuth()
-  const { isSuperAdmin, isSupervisora } = useRole()
+  const { isSuperAdmin, isSupervisora, loading: roleLoading } = useRole()
   const { formatDateTime, language, t } = useI18n()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -154,6 +154,7 @@ export default function ReportsPage() {
   }, [localizedColumnOptions, selectedColumns])
 
   const loadCatalogs = useCallback(async () => {
+    if (roleLoading) return
     try {
       const [restaurantRows, profileRows] = await Promise.all([
         isSupervisora
@@ -169,7 +170,7 @@ export default function ReportsPage() {
     } catch {
       // Catalogos opcionales para filtros.
     }
-  }, [isSuperAdmin, isSupervisora])
+  }, [isSuperAdmin, isSupervisora, roleLoading])
 
   const loadReport = useCallback(async () => {
     if (isSupervisora && !restaurantId) {
@@ -215,10 +216,10 @@ export default function ReportsPage() {
   }, [historyLimit, showToast, t])
 
   useEffect(() => {
-    if (authLoading) return
+    if (authLoading || roleLoading) return
     if (!isAuthenticated || !session?.access_token) return
     void loadCatalogs()
-  }, [authLoading, isAuthenticated, loadCatalogs, session?.access_token])
+  }, [authLoading, isAuthenticated, loadCatalogs, roleLoading, session?.access_token])
 
   useEffect(() => {
     if (!isSupervisora) return

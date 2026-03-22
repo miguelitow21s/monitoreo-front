@@ -97,6 +97,29 @@ function toNullableString(value: unknown) {
   return typeof value === "string" ? value : null
 }
 
+function extractEvidencePath(value: unknown): string | null {
+  if (typeof value === "string" && value.trim().length > 0) return value
+  if (Array.isArray(value)) {
+    const fromString = value.find(item => typeof item === "string" && item.trim().length > 0) as string | undefined
+    if (fromString) return fromString
+    const fromObject = value.find(
+      item =>
+        item &&
+        typeof item === "object" &&
+        (typeof (item as { storage_path?: unknown }).storage_path === "string" ||
+          typeof (item as { path?: unknown }).path === "string")
+    ) as { storage_path?: string; path?: string } | undefined
+    if (fromObject?.storage_path) return fromObject.storage_path
+    if (fromObject?.path) return fromObject.path
+  }
+  if (value && typeof value === "object") {
+    const candidate = value as { storage_path?: unknown; path?: unknown }
+    if (typeof candidate.storage_path === "string") return candidate.storage_path
+    if (typeof candidate.path === "string") return candidate.path
+  }
+  return null
+}
+
 function toNumberValue(value: unknown, fallback = 0) {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string" && value.trim().length > 0) {
@@ -150,8 +173,16 @@ function normalizeReportRow(raw: unknown): ReportRow | null {
     status: typeof row.status === "string" ? row.status : "unknown",
     incidents_count: toNumberValue(row.incidents_count ?? row.incidents, 0),
     duration_minutes: durationMinutes,
-    start_evidence_path: toNullableString(row.start_evidence_path ?? row.start_evidence),
-    end_evidence_path: toNullableString(row.end_evidence_path ?? row.end_evidence),
+    start_evidence_path: extractEvidencePath(
+      row.start_evidence_path ??
+        row.start_evidence ??
+        row.start_evidence_paths ??
+        row.start_evidences ??
+        row.start_evidence_items
+    ),
+    end_evidence_path: extractEvidencePath(
+      row.end_evidence_path ?? row.end_evidence ?? row.end_evidence_paths ?? row.end_evidences ?? row.end_evidence_items
+    ),
   }
 }
 

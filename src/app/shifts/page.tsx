@@ -5174,6 +5174,20 @@ function ShiftsPageContent() {
                                 {t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")}
                               </p>
                             )}
+                            {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {overdueSupervisorTasks.length > 0 && (
+                                  <Button size="sm" variant="secondary" onClick={() => setSupervisorScreenWithHistory("tasks")}>
+                                    {t("Ver tareas", "View tasks")}
+                                  </Button>
+                                )}
+                                {pendingPresenceClosures.length > 0 && (
+                                  <Button size="sm" variant="secondary" onClick={() => setSupervisorScreenWithHistory("presence")}>
+                                    {t("Ir a supervisión", "Go to supervision")}
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
