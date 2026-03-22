@@ -9,6 +9,7 @@ interface BackendEnvelope<T> {
     code?: string
     message?: string
     category?: string
+    details?: unknown
     request_id?: string
   } | null
   request_id?: string
@@ -58,12 +59,18 @@ function isNetworkOrCorsFailure(message: string, status?: unknown) {
   )
 }
 
-function toError(message: string, status?: number, code?: string, requestId?: string) {
+function toError(message: string, status?: number, code?: string, requestId?: string, details?: unknown) {
   const decoratedMessage = requestId ? `${message} (request_id: ${requestId})` : message
-  const err = new Error(decoratedMessage) as Error & { status?: number; code?: string; request_id?: string }
+  const err = new Error(decoratedMessage) as Error & {
+    status?: number
+    code?: string
+    request_id?: string
+    details?: unknown
+  }
   if (typeof status === "number") err.status = status
   if (code) err.code = code
   if (requestId) err.request_id = requestId
+  if (details !== undefined) err.details = details
   return err
 }
 
@@ -94,6 +101,7 @@ async function extractErrorContext(error: unknown) {
   let message = err.message ?? fallbackMessage
   let code: string | undefined
   let requestId: string | undefined
+  let details: unknown
 
   const headerRequestId = (() => {
     const headers = err.context?.headers
@@ -127,15 +135,19 @@ async function extractErrorContext(error: unknown) {
 
       if (parsed) {
         const envelopeError = parsed?.error as Record<string, unknown> | undefined
-        const envelopeRequestId = parsed?.request_id as string | undefined
-        const envelopeMessage = envelopeError?.message as string | undefined
-        const envelopeCode = envelopeError?.code as string | number | undefined
-        if (envelopeMessage) {
-          message = envelopeMessage
-        }
-        if (envelopeRequestId) {
-          requestId = envelopeRequestId
-        }
+      const envelopeRequestId = parsed?.request_id as string | undefined
+      const envelopeMessage = envelopeError?.message as string | undefined
+      const envelopeCode = envelopeError?.code as string | number | undefined
+      const envelopeDetails = envelopeError?.details ?? (parsed as { details?: unknown }).details
+      if (envelopeMessage) {
+        message = envelopeMessage
+      }
+      if (envelopeDetails !== undefined) {
+        details = envelopeDetails
+      }
+      if (envelopeRequestId) {
+        requestId = envelopeRequestId
+      }
         if (typeof envelopeCode === "number") {
           code = String(envelopeCode)
           status = status ?? envelopeCode
@@ -171,7 +183,7 @@ async function extractErrorContext(error: unknown) {
     requestId = headerRequestId
   }
 
-  return { message, status, code, requestId }
+  return { message, status, code, requestId, details }
 }
 
 function shouldDebugEndpoint(fn: string) {
@@ -318,7 +330,8 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
       extracted.message ?? error.message ?? "Edge Function request failed.",
       typeof status === "number" ? status : undefined,
       extracted.code,
-      extracted.requestId
+      extracted.requestId,
+      extracted.details
     )
   }
 
@@ -346,7 +359,8 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
         message,
         parsedStatus,
         typeof rawCode === "string" ? rawCode : typeof rawCode === "number" ? String(rawCode) : undefined,
-        envelope.request_id ?? envelope.error?.request_id
+        envelope.request_id ?? envelope.error?.request_id,
+        envelope.error?.details
       )
     }
     return (envelope.data ?? null) as T

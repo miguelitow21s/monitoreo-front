@@ -190,11 +190,20 @@ function formatElapsed(ms: number) {
 function formatErrorDetails(error: unknown, fallback: string) {
   const message = extractErrorMessage(error, fallback)
   if (!error || typeof error !== "object") return message
-  const details = error as { status?: unknown; code?: unknown; request_id?: unknown }
+  const details = error as { status?: unknown; code?: unknown; request_id?: unknown; details?: unknown }
   const parts: string[] = []
   if (typeof details.status === "number") parts.push(`status ${details.status}`)
   if (typeof details.code === "string" && details.code.trim()) parts.push(`code ${details.code}`)
   if (typeof details.request_id === "string" && details.request_id.trim()) parts.push(`request_id ${details.request_id}`)
+  if (details.details !== undefined) {
+    try {
+      const raw =
+        typeof details.details === "string" ? details.details : JSON.stringify(details.details)
+      if (raw && raw.trim()) parts.push(raw.trim())
+    } catch {
+      // ignore details serialization errors
+    }
+  }
   if (parts.length === 0) return message
   return `${message} (${parts.join(" | ")})`
 }
