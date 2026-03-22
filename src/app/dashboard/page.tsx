@@ -49,7 +49,8 @@ export default function DashboardPage() {
     if (!isSuperAdmin || authLoading || loading) return
     let mounted = true
     setLoadingTodaySupervisions(true)
-    listSupervisorPresenceToday(20)
+    const range = buildDayRangeForTimeZone(resolveDashboardTimeZone())
+    listSupervisorPresenceToday(20, range)
       .then(items => {
         if (mounted) setTodaySupervisions(items)
       })
@@ -140,6 +141,82 @@ export default function DashboardPage() {
     ],
     [t]
   )
+
+  const resolveDashboardTimeZone = () => {
+    const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return resolved && resolved.trim().length > 0 ? resolved : "America/New_York"
+  }
+
+  const getTimeZoneParts = (date: Date, timeZone: string) => {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+    const parts = formatter.formatToParts(date)
+    const map = parts.reduce((acc, part) => {
+      if (part.type !== "literal") acc[part.type] = part.value
+      return acc
+    }, {} as Record<string, string>)
+    return {
+      year: Number(map.year),
+      month: Number(map.month),
+      day: Number(map.day),
+      hour: Number(map.hour),
+      minute: Number(map.minute),
+      second: Number(map.second),
+    }
+  }
+
+  const getTimeZoneOffsetMinutes = (date: Date, timeZone: string) => {
+    const parts = getTimeZoneParts(date, timeZone)
+    const utc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+    return (utc - date.getTime()) / 60000
+  }
+
+  const formatOffset = (offsetMinutes: number) => {
+    const sign = offsetMinutes >= 0 ? "+" : "-"
+    const abs = Math.abs(offsetMinutes)
+    const hours = String(Math.floor(abs / 60)).padStart(2, "0")
+    const minutes = String(Math.floor(abs % 60)).padStart(2, "0")
+    return `${sign}${hours}:${minutes}`
+  }
+
+  const buildDayRangeForTimeZone = (timeZone: string) => {
+    const now = new Date()
+    const todayParts = getTimeZoneParts(now, timeZone)
+    const baseUtc = Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day, 0, 0, 0)
+    let offset = getTimeZoneOffsetMinutes(new Date(baseUtc), timeZone)
+    let utcMidnight = baseUtc - offset * 60000
+    const recalculatedOffset = getTimeZoneOffsetMinutes(new Date(utcMidnight), timeZone)
+    if (recalculatedOffset !== offset) {
+      offset = recalculatedOffset
+      utcMidnight = baseUtc - offset * 60000
+    }
+
+    const offsetLabel = formatOffset(offset)
+    const from = `${todayParts.year}-${String(todayParts.month).padStart(2, "0")}-${String(todayParts.day).padStart(2, "0")}T00:00:00${offsetLabel}`
+
+    const tomorrow = new Date(utcMidnight + 24 * 60 * 60 * 1000)
+    const tomorrowParts = getTimeZoneParts(tomorrow, timeZone)
+    const tomorrowBaseUtc = Date.UTC(tomorrowParts.year, tomorrowParts.month - 1, tomorrowParts.day, 0, 0, 0)
+    let tomorrowOffset = getTimeZoneOffsetMinutes(new Date(tomorrowBaseUtc), timeZone)
+    let tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
+    const recalculatedTomorrowOffset = getTimeZoneOffsetMinutes(new Date(tomorrowUtcMidnight), timeZone)
+    if (recalculatedTomorrowOffset !== tomorrowOffset) {
+      tomorrowOffset = recalculatedTomorrowOffset
+      tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
+    }
+    const tomorrowOffsetLabel = formatOffset(tomorrowOffset)
+    const to = `${tomorrowParts.year}-${String(tomorrowParts.month).padStart(2, "0")}-${String(tomorrowParts.day).padStart(2, "0")}T00:00:00${tomorrowOffsetLabel}`
+
+    return { from, to }
+  }
 
   const supervisionStatusLabel = (phase: SupervisorPresenceSummary["phase"]) => {
     if (phase === "end") return t("Verificado en sitio", "Verified on site")
