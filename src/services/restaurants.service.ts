@@ -1,4 +1,3 @@
-import { supabase } from "@/services/supabaseClient"
 import { invokeEdge } from "@/services/edgeClient"
 
 export interface Restaurant {
@@ -28,33 +27,61 @@ export interface SupervisorRestaurantOption {
   name: string
 }
 
-function shouldFallbackToDirectDb(error: unknown) {
-  if (typeof error !== "object" || error === null) return true
-
-  const status = (error as { status?: unknown }).status
-  if (typeof status === "number") {
-    if (status === 404 || status === 503) return true
-    return false
-  }
-
-  const message =
-    typeof (error as { message?: unknown }).message === "string"
-      ? (error as { message: string }).message.toLowerCase()
-      : ""
-
-  return (
-    message.includes("failed to fetch") ||
-    message.includes("network") ||
-    message.includes("cors") ||
-    message.includes("temporarily unavailable")
-  )
-}
-
 function unwrapRestaurant(payload: unknown) {
   if (payload && typeof payload === "object" && "restaurant" in payload) {
     return (payload as { restaurant?: unknown }).restaurant ?? null
   }
   return payload
+}
+
+function toNumberValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function toNullableString(value: unknown) {
+  return typeof value === "string" ? value : null
+}
+
+function normalizeRestaurantRow(raw: unknown): Restaurant | null {
+  if (!raw || typeof raw !== "object") return null
+  const base = raw as Record<string, unknown>
+  const unwrapped = unwrapRestaurant(base)
+  const row = (unwrapped && typeof unwrapped === "object" ? (unwrapped as Record<string, unknown>) : base)
+
+  const id = toNullableString(row.id) ?? (toNumberValue(row.id) !== null ? String(row.id) : null)
+  if (!id) return null
+
+  const name = toNullableString(row.name) ?? `Restaurant #${id}`
+
+  return {
+    id,
+    name,
+    is_active: typeof row.is_active === "boolean" ? row.is_active : undefined,
+    lat: toNumberValue(row.lat),
+    lng: toNumberValue(row.lng),
+    geofence_radius_m: toNumberValue(row.geofence_radius_m ?? row.radius),
+    address_line: toNullableString(row.address_line),
+    city: toNullableString(row.city),
+    state: toNullableString(row.state),
+    postal_code: toNullableString(row.postal_code),
+    country: toNullableString(row.country),
+    place_id: toNullableString(row.place_id),
+  }
+}
+
+function normalizeRestaurantsPayload(payload: unknown) {
+  const rows = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown }).items)
+      ? ((payload as { items?: unknown }).items as unknown[])
+      : []
+
+  return rows.map(normalizeRestaurantRow).filter((item): item is Restaurant => item !== null)
 }
 
 function normalizeStaffItems(payload: unknown, role: "employee" | "supervisor") {
@@ -101,139 +128,85 @@ export async function listRestaurants(options?: { includeInactive?: boolean; use
   const includeInactive = options?.includeInactive === true
 
   if (options?.useAdminApi) {
-    try {
-      const payload = await invokeEdge<unknown>("admin_restaurants_manage", {
-        idempotencyKey: crypto.randomUUID(),
-        body: {
-          action: "list",
-          ...(includeInactive ? {} : { is_active: true }),
-        },
-      })
+    const payload = await invokeEdge<unknown>("admin_restaurants_manage", {
+      idempotencyKey: crypto.randomUUID(),
+      body: {
+        action: "list",
+        ...(includeInactive ? {} : { is_active: true }),
+      },
+    })
 
-      const rows = Array.isArray(payload)
-        ? payload
-        : payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown }).items)
-          ? ((payload as { items?: unknown }).items as unknown[])
-          : []
-
-      if (Array.isArray(rows)) {
-        return rows as Restaurant[]
-      }
-    } catch (error: unknown) {
-      if (!shouldFallbackToDirectDb(error)) throw error
-    }
+    return normalizeRestaurantsPayload(payload)
   }
 
-  let query = supabase.from("restaurants").select("*").order("name")
-  if (!includeInactive) {
-    query = query.eq("is_active", true)
-  }
+  const payload = await invokeEdge<unknown>("restaurant_staff_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list_my_restaurants",
+      ...(includeInactive ? {} : { is_active: true }),
+    },
+  })
 
-  const result = await query
-  if (!result.error) {
-    return (result.data ?? []) as Restaurant[]
-  }
-
-  const missingColumn = typeof result.error.message === "string" && result.error.message.includes("is_active")
-  if (missingColumn) {
-    const fallback = await supabase.from("restaurants").select("*").order("name")
-    if (fallback.error) throw fallback.error
-    return (fallback.data ?? []) as Restaurant[]
-  }
-
-  throw result.error
+  return normalizeRestaurantsPayload(payload)
 }
 
 export async function createRestaurant(payload: Omit<Restaurant, "id">) {
-  try {
-    const created = await invokeEdge<unknown>("admin_restaurants_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "create",
-        name: payload.name,
-        lat: payload.lat,
-        lng: payload.lng,
-        radius: payload.geofence_radius_m,
-        address_line: payload.address_line ?? null,
-        city: payload.city ?? null,
-        state: payload.state ?? null,
-        postal_code: payload.postal_code ?? null,
-        country: payload.country ?? null,
-        place_id: payload.place_id ?? null,
-      },
-    })
+  const created = await invokeEdge<unknown>("admin_restaurants_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "create",
+      name: payload.name,
+      lat: payload.lat,
+      lng: payload.lng,
+      radius: payload.geofence_radius_m,
+      address_line: payload.address_line ?? null,
+      city: payload.city ?? null,
+      state: payload.state ?? null,
+      postal_code: payload.postal_code ?? null,
+      country: payload.country ?? null,
+      place_id: payload.place_id ?? null,
+    },
+  })
 
-    const unwrapped = unwrapRestaurant(created)
-    if (unwrapped && typeof unwrapped === "object") {
-      return unwrapped as Restaurant
-    }
-  } catch {
-    // Fall through to direct DB access while backend rollout converges.
+  const normalized = normalizeRestaurantRow(created)
+  if (!normalized) {
+    throw new Error("Invalid restaurant payload from admin_restaurants_manage.")
   }
-
-  const { data, error } = await supabase.from("restaurants").insert(payload).select("*").single()
-  if (error) throw error
-  return data as Restaurant
+  return normalized
 }
 
 export async function updateRestaurant(id: string, payload: Partial<Omit<Restaurant, "id">>) {
-  try {
-    const updated = await invokeEdge<unknown>("admin_restaurants_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "update",
-        restaurant_id: Number(id),
-        ...payload,
-        ...(payload.geofence_radius_m === undefined ? {} : { radius: payload.geofence_radius_m }),
-      },
-    })
+  const updated = await invokeEdge<unknown>("admin_restaurants_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "update",
+      restaurant_id: Number(id),
+      ...payload,
+      ...(payload.geofence_radius_m === undefined ? {} : { radius: payload.geofence_radius_m }),
+    },
+  })
 
-    const unwrapped = unwrapRestaurant(updated)
-    if (unwrapped && typeof unwrapped === "object") {
-      return unwrapped as Restaurant
-    }
-  } catch {
-    // Fall through to direct DB access while backend rollout converges.
+  const normalized = normalizeRestaurantRow(updated)
+  if (!normalized) {
+    throw new Error("Invalid restaurant payload from admin_restaurants_manage.")
   }
-
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update(payload)
-    .eq("id", id)
-    .select("*")
-    .single()
-
-  if (error) throw error
-  return data as Restaurant
+  return normalized
 }
 
 export async function updateRestaurantStatus(id: string, isActive: boolean) {
-  try {
-    const updated = await invokeEdge<unknown>("admin_restaurants_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: isActive ? "activate" : "deactivate",
-        restaurant_id: Number(id),
-      },
-    })
+  const updated = await invokeEdge<unknown>("admin_restaurants_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: isActive ? "activate" : "deactivate",
+      restaurant_id: Number(id),
+    },
+  })
 
-    const unwrapped = unwrapRestaurant(updated)
-    if (unwrapped && typeof unwrapped === "object") {
-      return unwrapped as Restaurant
-    }
-  } catch {
-    // Fall through to direct DB access while backend rollout converges.
+  const normalized = normalizeRestaurantRow(updated)
+  if (!normalized) {
+    throw new Error("Invalid restaurant payload from admin_restaurants_manage.")
   }
-
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({ is_active: isActive })
-    .eq("id", id)
-    .select("*")
-    .single()
-
-  if (error) throw error
-  return data as Restaurant
+  return normalized
 }
 
 export async function listRestaurantEmployees(restaurantId: string, role?: "employee" | "supervisor") {
@@ -241,32 +214,19 @@ export async function listRestaurantEmployees(restaurantId: string, role?: "empl
   const scopedRole = role ?? "employee"
   const action = "list_by_restaurant"
 
-  try {
-    const payload = await invokeEdge<unknown>(endpoint, {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action,
-        restaurant_id: Number(restaurantId),
-      },
-    })
+  const payload = await invokeEdge<unknown>(endpoint, {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action,
+      restaurant_id: Number(restaurantId),
+    },
+  })
 
-    if (payload && typeof payload === "object" && "items" in payload) {
-      return normalizeStaffItems(payload, scopedRole)
-    }
-  } catch {
-    // Fall through to direct DB fallback below.
+  if (payload && typeof payload === "object" && "items" in payload) {
+    return normalizeStaffItems(payload, scopedRole)
   }
 
-  const { data, error } = await supabase
-    .from("restaurant_employees")
-    .select("*")
-    .eq("restaurant_id", restaurantId)
-
-  if (error) throw error
-
-  const rows = (data ?? []) as RestaurantEmployee[]
-  if (!role) return rows
-  return rows.filter(item => (role === "supervisor" ? item.role === "supervisora" : item.role !== "supervisora"))
+  return [] as RestaurantEmployee[]
 }
 
 export async function assignEmployeeToRestaurant(
@@ -276,31 +236,20 @@ export async function assignEmployeeToRestaurant(
 ) {
   const endpoint = role === "supervisor" ? "admin_supervisors_manage" : "restaurant_staff_manage"
 
-  try {
-    const created = await invokeEdge<unknown>(endpoint, {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: role === "supervisor" ? "assign" : "assign_employee",
-        restaurant_id: Number(restaurantId),
-        ...(role === "supervisor" ? { supervisor_id: userId } : { employee_id: userId }),
-      },
-    })
+  const created = await invokeEdge<unknown>(endpoint, {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: role === "supervisor" ? "assign" : "assign_employee",
+      restaurant_id: Number(restaurantId),
+      ...(role === "supervisor" ? { supervisor_id: userId } : { employee_id: userId }),
+    },
+  })
 
-    if (created && typeof created === "object") {
-      return created as RestaurantEmployee
-    }
-  } catch {
-    // Fall through to direct DB fallback below.
+  if (created && typeof created === "object") {
+    return created as RestaurantEmployee
   }
 
-  const { data, error } = await supabase
-    .from("restaurant_employees")
-    .insert({ restaurant_id: restaurantId, user_id: userId })
-    .select("*")
-    .single()
-
-  if (error) throw error
-  return data as RestaurantEmployee
+  throw new Error("Invalid response from restaurant staff assignment.")
 }
 
 export async function unassignEmployeeFromRestaurant(
@@ -310,66 +259,22 @@ export async function unassignEmployeeFromRestaurant(
 ) {
   const endpoint = role === "supervisor" ? "admin_supervisors_manage" : "restaurant_staff_manage"
 
-  try {
-    await invokeEdge(endpoint, {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: role === "supervisor" ? "unassign" : "unassign_employee",
-        restaurant_id: Number(restaurantId),
-        ...(role === "supervisor" ? { supervisor_id: userId } : { employee_id: userId }),
-      },
-    })
-    return
-  } catch {
-    // Fall through to direct DB fallback below.
-  }
-
-  const { error } = await supabase
-    .from("restaurant_employees")
-    .delete()
-    .eq("restaurant_id", restaurantId)
-    .eq("user_id", userId)
-
-  if (error) throw error
+  await invokeEdge(endpoint, {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: role === "supervisor" ? "unassign" : "unassign_employee",
+      restaurant_id: Number(restaurantId),
+      ...(role === "supervisor" ? { supervisor_id: userId } : { employee_id: userId }),
+    },
+  })
 }
 
 export async function listMySupervisorRestaurants() {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-  if (userError) throw userError
-  if (!user?.id) return [] as SupervisorRestaurantOption[]
-
-  const { data: links, error: linksError } = await supabase
-    .from("restaurant_employees")
-    .select("restaurant_id")
-    .eq("user_id", user.id)
-
-  if (linksError) throw linksError
-
-  const restaurantIds = Array.from(
-    new Set(
-      (links ?? [])
-        .map(item => Number(item.restaurant_id))
-        .filter(id => Number.isFinite(id))
-    )
-  )
-
-  if (restaurantIds.length === 0) return [] as SupervisorRestaurantOption[]
-
-  const { data: restaurants, error: restaurantsError } = await supabase
-    .from("restaurants")
-    .select("id,name")
-    .in("id", restaurantIds)
-    .order("name")
-
-  if (restaurantsError) throw restaurantsError
-
-  return (restaurants ?? [])
+  const rows = await listRestaurants()
+  return rows
     .map(item => ({
       id: Number(item.id),
-      name: String(item.name ?? `Restaurant #${item.id}`),
+      name: item.name ?? `Restaurant #${item.id}`,
     }))
     .filter(item => Number.isFinite(item.id)) as SupervisorRestaurantOption[]
 }

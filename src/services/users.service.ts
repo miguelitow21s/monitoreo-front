@@ -6,28 +6,6 @@ import { normalizePhoneForOtp } from "@/utils/phone"
 let bootstrapRpcUnavailable = false
 let bootstrapRpcAttempted = false
 
-function shouldFallbackToDirectDb(error: unknown) {
-  if (typeof error !== "object" || error === null) return true
-
-  const status = (error as { status?: unknown }).status
-  if (typeof status === "number") {
-    if (status === 404 || status === 503) return true
-    return false
-  }
-
-  const message =
-    typeof (error as { message?: unknown }).message === "string"
-      ? (error as { message: string }).message.toLowerCase()
-      : ""
-
-  return (
-    message.includes("failed to fetch") ||
-    message.includes("network") ||
-    message.includes("cors") ||
-    message.includes("temporarily unavailable")
-  )
-}
-
 function isRpcUnavailableError(error: unknown) {
   if (!error || typeof error !== "object") return false
 
@@ -130,83 +108,53 @@ function normalizeUserProfiles(payload: unknown) {
 }
 
 export async function listUserProfiles(options?: { useAdminApi?: boolean }) {
-  if (options?.useAdminApi) {
-    try {
-      const payload = await invokeEdge<unknown>("admin_users_manage", {
-        idempotencyKey: crypto.randomUUID(),
-        body: {
-          action: "list",
-        },
-      })
-
-      const rows = normalizeUserProfiles(payload)
-      if (Array.isArray(rows)) {
-        return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
-      }
-    } catch (error: unknown) {
-      if (!shouldFallbackToDirectDb(error)) throw error
-    }
+  if (!options?.useAdminApi) {
+    throw new Error("admin_users_manage is required to list user profiles.")
   }
 
-  const { data, error } = await supabase.from("profiles").select("*").order("full_name")
-  if (error) throw error
-  return (data ?? []) as UserProfile[]
+  const payload = await invokeEdge<unknown>("admin_users_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "list",
+    },
+  })
+
+  const rows = normalizeUserProfiles(payload)
+  return rows.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? ""))
 }
 
 export async function updateUserProfileRole(id: string, role: Role) {
-  try {
-    const payload = await invokeEdge<unknown>("admin_users_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: "update",
-        user_id: id,
-        role,
-      },
-    })
+  const payload = await invokeEdge<unknown>("admin_users_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: "update",
+      user_id: id,
+      role,
+    },
+  })
 
-    const updated = normalizeUserProfile(unwrapUserPayload(payload))
-    if (updated) return updated
-  } catch {
-    // Keep compatibility with current direct DB fallback.
+  const updated = normalizeUserProfile(unwrapUserPayload(payload))
+  if (!updated) {
+    throw new Error("Invalid user payload from admin_users_manage.")
   }
-
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ role })
-    .eq("id", id)
-    .select("*")
-    .single()
-
-  if (error) throw error
-  return data as UserProfile
+  return updated
 }
 
 export async function updateUserProfileStatus(id: string, isActive: boolean) {
-  try {
-    const payload = await invokeEdge<unknown>("admin_users_manage", {
-      idempotencyKey: crypto.randomUUID(),
-      body: {
-        action: isActive ? "activate" : "deactivate",
-        user_id: id,
-        ...(isActive ? {} : { reason: "deactivated_from_frontend" }),
-      },
-    })
+  const payload = await invokeEdge<unknown>("admin_users_manage", {
+    idempotencyKey: crypto.randomUUID(),
+    body: {
+      action: isActive ? "activate" : "deactivate",
+      user_id: id,
+      ...(isActive ? {} : { reason: "deactivated_from_frontend" }),
+    },
+  })
 
-    const updated = normalizeUserProfile(unwrapUserPayload(payload))
-    if (updated) return updated
-  } catch {
-    // Keep compatibility with current direct DB fallback.
+  const updated = normalizeUserProfile(unwrapUserPayload(payload))
+  if (!updated) {
+    throw new Error("Invalid user payload from admin_users_manage.")
   }
-
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ is_active: isActive })
-    .eq("id", id)
-    .select("*")
-    .single()
-
-  if (error) throw error
-  return data as UserProfile
+  return updated
 }
 
 export async function createAdminUser(payload: {

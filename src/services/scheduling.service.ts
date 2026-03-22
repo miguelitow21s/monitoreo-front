@@ -36,12 +36,8 @@ function unavailableScheduledManageError() {
   )
 }
 
-async function invokeScheduledManage<T>(
-  body: Record<string, unknown>,
-  options: { allowUnavailable: boolean; fallback: T }
-) {
+async function invokeScheduledManage<T>(body: Record<string, unknown>) {
   if (scheduledManageUnavailable) {
-    if (options.allowUnavailable) return options.fallback
     throw unavailableScheduledManageError()
   }
 
@@ -53,7 +49,6 @@ async function invokeScheduledManage<T>(
   } catch (error: unknown) {
     if (isScheduledManageUnavailableError(error)) {
       scheduledManageUnavailable = true
-      if (options.allowUnavailable) return options.fallback
       throw unavailableScheduledManageError()
     }
     throw error
@@ -151,17 +146,14 @@ export async function assignScheduledShift(payload: {
 }) {
   const { employeeId, restaurantId, scheduledStartIso, scheduledEndIso, notes } = payload
 
-  return invokeScheduledManage(
-    {
-      action: "assign",
-      employee_id: employeeId,
-      restaurant_id: Number(restaurantId),
-      scheduled_start: scheduledStartIso,
-      scheduled_end: scheduledEndIso,
-      notes: notes ?? null,
-    },
-    { allowUnavailable: false, fallback: null }
-  )
+  return invokeScheduledManage({
+    action: "assign",
+    employee_id: employeeId,
+    restaurant_id: Number(restaurantId),
+    scheduled_start: scheduledStartIso,
+    scheduled_end: scheduledEndIso,
+    notes: notes ?? null,
+  })
 }
 
 function buildScheduledListBody(limit: number, restaurantId?: number | null) {
@@ -179,65 +171,33 @@ function buildScheduledListBody(limit: number, restaurantId?: number | null) {
 }
 
 export async function listMyScheduledShifts(limit = 10, restaurantId?: number | null) {
-  const data = await invokeScheduledManage<unknown>(
-    buildScheduledListBody(limit, restaurantId),
-    { allowUnavailable: true, fallback: [] }
-  )
+  const data = await invokeScheduledManage<unknown>(buildScheduledListBody(limit, restaurantId))
   return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
 }
 
 export async function listScheduledShifts(limit = 50, restaurantId?: number | null) {
-  const data = await invokeScheduledManage<unknown>(
-    buildScheduledListBody(limit, restaurantId),
-    { allowUnavailable: true, fallback: [] }
-  )
+  const data = await invokeScheduledManage<unknown>(buildScheduledListBody(limit, restaurantId))
   return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
 }
 
 export async function cancelScheduledShift(scheduledShiftId: number, notes?: string) {
-  await invokeScheduledManage(
-    {
-      action: "cancel",
-      scheduled_shift_id: scheduledShiftId,
-      reason: notes?.trim() || null,
-    },
-    { allowUnavailable: false, fallback: null }
-  )
-
-  return {
-    id: scheduledShiftId,
-    employee_id: "",
-    restaurant_id: 0,
-    scheduled_start: "",
-    scheduled_end: "",
-    status: "cancelled",
-    notes: notes?.trim() || null,
-  } as ScheduledShift
+  await invokeScheduledManage({
+    action: "cancel",
+    scheduled_shift_id: scheduledShiftId,
+    reason: notes?.trim() || null,
+  })
 }
 
 export async function reprogramScheduledShift(payload: ReprogramScheduledShiftPayload) {
   const { scheduledShiftId, scheduledStartIso, scheduledEndIso, notes } = payload
 
-  await invokeScheduledManage(
-    {
-      action: "reschedule",
-      scheduled_shift_id: scheduledShiftId,
-      scheduled_start: scheduledStartIso,
-      scheduled_end: scheduledEndIso,
-      notes: notes?.trim() || null,
-    },
-    { allowUnavailable: false, fallback: null }
-  )
-
-  return {
-    id: scheduledShiftId,
-    employee_id: "",
-    restaurant_id: 0,
+  await invokeScheduledManage({
+    action: "reschedule",
+    scheduled_shift_id: scheduledShiftId,
     scheduled_start: scheduledStartIso,
     scheduled_end: scheduledEndIso,
-    status: "scheduled",
     notes: notes?.trim() || null,
-  } as ScheduledShift
+  })
 }
 
 export async function assignScheduledShiftsBulk(payload: {
@@ -249,17 +209,14 @@ export async function assignScheduledShiftsBulk(payload: {
   const blocks = payload.blocks.filter(item => item.scheduledStartIso && item.scheduledEndIso)
   if (blocks.length === 0) return [] as unknown[]
 
-  return invokeScheduledManage(
-    {
-      action: "bulk_assign",
-      entries: blocks.map(block => ({
-        employee_id: payload.employeeId,
-        restaurant_id: Number(payload.restaurantId),
-        scheduled_start: block.scheduledStartIso,
-        scheduled_end: block.scheduledEndIso,
-        notes: payload.notes ?? null,
-      })),
-    },
-    { allowUnavailable: false, fallback: [] as unknown[] }
-  )
+  return invokeScheduledManage({
+    action: "bulk_assign",
+    entries: blocks.map(block => ({
+      employee_id: payload.employeeId,
+      restaurant_id: Number(payload.restaurantId),
+      scheduled_start: block.scheduledStartIso,
+      scheduled_end: block.scheduledEndIso,
+      notes: payload.notes ?? null,
+    })),
+  })
 }
