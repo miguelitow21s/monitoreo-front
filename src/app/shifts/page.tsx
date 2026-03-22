@@ -2035,6 +2035,9 @@ function ShiftsPageContent() {
       setOtpCode("")
       debugLog("otp.verify.success")
       showToast("success", t("OTP verificado. Ya puedes operar turnos.", "OTP verified. You can now operate shifts."))
+      if (canOperateSupervisor && supervisorScreen === "otp") {
+        handleSupervisorBack()
+      }
     } catch (error: unknown) {
       setShiftOtpReady(false)
       debugLog("otp.verify.error", { message: extractErrorMessage(error, "otp verify failed") })
@@ -5234,6 +5237,11 @@ function ShiftsPageContent() {
 
             {supervisorScreen === "otp" && !canOperateShift && (
               <Card title={t("OTP para aprobaciones e incidentes", "OTP for approvals and incidents")}>
+                <div className="mb-3 flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={handleSupervisorBack}>
+                    ← {t("Volver", "Back")}
+                  </Button>
+                </div>
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={shiftOtpReady ? "success" : "warning"}>
