@@ -67,16 +67,14 @@ export default function DashboardPage() {
       }, new Map<string, string>())
 
       const restaurantById = restaurants.reduce((acc, restaurant) => {
-        acc.set(Number(restaurant.id), restaurant)
+        const numericId = Number(restaurant.id)
+        if (Number.isFinite(numericId)) {
+          acc.set(numericId, restaurant)
+        }
         return acc
       }, new Map<number, Restaurant>())
 
-      const restaurantQueue = restaurants
-        .map(item => ({
-          ...item,
-          id: Number(item.id),
-        }))
-        .filter(item => Number.isFinite(item.id))
+      const restaurantQueue = restaurants.filter(item => Number.isFinite(Number(item.id)))
 
       const fallbackTimezone = resolveDashboardTimeZone()
       const results: SupervisorPresenceSummary[] = []
@@ -86,9 +84,12 @@ export default function DashboardPage() {
           while (restaurantQueue.length > 0) {
             const restaurant = restaurantQueue.shift()
             if (!restaurant) return
+            const restaurantId = Number(restaurant.id)
+            if (!Number.isFinite(restaurantId)) continue
+
             const timeZone = resolveRestaurantTimeZone(restaurant, fallbackTimezone)
             const range = buildDayRangeForTimeZone(timeZone)
-            const logs = await listSupervisorPresenceByRestaurant(restaurant.id, 50, range)
+            const logs = await listSupervisorPresenceByRestaurant(restaurantId, 50, range)
             for (const log of logs) {
               const restaurantInfo = restaurantById.get(log.restaurant_id)
               const supervisorName = log.supervisor_id ? supervisorNameById.get(log.supervisor_id) : null
