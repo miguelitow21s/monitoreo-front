@@ -15,6 +15,8 @@ export interface EmployeeDashboardData {
 		id: string | number
 		start_time?: string
 		restaurant_id?: number | null
+		scheduled_start?: string
+		scheduled_end?: string
 		required_evidence_types?: string[]
 		uploaded_evidence_types?: string[]
 	} | null

@@ -67,7 +67,7 @@ function toError(message: string, status?: number, code?: string, requestId?: st
   return err
 }
 
-function extractErrorContext(error: unknown) {
+async function extractErrorContext(error: unknown) {
   const fallbackMessage = "Edge Function request failed."
   if (!error || typeof error !== "object") {
     return { message: fallbackMessage } as {
@@ -106,32 +106,55 @@ function extractErrorContext(error: unknown) {
   const rawBody = err.context?.body ?? err.body
   if (rawBody) {
     try {
-      const parsed =
-        typeof rawBody === "string"
-          ? (JSON.parse(rawBody) as Record<string, unknown>)
-          : (rawBody as Record<string, unknown>)
-      const envelopeError = parsed?.error as Record<string, unknown> | undefined
-      const envelopeRequestId = parsed?.request_id as string | undefined
-      const envelopeMessage = envelopeError?.message as string | undefined
-      const envelopeCode = envelopeError?.code as string | number | undefined
-      if (envelopeMessage) {
-        message = envelopeMessage
+      let parsed: Record<string, unknown> | null = null
+      let rawText: string | null = null
+
+      if (typeof rawBody === "string") {
+        rawText = rawBody
+      } else if (rawBody instanceof ArrayBuffer) {
+        rawText = new TextDecoder().decode(rawBody)
+      } else if (ArrayBuffer.isView(rawBody)) {
+        rawText = new TextDecoder().decode(rawBody)
+      } else if (typeof (rawBody as { text?: unknown }).text === "function") {
+        rawText = await (rawBody as { text: () => Promise<string> }).text()
+      } else if (typeof rawBody === "object" && rawBody !== null) {
+        parsed = rawBody as Record<string, unknown>
       }
-      if (envelopeRequestId) {
-        requestId = envelopeRequestId
+
+      if (rawText) {
+        parsed = JSON.parse(rawText) as Record<string, unknown>
       }
-      if (typeof envelopeCode === "number") {
-        code = String(envelopeCode)
-        status = status ?? envelopeCode
-      } else if (typeof envelopeCode === "string") {
-        code = envelopeCode
-        if (/^\d{3}$/.test(envelopeCode)) {
-          status = status ?? Number(envelopeCode)
+
+      if (parsed) {
+        const envelopeError = parsed?.error as Record<string, unknown> | undefined
+        const envelopeRequestId = parsed?.request_id as string | undefined
+        const envelopeMessage = envelopeError?.message as string | undefined
+        const envelopeCode = envelopeError?.code as string | number | undefined
+        if (envelopeMessage) {
+          message = envelopeMessage
         }
-      }
-      const directMessage = parsed?.message as string | undefined
-      if (!envelopeMessage && directMessage) {
-        message = directMessage
+        if (envelopeRequestId) {
+          requestId = envelopeRequestId
+        }
+        if (typeof envelopeCode === "number") {
+          code = String(envelopeCode)
+          status = status ?? envelopeCode
+        } else if (typeof envelopeCode === "string") {
+          code = envelopeCode
+          if (/^\d{3}$/.test(envelopeCode)) {
+            status = status ?? Number(envelopeCode)
+          }
+        }
+        const directMessage = parsed?.message as string | undefined
+        if (!envelopeMessage && directMessage) {
+          message = directMessage
+        }
+      } else if (rawText) {
+        const trimmed = rawText.trim()
+        if (trimmed) {
+          const match = trimmed.match(/\"message\"\s*:\s*\"([^\"]+)\"/)
+          message = match?.[1] ?? trimmed
+        }
       }
     } catch {
       if (typeof rawBody === "string") {
@@ -280,7 +303,7 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
   })
 
   if (error) {
-    const extracted = extractErrorContext(error)
+    const extracted = await extractErrorContext(error)
     const status = extracted.status ?? (error as { status?: unknown }).status
     if (isNetworkOrCorsFailure(error.message ?? "", status)) {
       markEdgeTemporarilyUnavailable()

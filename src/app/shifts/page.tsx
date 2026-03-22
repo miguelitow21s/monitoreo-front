@@ -945,6 +945,11 @@ function ShiftsPageContent() {
   }, [activeShift?.start_time, elapsedShiftMs])
 
   const summaryScheduleLabel = useMemo(() => {
+    const dashboardStart = employeeDashboard?.active_shift?.scheduled_start
+    const dashboardEnd = employeeDashboard?.active_shift?.scheduled_end
+    if (dashboardStart && dashboardEnd) {
+      return `${formatTimeOnly(dashboardStart)} - ${formatTimeOnly(dashboardEnd)}`
+    }
     if (activeScheduledShift?.scheduled_start && activeScheduledShift?.scheduled_end) {
       return `${formatTimeOnly(activeScheduledShift.scheduled_start)} - ${formatTimeOnly(activeScheduledShift.scheduled_end)}`
     }
@@ -952,7 +957,13 @@ function ShiftsPageContent() {
       return `${formatTimeOnly(activeShift.start_time)} - ${formatTimeOnly(new Date().toISOString())}`
     }
     return "-"
-  }, [activeScheduledShift?.scheduled_end, activeScheduledShift?.scheduled_start, activeShift?.start_time])
+  }, [
+    activeScheduledShift?.scheduled_end,
+    activeScheduledShift?.scheduled_start,
+    activeShift?.start_time,
+    employeeDashboard?.active_shift?.scheduled_end,
+    employeeDashboard?.active_shift?.scheduled_start,
+  ])
 
   const summaryDateLabel = useMemo(() => {
     if (activeShift?.start_time) return formatDateOnly(activeShift.start_time)
@@ -974,10 +985,15 @@ function ShiftsPageContent() {
         ? activeScheduledMeta.scheduledEndMs
         : null
     if (typeof metaMatch === "number") return metaMatch
+    const dashboardScheduledEnd = employeeDashboard?.active_shift?.scheduled_end
+    if (dashboardScheduledEnd) {
+      const endMs = new Date(dashboardScheduledEnd).getTime()
+      if (Number.isFinite(endMs)) return endMs
+    }
     if (!activeScheduledShift?.scheduled_end) return null
     const endMs = new Date(activeScheduledShift.scheduled_end).getTime()
     return Number.isFinite(endMs) ? endMs : null
-  }, [activeScheduledMeta, activeScheduledShift, activeShift])
+  }, [activeScheduledMeta, activeScheduledShift, activeShift, employeeDashboard?.active_shift?.scheduled_end])
 
   const earlyEndReasonRequired = useMemo(() => {
     if (!activeShift || activeScheduledEndMs === null) return false
