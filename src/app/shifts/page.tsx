@@ -5750,7 +5750,17 @@ function ShiftsPageContent() {
 
             {supervisorScreen === "presence" && isSupervisora && (
               <div className="space-y-5">
-                <div className="page-title">{t("Supervisión en Sitio", "On-site supervision")}</div>
+                <div className="page-title">
+                  <button
+                    type="button"
+                    className="header-btn"
+                    onClick={handleSupervisorBack}
+                    aria-label={t("Volver", "Back")}
+                  >
+                    ←
+                  </button>
+                  {t("Supervisión en Sitio", "On-site supervision")}
+                </div>
 
                 <div className="gps-verification">
                   <div className="info-icon" style={{ margin: "0 auto 10px" }}>
