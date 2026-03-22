@@ -40,6 +40,7 @@ import { clearShiftOtpToken, getShiftOtpToken, getOrCreateDeviceFingerprint } fr
 import { EvidenceMeta, uploadShiftEvidence } from "@/services/evidence.service"
 import {
   listMySupervisorPresence,
+  listSupervisorPresenceByRestaurant,
   registerSupervisorPresence,
   SupervisorPresenceLog,
 } from "@/services/supervisorPresence.service"
@@ -1687,12 +1688,15 @@ function ShiftsPageContent() {
   const loadPresenceLogs = useCallback(async () => {
     if (!canOperateSupervisor) return
     try {
-      const rows = await listMySupervisorPresence(20)
+      const rows =
+        isSuperAdmin && presenceRestaurantId
+          ? await listSupervisorPresenceByRestaurant(presenceRestaurantId, 50)
+          : await listMySupervisorPresence(20)
       setSupervisorPresence(rows)
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudieron cargar los registros de presencia de supervision.", "Could not load supervisor presence records.")))
     }
-  }, [canOperateSupervisor, showToast, t])
+  }, [canOperateSupervisor, isSuperAdmin, presenceRestaurantId, showToast, t])
 
   const loadStaffAssignmentContext = useCallback(async () => {
     if (!canOperateSupervisor) return
@@ -5926,6 +5930,11 @@ function ShiftsPageContent() {
                     <div className="card-header">
                       <div className="card-title">{t("Historial reciente", "Recent history")}</div>
                     </div>
+                    {isSuperAdmin && presenceRestaurantId && (
+                      <div className="mb-2 text-xs text-slate-500">
+                        {t("Restaurante", "Restaurant")}: {getRestaurantLabelById(presenceRestaurantId)}
+                      </div>
+                    )}
                     <ul className="text-sm text-slate-500">
                       {supervisorPresence.slice(0, 6).map(item => (
                         <li key={item.id}>
