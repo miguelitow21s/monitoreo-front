@@ -12,6 +12,7 @@ import Button from "@/components/ui/Button"
 import Card from "@/components/ui/Card"
 import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
+import Modal from "@/components/Modal"
 import {
   DEFAULT_REPORT_COLUMNS,
   fetchGeneratedReportsHistory,
@@ -26,6 +27,8 @@ import {
   resolveReportReadonlyUrl,
 } from "@/services/reports.service"
 import { listMySupervisorRestaurants, listRestaurants, Restaurant } from "@/services/restaurants.service"
+import { createEvidenceSignedUrl } from "@/services/storageEvidence.service"
+import { listShiftEvidenceByShift } from "@/services/shiftEvidence.service"
 import { listUserProfiles, UserProfile } from "@/services/users.service"
 import { ROLES } from "@/utils/permissions"
 
@@ -122,6 +125,13 @@ export default function ReportsPage() {
   const [reportLimit, setReportLimit] = useState(500)
   const [historyLimit, setHistoryLimit] = useState(20)
   const [tableFilter, setTableFilter] = useState("")
+  const [evidenceModalOpen, setEvidenceModalOpen] = useState(false)
+  const [evidenceModalTitle, setEvidenceModalTitle] = useState("")
+  const [evidenceModalLoading, setEvidenceModalLoading] = useState(false)
+  const [evidenceModalError, setEvidenceModalError] = useState<string | null>(null)
+  const [evidenceModalItems, setEvidenceModalItems] = useState<
+    Array<{ id: string; url: string; capturedAt: string | null }>
+  >([])
 
   useEffect(() => {
     if (authLoading) return
@@ -348,22 +358,48 @@ export default function ReportsPage() {
     })
   }, [getDisplayValue, rows, tableFilter])
 
-  const openEvidenceReadonly = useCallback(
-    async (path: string | null | undefined) => {
-      if (!path) {
-        showToast("info", t("No hay evidencia asociada.", "No linked evidence."))
-        return
-      }
+  const openEvidenceGallery = useCallback(
+    async (shiftId: string, type: "inicio" | "fin") => {
+      setEvidenceModalLoading(true)
+      setEvidenceModalError(null)
+      setEvidenceModalItems([])
+      setEvidenceModalTitle(
+        type === "inicio"
+          ? t("Evidencia inicial del turno", "Shift start evidence")
+          : t("Evidencia final del turno", "Shift end evidence")
+      )
+      setEvidenceModalOpen(true)
 
-      const signedUrl = await resolveReportReadonlyUrl(path)
-      if (!signedUrl) {
-        showToast("error", t("No se pudo generar enlace de evidencia.", "Could not generate evidence link."))
-        return
-      }
+      try {
+        const items = await listShiftEvidenceByShift({ shiftId, type, limit: 50 })
+        if (items.length === 0) {
+          setEvidenceModalError(t("No hay evidencia registrada para este turno.", "No evidence registered for this shift."))
+          return
+        }
 
-      window.open(signedUrl, "_blank", "noopener,noreferrer")
+        const resolved = await Promise.all(
+          items.map(async item => {
+            const url = await createEvidenceSignedUrl(item.storage_path)
+            return url ? { id: item.id, url, capturedAt: item.captured_at } : null
+          })
+        )
+        const usable = resolved.filter(
+          (item): item is { id: string; url: string; capturedAt: string | null } => item !== null
+        )
+
+        if (usable.length === 0) {
+          setEvidenceModalError(t("No se pudo generar enlaces de evidencia.", "Could not generate evidence links."))
+          return
+        }
+
+        setEvidenceModalItems(usable)
+      } catch (error: unknown) {
+        setEvidenceModalError(error instanceof Error ? error.message : t("No se pudo cargar la evidencia.", "Could not load evidence."))
+      } finally {
+        setEvidenceModalLoading(false)
+      }
     },
-    [showToast, t]
+    [t]
   )
 
   const getStatusBadge = useCallback(
@@ -444,11 +480,7 @@ export default function ReportsPage() {
           <Button
             size="sm"
             variant={hasEvidence ? "secondary" : "ghost"}
-            onClick={() =>
-              void openEvidenceReadonly(
-                column === "start_evidence" ? row.start_evidence_path : row.end_evidence_path
-              )
-            }
+            onClick={() => void openEvidenceGallery(row.id, column === "start_evidence" ? "inicio" : "fin")}
             disabled={!hasEvidence}
           >
             {hasEvidence
@@ -499,7 +531,7 @@ export default function ReportsPage() {
       const value = getDisplayValue(row, column)
       return <span className="text-slate-700">{String(value)}</span>
     },
-    [formatDateParts, getDisplayValue, getEmployeeDisplay, getRestaurantDisplay, getStatusBadge, openEvidenceReadonly, t]
+    [formatDateParts, getDisplayValue, getEmployeeDisplay, getRestaurantDisplay, getStatusBadge, openEvidenceGallery, t]
   )
 
   const handleGenerateBackend = async () => {
@@ -896,6 +928,30 @@ export default function ReportsPage() {
             )}
           </Card>
         </div>
+        <Modal open={evidenceModalOpen} onClose={() => setEvidenceModalOpen(false)} title={evidenceModalTitle}>
+          <div className="space-y-3">
+            <div className="text-sm font-semibold text-slate-100">{evidenceModalTitle}</div>
+            {evidenceModalLoading && (
+              <p className="text-sm text-slate-300">{t("Cargando evidencia...", "Loading evidence...")}</p>
+            )}
+            {evidenceModalError && (
+              <p className="text-sm text-rose-200">{evidenceModalError}</p>
+            )}
+            {!evidenceModalLoading && !evidenceModalError && evidenceModalItems.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {evidenceModalItems.map(item => (
+                  <div key={item.id} className="overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={item.url} alt="evidence" className="h-40 w-full object-cover" />
+                    <div className="px-3 py-2 text-xs text-slate-300">
+                      {item.capturedAt ? formatDateTime(item.capturedAt) : t("Sin fecha", "No date")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
       </RoleGuard>
     </ProtectedRoute>
   )

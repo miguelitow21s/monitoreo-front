@@ -53,6 +53,7 @@ const DEBUG_ENDPOINTS = new Set([
   "auth_register",
   "users_bootstrap",
   "users_manage",
+  "shift_evidence_manage",
   "admin_dashboard_metrics",
   "health_ping",
 ])

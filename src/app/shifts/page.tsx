@@ -81,7 +81,8 @@ import {
   SupervisorRestaurantOption,
   unassignEmployeeFromRestaurant,
 } from "@/services/restaurants.service"
-import { uploadEvidenceObject } from "@/services/storageEvidence.service"
+import { createEvidenceSignedUrl, uploadEvidenceObject } from "@/services/storageEvidence.service"
+import { listShiftEvidenceByShift } from "@/services/shiftEvidence.service"
 import {
   createEmployeeObservation,
   EmployeeDashboardData,
@@ -458,6 +459,13 @@ function ShiftsPageContent() {
   const [creatingEmployeeIncident, setCreatingEmployeeIncident] = useState(false)
 
   const [supervisorRows, setSupervisorRows] = useState<SupervisorShiftRow[]>([])
+  const [shiftEvidenceModalOpen, setShiftEvidenceModalOpen] = useState(false)
+  const [shiftEvidenceModalTitle, setShiftEvidenceModalTitle] = useState("")
+  const [shiftEvidenceModalLoading, setShiftEvidenceModalLoading] = useState(false)
+  const [shiftEvidenceModalError, setShiftEvidenceModalError] = useState<string | null>(null)
+  const [shiftEvidenceModalItems, setShiftEvidenceModalItems] = useState<
+    Array<{ id: string; url: string; capturedAt: string | null }>
+  >([])
   const [loadingSupervisor, setLoadingSupervisor] = useState(false)
   const [incidentNotes, setIncidentNotes] = useState<Record<string, string>>({})
   const [incidentHistory, setIncidentHistory] = useState<Record<string, ShiftIncident[]>>({})
@@ -2497,6 +2505,52 @@ function ShiftsPageContent() {
       setUploadingEndEvidence(false)
     }
   }
+
+  const openShiftEvidenceGallery = useCallback(
+    async (shiftId: string, type: "inicio" | "fin") => {
+      setShiftEvidenceModalLoading(true)
+      setShiftEvidenceModalError(null)
+      setShiftEvidenceModalItems([])
+      setShiftEvidenceModalTitle(
+        type === "inicio"
+          ? t("Evidencia inicial del turno", "Shift start evidence")
+          : t("Evidencia final del turno", "Shift end evidence")
+      )
+      setShiftEvidenceModalOpen(true)
+
+      try {
+        const items = await listShiftEvidenceByShift({ shiftId, type, limit: 50 })
+        if (items.length === 0) {
+          setShiftEvidenceModalError(
+            t("No hay evidencia registrada para este turno.", "No evidence registered for this shift.")
+          )
+          return
+        }
+
+        const resolved = await Promise.all(
+          items.map(async item => {
+            const url = await createEvidenceSignedUrl(item.storage_path)
+            return url ? { id: item.id, url, capturedAt: item.captured_at } : null
+          })
+        )
+        const usable = resolved.filter(
+          (item): item is { id: string; url: string; capturedAt: string | null } => item !== null
+        )
+        if (usable.length === 0) {
+          setShiftEvidenceModalError(t("No se pudo generar enlaces de evidencia.", "Could not generate evidence links."))
+          return
+        }
+        setShiftEvidenceModalItems(usable)
+      } catch (error: unknown) {
+        setShiftEvidenceModalError(
+          error instanceof Error ? error.message : t("No se pudo cargar la evidencia.", "Could not load evidence.")
+        )
+      } finally {
+        setShiftEvidenceModalLoading(false)
+      }
+    },
+    [t]
+  )
 
   const handleStatusChange = async (shiftId: string, status: string) => {
     try {
@@ -6341,20 +6395,7 @@ function ShiftsPageContent() {
                             <Button
                               size="sm"
                               variant="secondary"
-                              onClick={() => {
-                                void (async () => {
-                                  try {
-                                    const signedUrl = await resolveEvidenceUrl(row.start_evidence_path)
-                                    if (!signedUrl) {
-                                      showToast("info", t("No se pudo generar URL de evidencia.", "Could not generate evidence URL."))
-                                      return
-                                    }
-                                    window.open(signedUrl, "_blank", "noopener,noreferrer")
-                                  } catch (error: unknown) {
-                                    showToast("error", extractErrorMessage(error, t("No se pudo abrir la evidencia.", "Could not open evidence.")))
-                                  }
-                                })()
-                              }}
+                              onClick={() => void openShiftEvidenceGallery(row.id, "inicio")}
                             >
                               {t("Ver evidencia de inicio", "View start evidence")}
                             </Button>
@@ -6368,20 +6409,7 @@ function ShiftsPageContent() {
                             <Button
                               size="sm"
                               variant="secondary"
-                              onClick={() => {
-                                void (async () => {
-                                  try {
-                                    const signedUrl = await resolveEvidenceUrl(row.end_evidence_path)
-                                    if (!signedUrl) {
-                                      showToast("info", t("No se pudo generar URL de evidencia.", "Could not generate evidence URL."))
-                                      return
-                                    }
-                                    window.open(signedUrl, "_blank", "noopener,noreferrer")
-                                  } catch (error: unknown) {
-                                    showToast("error", extractErrorMessage(error, t("No se pudo abrir la evidencia.", "Could not open evidence.")))
-                                  }
-                                })()
-                              }}
+                              onClick={() => void openShiftEvidenceGallery(row.id, "fin")}
                             >
                               {t("Ver evidencia de cierre", "View end evidence")}
                             </Button>
@@ -6618,6 +6646,34 @@ function ShiftsPageContent() {
                     {t("Ver manifiesto JSON", "View JSON manifest")}
                   </Button>
                 </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+        <Modal
+          open={shiftEvidenceModalOpen}
+          onClose={() => setShiftEvidenceModalOpen(false)}
+          title={shiftEvidenceModalTitle}
+        >
+          <div className="space-y-3">
+            <div className="text-sm font-semibold text-slate-100">{shiftEvidenceModalTitle}</div>
+            {shiftEvidenceModalLoading && (
+              <p className="text-sm text-slate-300">{t("Cargando evidencia...", "Loading evidence...")}</p>
+            )}
+            {shiftEvidenceModalError && (
+              <p className="text-sm text-rose-200">{shiftEvidenceModalError}</p>
+            )}
+            {!shiftEvidenceModalLoading && !shiftEvidenceModalError && shiftEvidenceModalItems.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {shiftEvidenceModalItems.map(item => (
+                  <div key={item.id} className="overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={item.url} alt="evidence" className="h-40 w-full object-cover" />
+                    <div className="px-3 py-2 text-xs text-slate-300">
+                      {item.capturedAt ? formatDateTime(item.capturedAt) : t("Sin fecha", "No date")}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
