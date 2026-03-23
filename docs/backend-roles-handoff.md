@@ -201,6 +201,11 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
      `start_time`, `end_time`, `hours_worked`, `state`, `status`,
      `approved_by`, `approved_by_name`, `rejected_by`, `rejected_by_name`,
      `start_evidence_path`, `end_evidence_path`.
+   - Notas:
+     - PDF sale en formato tabla con encabezados legibles.
+     - CSV usa encabezados legibles.
+     - El orden respeta exactamente el array `columns`.
+     - Si `columns` incluye campos no soportados, backend devuelve 422 con la lista valida.
    - Respuesta: `{ success, data: { report_id, url_pdf?, url_csv? }, error, request_id }`
 
 ---
@@ -230,6 +235,11 @@ El Super Admin reutiliza todo lo de Supervisora y suma administracion global:
      `start_time`, `end_time`, `hours_worked`, `state`, `status`,
      `approved_by`, `approved_by_name`, `rejected_by`, `rejected_by_name`,
      `start_evidence_path`, `end_evidence_path`.
+   - Notas:
+     - PDF sale en formato tabla con encabezados legibles.
+     - CSV usa encabezados legibles.
+     - El orden respeta exactamente el array `columns`.
+     - Si `columns` incluye campos no soportados, backend devuelve 422 con la lista valida.
    - Respuesta: `{ success, data: { report_id, url_pdf?, url_csv? }, error, request_id }`
 
 ---

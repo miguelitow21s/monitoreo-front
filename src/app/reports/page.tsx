@@ -14,7 +14,6 @@ import EmptyState from "@/components/ui/EmptyState"
 import Skeleton from "@/components/ui/Skeleton"
 import {
   DEFAULT_REPORT_COLUMNS,
-  exportReportCsv,
   fetchGeneratedReportsHistory,
   fetchShiftsReport,
   BackendReportColumn,
@@ -503,22 +502,6 @@ export default function ReportsPage() {
     [formatDateParts, getDisplayValue, getEmployeeDisplay, getRestaurantDisplay, getStatusBadge, openEvidenceReadonly, t]
   )
 
-  const handleExportCsv = useCallback(() => {
-    const exportRows = rows.map(item => ({
-      ...item,
-      restaurant_id: getDisplayValue(item, "restaurant_id"),
-      employee_id: getDisplayValue(item, "employee_id"),
-      supervisor_id: getDisplayValue(item, "supervisor_id"),
-    }))
-    exportReportCsv(exportRows, selectedColumns, key =>
-      language === "en" ? COLUMN_LABELS[key].en : COLUMN_LABELS[key].es
-    )
-  }, [getDisplayValue, language, rows, selectedColumns])
-
-  const exportPdf = () => {
-    window.print()
-  }
-
   const handleGenerateBackend = async () => {
     if (!restaurantId || !fromDate || !toDate) {
       showToast("info", t("Para generar reporte backend debes seleccionar restaurante, fecha inicial y fecha final.", "To generate backend report you must select restaurant, start date, and end date."))
@@ -702,12 +685,6 @@ export default function ReportsPage() {
                 ))}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="ghost" onClick={handleExportCsv} className="sm:w-auto">
-                  {t("Exportar Excel (CSV)", "Export Excel (CSV)")}
-                </Button>
-                <Button variant="primary" onClick={exportPdf} className="sm:w-auto">
-                  {t("Exportar PDF", "Export PDF")}
-                </Button>
                 <Button variant="secondary" onClick={() => void handleGenerateBackend()} disabled={generatingBackend} className="sm:w-auto">
                   {generatingBackend ? t("Generando...", "Generating...") : t("Generar en backend", "Generate in backend")}
                 </Button>
