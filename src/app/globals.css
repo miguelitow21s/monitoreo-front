@@ -698,6 +698,18 @@ select:focus {
   animation: fadeIn 0.3s ease-out;
 }
 
+.alert > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.alert > span:first-child svg {
+  width: 18px;
+  height: 18px;
+}
+
 .alert-success {
   background: rgba(16, 185, 129, 0.1);
   border: 1px solid rgba(16, 185, 129, 0.3);
@@ -821,6 +833,13 @@ select:focus {
   gap: 10px;
   margin-top: 10px;
   font-weight: 600;
+}
+
+.gps-status > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .gps-status.valid {
@@ -1318,5 +1337,28 @@ textarea.form-control:focus {
 
   .form-row.two-col {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Keyboard and accessibility polish for interactive controls */
+.btn:focus-visible,
+.btn-large:focus-visible,
+.header-btn:focus-visible,
+.nav-item:focus-visible,
+.quick-action-btn:focus-visible,
+.photo-slot:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 80%, white);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
