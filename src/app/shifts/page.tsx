@@ -4495,10 +4495,14 @@ function ShiftsPageContent() {
                           </div>
                         </div>
 
-                        {earlyEndReasonRequired && (
+                        {activeShift && hasStartEvidence && (
                           <div className="card">
                             <div className="card-header">
-                              <div className="card-title">{t("Motivo de salida temprana", "Early end reason")}</div>
+                              <div className="card-title">
+                                {earlyEndReasonRequired
+                                  ? t("Motivo de salida temprana (obligatorio)", "Early end reason (required)")
+                                  : t("Motivo de salida temprana (opcional)", "Early end reason (optional)")}
+                              </div>
                             </div>
                             <div className="form-group">
                               <label>{t("Detalle", "Details")}</label>
@@ -5068,10 +5072,12 @@ function ShiftsPageContent() {
                 )}
               </div>
 
-              {activeShift && hasStartEvidence && earlyEndReasonRequired && (
+              {activeShift && hasStartEvidence && (
                 <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
                   <p className="font-medium text-amber-900">
-                    {t("Motivo de salida temprana (obligatorio)", "Early end reason (required)")}
+                    {earlyEndReasonRequired
+                      ? t("Motivo de salida temprana (obligatorio)", "Early end reason (required)")
+                      : t("Motivo de salida temprana (opcional)", "Early end reason (optional)")}
                   </p>
                   <textarea
                     rows={2}
