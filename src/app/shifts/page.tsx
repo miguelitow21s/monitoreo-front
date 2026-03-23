@@ -888,6 +888,43 @@ function ShiftsPageContent() {
     }
     return Array.from(latestByRestaurant.values()).filter(item => item.phase === "start")
   }, [supervisorPresence])
+  const missedScheduledStarts = useMemo(() => {
+    if (!canOperateSupervisor || supervisionScheduledShifts.length === 0) return [] as ScheduledShift[]
+
+    const now = new Date(clockMs)
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000
+
+    const activeEmployeeRestaurant = new Set(
+      supervisorRows
+        .map(row => {
+          const employee = row.employee_id ?? ""
+          if (!employee) return null
+          const restaurant = row.restaurant_id !== null && row.restaurant_id !== undefined ? String(row.restaurant_id) : ""
+          return `${employee}|${restaurant}`
+        })
+        .filter((key): key is string => !!key)
+    )
+
+    return supervisionScheduledShifts
+      .filter(item => {
+        const status = (item.status ?? "").toLowerCase()
+        if (status === "cancelled" || status === "canceled") return false
+        if (status === "completed" || status === "finished" || status === "finalizado") return false
+        if (status === "in_progress" || status === "active" || status === "activo") return false
+
+        const startMs = new Date(item.scheduled_start).getTime()
+        if (!Number.isFinite(startMs)) return false
+        if (startMs < dayStart || startMs >= dayEnd) return false
+        if (clockMs < startMs) return false
+
+        const employeeKey = item.employee_id ?? ""
+        if (!employeeKey) return false
+        const restaurantKey = Number.isFinite(item.restaurant_id) ? String(item.restaurant_id) : ""
+        return !activeEmployeeRestaurant.has(`${employeeKey}|${restaurantKey}`)
+      })
+      .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
+  }, [canOperateSupervisor, clockMs, supervisionScheduledShifts, supervisorRows])
 
   const totalWorkedMinutes = useMemo(
     () => history.reduce((acc, item) => acc + durationMinutes(item.start_time, item.end_time), 0),
@@ -1047,6 +1084,10 @@ function ShiftsPageContent() {
     () => new Map(knownRestaurants.map(item => [Number(item.id), item])),
     [knownRestaurants]
   )
+  const staffUsersById = useMemo(
+    () => new Map(staffUsers.map(item => [item.id, item])),
+    [staffUsers]
+  )
 
   const supervisorScheduleEligibleUsers = useMemo(() => staffUsers, [staffUsers])
 
@@ -1082,6 +1123,15 @@ function ShiftsPageContent() {
       return formatRestaurantLabel(restaurant) || restaurant.name || `#${restaurantId}`
     },
     [knownRestaurantsById]
+  )
+
+  const getEmployeeLabelById = useCallback(
+    (employeeId: string | null | undefined) => {
+      if (!employeeId) return "-"
+      const employee = staffUsersById.get(employeeId)
+      return employee?.full_name ?? employee?.email ?? employeeId.slice(0, 8)
+    },
+    [staffUsersById]
   )
 
   const getRestaurantWatermarkLabelById = useCallback(
@@ -5282,7 +5332,9 @@ function ShiftsPageContent() {
                       <div className="card-header">
                         <div className="card-title">{t("Alertas Recientes", "Recent alerts")}</div>
                       </div>
-                      {overdueSupervisorTasks.length === 0 && pendingPresenceClosures.length === 0 ? (
+                      {overdueSupervisorTasks.length === 0 &&
+                      pendingPresenceClosures.length === 0 &&
+                      missedScheduledStarts.length === 0 ? (
                         <div className="alert alert-success">
                           <span>✅</span>
                           <span>{t("Sin alertas pendientes por ahora.", "No pending alerts right now.")}</span>
@@ -5303,7 +5355,32 @@ function ShiftsPageContent() {
                                 {t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")}
                               </p>
                             )}
-                            {(overdueSupervisorTasks.length > 0 || pendingPresenceClosures.length > 0) && (
+                            {missedScheduledStarts.length > 0 && (
+                              <p>
+                                {t("Hay", "There are")} {missedScheduledStarts.length}{" "}
+                                {t("turno(s) programados sin iniciar hoy.", "scheduled shift(s) not started today.")}
+                              </p>
+                            )}
+                            {missedScheduledStarts.length > 0 && (
+                              <div className="mt-2 space-y-1 text-sm text-slate-700">
+                                {missedScheduledStarts.slice(0, 3).map(item => (
+                                  <p key={`missed-${item.id}`}>
+                                    {t("Turno no iniciado", "Shift not started")}: {getEmployeeLabelById(item.employee_id)}{" "}
+                                    {t("no ha iniciado turno en", "has not started shift at")}{" "}
+                                    {getRestaurantLabelById(item.restaurant_id)} ({t("programado", "scheduled")}{" "}
+                                    {formatTimeOnly(item.scheduled_start)})
+                                  </p>
+                                ))}
+                                {missedScheduledStarts.length > 3 && (
+                                  <p className="text-xs text-slate-500">
+                                    {t("Y", "And")} {missedScheduledStarts.length - 3} {t("más...", "more...")}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {(overdueSupervisorTasks.length > 0 ||
+                              pendingPresenceClosures.length > 0 ||
+                              missedScheduledStarts.length > 0) && (
                               <div className="mt-3 flex flex-wrap gap-2">
                                 {overdueSupervisorTasks.length > 0 && (
                                   <Button size="sm" variant="secondary" onClick={() => setSupervisorScreenWithHistory("tasks")}>
@@ -5313,6 +5390,11 @@ function ShiftsPageContent() {
                                 {pendingPresenceClosures.length > 0 && (
                                   <Button size="sm" variant="secondary" onClick={() => setSupervisorScreenWithHistory("presence")}>
                                     {t("Ir a supervisión", "Go to supervision")}
+                                  </Button>
+                                )}
+                                {missedScheduledStarts.length > 0 && (
+                                  <Button size="sm" variant="secondary" onClick={() => setSupervisorScreenWithHistory("scheduled")}>
+                                    {t("Ver turnos programados", "View scheduled shifts")}
                                   </Button>
                                 )}
                               </div>
