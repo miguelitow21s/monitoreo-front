@@ -3242,29 +3242,33 @@ function ShiftsPageContent() {
     if (!canOperateSupervisor) return
     const supervisorParam = searchParams.get("supervisor")
 
-    if (supervisorParam === "home") {
-      if (supervisorScreen !== "home") {
-        setSupervisorScreenHistory(["home"])
-        setSupervisorScreen("home")
-      }
+    const paramToScreen: Record<
+      string,
+      "home" | "turnos" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active" | "alerts"
+    > = {
+      home: "home",
+      turnos: "turnos",
+      otp: "otp",
+      staff: "staff",
+      schedule: "schedule",
+      presence: "presence",
+      tasks: "tasks",
+      scheduled: "scheduled",
+      active: "active",
+      alerts: "alerts",
+    }
+
+    const nextScreen = supervisorParam ? paramToScreen[supervisorParam] : undefined
+    if (!nextScreen) return
+
+    if (nextScreen === "home") {
+      setSupervisorScreenHistory(["home"])
+      setSupervisorScreen("home")
       return
     }
 
-    if (supervisorParam === "presence") {
-      if (supervisorScreen !== "presence") {
-        setSupervisorScreenWithHistory("presence")
-      }
-      return
-    }
-
-    if (supervisorParam === "turnos") {
-      if (supervisorScreen !== "turnos") {
-        setSupervisorScreenWithHistory("turnos")
-      }
-      return
-    }
-
-  }, [canOperateSupervisor, searchParams, setSupervisorScreenWithHistory, supervisorScreen])
+    setSupervisorScreenWithHistory(nextScreen)
+  }, [canOperateSupervisor, searchParams, setSupervisorScreenWithHistory])
 
   const handleAssignStaff = async () => {
     if (!staffRestaurantId || !staffUserId) {

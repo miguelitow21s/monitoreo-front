@@ -66,7 +66,7 @@ export default function LayoutShell({ children }: LayoutShellProps) {
           key: "home",
           label: t("Inicio", "Home"),
           icon: "🏠",
-          href: "/shifts?supervisor=home",
+          href: "/shifts",
           active: supervisorHomeActive,
         },
         {
