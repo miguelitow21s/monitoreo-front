@@ -24,6 +24,70 @@ const manrope = Manrope({
 
 const PRESENCE_FETCH_CONCURRENCY = 4
 
+type ActionIconKey = "restaurants" | "users" | "shifts" | "reports"
+
+function ActionIcon({ name }: { name: ActionIconKey }) {
+  if (name === "restaurants") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 10h16v10H4z" />
+        <path d="M7 10V7h10v3" />
+        <path d="M9 14h6" />
+      </svg>
+    )
+  }
+
+  if (name === "users") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="9" cy="9" r="3" />
+        <circle cx="17" cy="10" r="2" />
+        <path d="M3 19a6 6 0 0 1 12 0" />
+        <path d="M14 19a4 4 0 0 1 7 0" />
+      </svg>
+    )
+  }
+
+  if (name === "shifts") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M8 3v4" />
+        <path d="M16 3v4" />
+        <path d="M3 10h18" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 20h16" />
+      <path d="M7 16v-5" />
+      <path d="M12 16v-9" />
+      <path d="M17 16v-3" />
+    </svg>
+  )
+}
+
+function AlertOkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12 2.2 2.2 4.8-4.8" />
+    </svg>
+  )
+}
+
+function AlertWarnIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <path d="M12 4 3 20h18L12 4z" />
+      <path d="M12 9v5" />
+      <path d="M12 17h.01" />
+    </svg>
+  )
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const { t, formatDate, formatTime } = useI18n()
@@ -344,28 +408,28 @@ export default function DashboardPage() {
         key: "restaurants",
         label: t("Restaurantes", "Restaurants"),
         helper: t("Gestion", "Manage"),
-        icon: "🏬",
+        icon: "restaurants" as const,
         href: "/restaurants",
       },
       {
         key: "users",
         label: t("Usuarios", "Users"),
         helper: t("Gestion", "Manage"),
-        icon: "👥",
+        icon: "users" as const,
         href: "/users",
       },
       {
         key: "shifts",
         label: t("Turnos", "Shifts"),
         helper: t("Monitoreo", "Monitoring"),
-        icon: "🗓️",
+        icon: "shifts" as const,
         href: "/shifts",
       },
       {
         key: "reports",
         label: t("Informes", "Reports"),
         helper: t("Historial", "History"),
-        icon: "📊",
+        icon: "reports" as const,
         href: "/reports",
       },
     ],
@@ -596,7 +660,9 @@ export default function DashboardPage() {
                 onClick={() => router.push(action.href)}
                 className="quick-action-btn"
               >
-                <span className="quick-action-icon">{action.icon}</span>
+                <span className="quick-action-icon">
+                  <ActionIcon name={action.icon} />
+                </span>
                 <span>{action.label}</span>
               </button>
             ))}
@@ -610,12 +676,12 @@ export default function DashboardPage() {
               <div className="text-sm text-slate-500">{t("Cargando...", "Loading...")}</div>
             ) : supervisorAlertItems.length === 0 ? (
               <div className="alert alert-success">
-                <span>✅</span>
+                <span><AlertOkIcon /></span>
                 <span>{t("Sin alertas pendientes por ahora.", "No pending alerts right now.")}</span>
               </div>
             ) : (
               <div className="alert alert-warning">
-                <span>⚠️</span>
+                <span><AlertWarnIcon /></span>
                 <div className="text-sm">
                   {supervisorAlertItems[supervisorAlertIndex]}
                   {supervisorAlertItems.length > 1 && (
@@ -650,7 +716,9 @@ export default function DashboardPage() {
               onClick={() => router.push(action.href)}
               className="quick-action-btn"
             >
-              <span className="quick-action-icon">{action.icon}</span>
+              <span className="quick-action-icon">
+                <ActionIcon name={action.icon} />
+              </span>
               <span>{action.label}</span>
             </button>
           ))}

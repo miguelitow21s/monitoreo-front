@@ -485,6 +485,12 @@ select:focus {
   font-size: 18px;
 }
 
+.info-item .info-icon svg {
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+}
+
 .info-item label {
   font-size: 12px;
   color: var(--gray);
@@ -617,6 +623,18 @@ select:focus {
 .quick-action-btn .quick-action-icon {
   font-size: 28px;
   color: var(--primary);
+}
+
+.quick-action-btn .quick-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quick-action-btn .quick-action-icon svg {
+  width: 28px;
+  height: 28px;
+  color: currentColor;
 }
 
 .quick-action-btn span {

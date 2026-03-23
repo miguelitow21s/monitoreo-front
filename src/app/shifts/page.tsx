@@ -135,6 +135,134 @@ type SupervisionPhotoDraft = {
 }
 type ScheduledShiftUiState = "scheduled" | "in_progress" | "ended" | "cancelled" | "other"
 
+type StatusIconState = "checking" | "valid" | "invalid"
+type QuickActionIconKey = "restaurants" | "employees" | "shifts" | "reports"
+
+function LocationPinIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} aria-hidden="true">
+      <path d="M12 22s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  )
+}
+
+function GpsStatusIcon({ state }: { state: StatusIconState }) {
+  if (state === "checking") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" strokeOpacity="0.35" />
+        <path d="M12 6a6 6 0 0 1 6 6" />
+      </svg>
+    )
+  }
+
+  if (state === "valid") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="m8.5 12 2.2 2.2 4.8-4.8" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9 9l6 6" />
+      <path d="M15 9l-6 6" />
+    </svg>
+  )
+}
+
+function CameraAddIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+      <path d="M3 8a2 2 0 0 1 2-2h3l1.4-2h5.2L16 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <circle cx="12" cy="13" r="3.5" />
+      <path d="M12 9v2" />
+      <path d="M11 10h2" />
+    </svg>
+  )
+}
+
+function AlertOkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12 2.2 2.2 4.8-4.8" />
+    </svg>
+  )
+}
+
+function AlertWarnIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <path d="M12 4 3 20h18L12 4z" />
+      <path d="M12 9v5" />
+      <path d="M12 17h.01" />
+    </svg>
+  )
+}
+
+function InfoRestaurantIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <path d="M4 10h16v10H4z" />
+      <path d="M7 10V7h10v3" />
+      <path d="M9 14h6" />
+    </svg>
+  )
+}
+
+function InfoClockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  )
+}
+
+function InfoCalendarIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M8 3v4" />
+      <path d="M16 3v4" />
+      <path d="M3 10h18" />
+    </svg>
+  )
+}
+
+function QuickActionIcon({ name }: { name: QuickActionIconKey }) {
+  if (name === "restaurants") return <InfoRestaurantIcon />
+
+  if (name === "employees") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+        <circle cx="9" cy="9" r="3" />
+        <circle cx="17" cy="10" r="2" />
+        <path d="M3 19a6 6 0 0 1 12 0" />
+        <path d="M14 19a4 4 0 0 1 7 0" />
+      </svg>
+    )
+  }
+
+  if (name === "shifts") {
+    return <InfoCalendarIcon />
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <path d="M4 20h16" />
+      <path d="M7 16v-5" />
+      <path d="M12 16v-9" />
+      <path d="M17 16v-3" />
+    </svg>
+  )
+}
+
 function formatDuration(start: string, end: string | null) {
   const startDate = new Date(start).getTime()
   const endDate = new Date(end ?? Date.now()).getTime()
@@ -3875,11 +4003,13 @@ function ShiftsPageContent() {
 
                     <div className="gps-verification">
                       <div className="info-icon" style={{ margin: "0 auto 10px" }}>
-                        📍
+                        <LocationPinIcon />
                       </div>
                       <h4>{t("Verificación de Ubicación", "Location verification")}</h4>
                       <div className={`gps-status ${gpsStatus === "valid" ? "valid" : "invalid"}`}>
-                        <span>{gpsStatus === "checking" ? "⏳" : gpsStatus === "valid" ? "✅" : "❌"}</span>
+                        <span>
+                          <GpsStatusIcon state={gpsStatus === "checking" ? "checking" : gpsStatus === "valid" ? "valid" : "invalid"} />
+                        </span>
                         <span>{gpsMessage || t("Verificando GPS...", "Checking GPS...")}</span>
                       </div>
                       <button
@@ -4027,7 +4157,9 @@ function ShiftsPageContent() {
                             }
                           }}
                         >
-                          <span style={{ fontSize: "32px", color: "var(--gray)" }}>📷</span>
+                          <span style={{ color: "var(--gray)" }}>
+                            <CameraAddIcon />
+                          </span>
                           <label>{t("Agregar foto", "Add photo")}</label>
                         </div>
                       </div>
@@ -4271,7 +4403,7 @@ function ShiftsPageContent() {
                       <div className="timer-display">{formatElapsed(elapsedShiftMs)}</div>
 
                       <div className="alert alert-warning" style={{ margin: "20px 0" }}>
-                        <span>⚠️</span>
+                        <span><AlertWarnIcon /></span>
                         <div>
                           <strong>{t("No cierre la aplicación", "Do not close the app")}</strong>
                           <br />
@@ -4280,7 +4412,7 @@ function ShiftsPageContent() {
                       </div>
 
                       <div className="info-item" style={{ marginBottom: "20px" }}>
-                        <div className="info-icon">🏬</div>
+                        <div className="info-icon"><InfoRestaurantIcon /></div>
                         <div>
                           <label>{t("Restaurante", "Restaurant")}</label>
                           <span className="info-value">{activeRestaurantLabel}</span>
@@ -4411,7 +4543,9 @@ function ShiftsPageContent() {
                                 }
                               }}
                             >
-                              <span style={{ fontSize: "32px", color: "var(--gray)" }}>📷</span>
+                              <span style={{ color: "var(--gray)" }}>
+                                <CameraAddIcon />
+                              </span>
                               <label>{t("Agregar foto", "Add photo")}</label>
                             </div>
                           </div>
@@ -4457,14 +4591,14 @@ function ShiftsPageContent() {
                             </button>
                           ) : (
                             <div className="alert alert-success">
-                              <span>✅</span>
+                              <span><AlertOkIcon /></span>
                               <span>{t("Fin de tarea registrado", "Task end registered")}</span>
                             </div>
                           )}
 
                           {endEvidenceUploadError && (
                             <div className="alert alert-error">
-                              <span>⚠️</span>
+                              <span><AlertWarnIcon /></span>
                               <span>{endEvidenceUploadError}</span>
                             </div>
                           )}
@@ -4552,7 +4686,7 @@ function ShiftsPageContent() {
                           </div>
 
                           <div className="info-item">
-                            <div className="info-icon">🏬</div>
+                            <div className="info-icon"><InfoRestaurantIcon /></div>
                             <div>
                               <label>{t("Restaurante", "Restaurant")}</label>
                               <span className="info-value">{activeRestaurantLabel}</span>
@@ -4560,7 +4694,7 @@ function ShiftsPageContent() {
                           </div>
 
                           <div className="info-item">
-                            <div className="info-icon">⏰</div>
+                            <div className="info-icon"><InfoClockIcon /></div>
                             <div>
                               <label>{t("Horario", "Schedule")}</label>
                               <span className="info-value">{summaryScheduleLabel}</span>
@@ -4568,7 +4702,7 @@ function ShiftsPageContent() {
                           </div>
 
                           <div className="info-item">
-                            <div className="info-icon">📅</div>
+                            <div className="info-icon"><InfoCalendarIcon /></div>
                             <div>
                               <label>{t("Fecha", "Date")}</label>
                               <span className="info-value">{summaryDateLabel}</span>
@@ -4587,7 +4721,7 @@ function ShiftsPageContent() {
 
                         {endShiftError && (
                           <div className="alert alert-error">
-                            <span>⚠️</span>
+                            <span><AlertWarnIcon /></span>
                             <span>{endShiftError}</span>
                           </div>
                         )}
@@ -5351,19 +5485,19 @@ function ShiftsPageContent() {
 
                     <div className="quick-actions">
                       <button type="button" className="quick-action-btn" onClick={() => router.push("/restaurants")}>
-                        <span className="quick-action-icon">🏬</span>
+                        <span className="quick-action-icon"><QuickActionIcon name="restaurants" /></span>
                         <span>{t("Restaurantes", "Restaurants")}</span>
                       </button>
                       <button type="button" className="quick-action-btn" onClick={() => router.push("/users")}>
-                        <span className="quick-action-icon">👥</span>
+                        <span className="quick-action-icon"><QuickActionIcon name="employees" /></span>
                         <span>{t("Empleados", "Employees")}</span>
                       </button>
                       <button type="button" className="quick-action-btn" onClick={() => setSupervisorScreenWithHistory("turnos")}>
-                        <span className="quick-action-icon">🗓️</span>
+                        <span className="quick-action-icon"><QuickActionIcon name="shifts" /></span>
                         <span>{t("Turnos", "Shifts")}</span>
                       </button>
                       <button type="button" className="quick-action-btn" onClick={() => router.push("/reports")}>
-                        <span className="quick-action-icon">📊</span>
+                        <span className="quick-action-icon"><QuickActionIcon name="reports" /></span>
                         <span>{t("Informes", "Reports")}</span>
                       </button>
                     </div>
@@ -5378,12 +5512,12 @@ function ShiftsPageContent() {
                       pendingPresenceClosures.length === 0 &&
                       missedScheduledStarts.length === 0 ? (
                         <div className="alert alert-success">
-                          <span>✅</span>
+                          <span><AlertOkIcon /></span>
                           <span>{t("Sin alertas pendientes por ahora.", "No pending alerts right now.")}</span>
                         </div>
                       ) : (
                         <div className="alert alert-warning">
-                          <span>⚠️</span>
+                          <span><AlertWarnIcon /></span>
                           <div>
                             {overdueSupervisorTasks.length > 0 && (
                               <p>
@@ -6033,11 +6167,13 @@ function ShiftsPageContent() {
 
                 <div className="gps-verification">
                   <div className="info-icon" style={{ margin: "0 auto 10px" }}>
-                    📍
+                    <LocationPinIcon />
                   </div>
                   <h4>{t("Verificación de Ubicación", "Location verification")}</h4>
                   <div className={`gps-status ${presenceGpsStatus === "valid" ? "valid" : "invalid"}`}>
-                    <span>{presenceGpsStatus === "checking" ? "⏳" : presenceGpsStatus === "valid" ? "✅" : "❌"}</span>
+                    <span>
+                      <GpsStatusIcon state={presenceGpsStatus === "checking" ? "checking" : presenceGpsStatus === "valid" ? "valid" : "invalid"} />
+                    </span>
                     <span>{presenceGpsMessage || t("Verificando GPS...", "Checking GPS...")}</span>
                   </div>
                   <button
@@ -6163,7 +6299,9 @@ function ShiftsPageContent() {
                             }
                           }}
                         >
-                          <span style={{ fontSize: "32px", color: "var(--gray)" }}>📷</span>
+                          <span style={{ color: "var(--gray)" }}>
+                            <CameraAddIcon />
+                          </span>
                           <label>{t("Agregar foto", "Add photo")}</label>
                         </div>
                       </div>
