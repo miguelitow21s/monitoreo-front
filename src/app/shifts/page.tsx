@@ -1468,6 +1468,80 @@ function ShiftsPageContent() {
     )
   }, [geofenceTarget, t])
 
+  const resolveCoordsForEndEvidence = useCallback(async (): Promise<Coordinates | null> => {
+    if (coords) return coords
+
+    if (!navigator.geolocation) {
+      setGpsStatus("invalid")
+      setGpsMessage(t("GPS no disponible en este dispositivo.", "GPS not available on this device."))
+      setCoords(null)
+      return null
+    }
+
+    setGpsStatus("checking")
+    setGpsMessage(t("Verificando GPS...", "Checking GPS..."))
+
+    return await new Promise(resolve => {
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          const coordsAny = position.coords as GeolocationCoordinates & { mocked?: boolean }
+          const positionAny = position as GeolocationPosition & { mocked?: boolean }
+          const mocked = coordsAny.mocked === true || positionAny.mocked === true
+
+          const nextCoords: Coordinates = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracyMeters: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : undefined,
+            capturedAtMs: Number.isFinite(position.timestamp) ? position.timestamp : Date.now(),
+            isMocked: mocked,
+          }
+
+          let withinRange = true
+          if (
+            geofenceTarget &&
+            geofenceTarget.lat !== null &&
+            geofenceTarget.lng !== null &&
+            geofenceTarget.geofence_radius_m !== null
+          ) {
+            const meters = distanceMeters(
+              { lat: nextCoords.lat, lng: nextCoords.lng },
+              { lat: Number(geofenceTarget.lat), lng: Number(geofenceTarget.lng) }
+            )
+            withinRange = meters <= Number(geofenceTarget.geofence_radius_m)
+          }
+
+          setCoords(nextCoords)
+          setGpsStatus(withinRange ? "valid" : "invalid")
+          setGpsMessage(
+            withinRange
+              ? t("Ubicación verificada - Dentro del rango permitido", "Location verified - Within allowed range")
+              : t("Ubicación fuera del rango permitido", "Location outside the allowed range")
+          )
+          resolve(nextCoords)
+        },
+        error => {
+          let message = t("No se pudo verificar la ubicación.", "Could not verify location.")
+          if (error.code === error.PERMISSION_DENIED) {
+            message = t("Permiso de ubicación denegado.", "Location permission denied.")
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            message = t("Ubicación no disponible.", "Location unavailable.")
+          } else if (error.code === error.TIMEOUT) {
+            message = t("Tiempo agotado al solicitar GPS.", "GPS request timed out.")
+          }
+          setCoords(null)
+          setGpsStatus("invalid")
+          setGpsMessage(message)
+          resolve(null)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        }
+      )
+    })
+  }, [coords, geofenceTarget, t])
+
   const verifyPresenceGps = useCallback(() => {
     if (!navigator.geolocation) {
       setPresenceGpsStatus("invalid")
@@ -2668,7 +2742,8 @@ function ShiftsPageContent() {
 
   const handleUploadEndEvidence = async () => {
     if (!activeShift) return
-    if (!coords) {
+    const uploadCoords = await resolveCoordsForEndEvidence()
+    if (!uploadCoords) {
       showToast("info", t("Debes capturar la ubicacion GPS.", "You must capture GPS location."))
       return
     }
@@ -2694,9 +2769,9 @@ function ShiftsPageContent() {
           shiftId: Number(activeShift.id),
           type: "fin",
           file: capture.file,
-          lat: coords.lat,
-          lng: coords.lng,
-          accuracy: coords.accuracyMeters,
+          lat: uploadCoords.lat,
+          lng: uploadCoords.lng,
+          accuracy: uploadCoords.accuracyMeters,
           meta: buildEvidenceMeta(capture.areaKey, capture.areaDetail, capture.subareaKey),
         })
       }
@@ -4583,7 +4658,7 @@ function ShiftsPageContent() {
                               type="button"
                               className="btn btn-secondary"
                               onClick={() => void handleUploadEndEvidence()}
-                              disabled={uploadingEndEvidence || !coords || !endPhotosReady}
+                              disabled={uploadingEndEvidence || !endPhotosReady}
                             >
                               {uploadingEndEvidence
                                 ? t("Almacenando datos...", "Saving data...")
@@ -5046,7 +5121,7 @@ function ShiftsPageContent() {
                         size="sm"
                         variant="secondary"
                         onClick={() => void handleUploadEndEvidence()}
-                        disabled={uploadingEndEvidence || !coords || !endPhotosReady}
+                        disabled={uploadingEndEvidence || !endPhotosReady}
                       >
                         {uploadingEndEvidence
                           ? t("Almacenando datos...", "Saving data...")
