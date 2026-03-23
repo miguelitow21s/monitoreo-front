@@ -197,6 +197,11 @@ export default function ReportsPage() {
   }, [isSuperAdmin, isSupervisora, roleLoading])
 
   const loadReport = useCallback(async () => {
+    if (!isSuperAdmin) {
+      setRows([])
+      setLoading(false)
+      return
+    }
     if (isSupervisora && !restaurantId) {
       setRows([])
       setLoading(false)
@@ -225,9 +230,14 @@ export default function ReportsPage() {
     } finally {
       setLoading(false)
     }
-  }, [employeeId, fromDate, isSupervisora, reportLimit, restaurantId, showToast, status, supervisorId, t, toDate])
+  }, [employeeId, fromDate, isSuperAdmin, isSupervisora, reportLimit, restaurantId, showToast, status, supervisorId, t, toDate])
 
   const loadHistory = useCallback(async () => {
+    if (!isSuperAdmin) {
+      setReportHistory([])
+      setLoadingHistory(false)
+      return
+    }
     setLoadingHistory(true)
     try {
       const rowsHistory = await fetchGeneratedReportsHistory(historyLimit)
@@ -237,7 +247,7 @@ export default function ReportsPage() {
     } finally {
       setLoadingHistory(false)
     }
-  }, [historyLimit, showToast, t])
+  }, [historyLimit, isSuperAdmin, showToast, t])
 
   useEffect(() => {
     if (authLoading || roleLoading) return
@@ -255,11 +265,16 @@ export default function ReportsPage() {
   }, [isSupervisora, restaurants])
 
   useEffect(() => {
-    if (authLoading) return
+    if (authLoading || roleLoading) return
     if (!isAuthenticated || !session?.access_token) return
+    if (!isSuperAdmin) {
+      setLoading(false)
+      setLoadingHistory(false)
+      return
+    }
     void loadReport()
     void loadHistory()
-  }, [authLoading, isAuthenticated, loadHistory, loadReport, session?.access_token])
+  }, [authLoading, isAuthenticated, isSuperAdmin, loadHistory, loadReport, roleLoading, session?.access_token])
 
   const totalCompleted = useMemo(() => rows.filter(item => item.end_time).length, [rows])
   const totalActive = useMemo(() => rows.length - totalCompleted, [rows, totalCompleted])

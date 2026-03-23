@@ -14,6 +14,8 @@ import { EmployeeDashboardData, getEmployeeSelfDashboard } from "@/services/empl
 import { listSupervisorPresenceByRestaurant, SupervisorPresenceSummary } from "@/services/supervisorPresence.service"
 import { listRestaurants, Restaurant } from "@/services/restaurants.service"
 import { listUserProfiles } from "@/services/users.service"
+import { listScheduledShifts } from "@/services/scheduling.service"
+import { getActiveShiftsForSupervision } from "@/services/operations.service"
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -30,6 +32,10 @@ export default function DashboardPage() {
   const [employeeDashboard, setEmployeeDashboard] = useState<EmployeeDashboardData | null | undefined>(undefined)
   const [todaySupervisions, setTodaySupervisions] = useState<SupervisorPresenceSummary[]>([])
   const [loadingTodaySupervisions, setLoadingTodaySupervisions] = useState(false)
+  const [supervisorAlertItems, setSupervisorAlertItems] = useState<string[]>([])
+  const [supervisorAlertIndex, setSupervisorAlertIndex] = useState(0)
+  const [loadingSupervisorAlerts, setLoadingSupervisorAlerts] = useState(false)
+  const isSupervisor = !isEmpleado && !isSuperAdmin
 
   const displayName = (() => {
     const metadata = user?.user_metadata as { full_name?: string; name?: string } | undefined
@@ -150,6 +156,121 @@ export default function DashboardPage() {
       mounted = false
     }
   }, [authLoading, isSuperAdmin, loading])
+
+  const loadSupervisorAlerts = useCallback(async () => {
+    if (!isSupervisor || authLoading || loading) return
+    setLoadingSupervisorAlerts(true)
+    try {
+      const [scheduled, active, restaurants, profiles] = await Promise.all([
+        listScheduledShifts(120),
+        getActiveShiftsForSupervision(80),
+        listRestaurants({ includeInactive: false }),
+        listUserProfiles(),
+      ])
+
+      const restaurantById = restaurants.reduce((acc, restaurant) => {
+        const numericId = Number(restaurant.id)
+        if (Number.isFinite(numericId)) {
+          acc.set(numericId, restaurant)
+        }
+        return acc
+      }, new Map<number, Restaurant>())
+
+      const supervisorNameById = profiles.reduce((acc, profile) => {
+        acc.set(profile.id, profile.full_name ?? profile.email ?? profile.id)
+        return acc
+      }, new Map<string, string>())
+
+      const activeKeys = new Set(
+        active
+          .map(row => {
+            const employee = row.employee_id ?? ""
+            if (!employee) return null
+            const restaurant =
+              row.restaurant_id !== null && row.restaurant_id !== undefined ? String(row.restaurant_id) : ""
+            return `${employee}|${restaurant}`
+          })
+          .filter((key): key is string => !!key)
+      )
+
+      const now = new Date()
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+      const dayEnd = dayStart + 24 * 60 * 60 * 1000
+
+      const items: string[] = []
+      for (const shift of scheduled) {
+        const status = (shift.status ?? "").toLowerCase()
+        if (status === "cancelled" || status === "canceled") continue
+        if (status === "completed" || status === "finished" || status === "finalizado") continue
+        if (status === "in_progress" || status === "active" || status === "activo") continue
+
+        const startMs = new Date(shift.scheduled_start).getTime()
+        if (!Number.isFinite(startMs)) continue
+        if (startMs < dayStart || startMs >= dayEnd) continue
+        if (Date.now() < startMs) continue
+
+        const restaurantLabel =
+          restaurantById.get(Number(shift.restaurant_id))?.name ??
+          `#${shift.restaurant_id}`
+        const employeeLabel = supervisorNameById.get(shift.employee_id) ?? shift.employee_id.slice(0, 8)
+        const timeLabel = formatTime(shift.scheduled_start, { hour: "2-digit", minute: "2-digit" })
+
+        const key = `${shift.employee_id}|${Number.isFinite(shift.restaurant_id) ? shift.restaurant_id : ""}`
+        if (activeKeys.has(key)) continue
+
+        items.push(
+          `${t("Turno no iniciado", "Shift not started")}: ${employeeLabel} ${t(
+            "no ha iniciado turno en",
+            "has not started shift at"
+          )} ${restaurantLabel} (${t("programado", "scheduled")} ${timeLabel})`
+        )
+      }
+
+      setSupervisorAlertItems(items)
+    } catch {
+      setSupervisorAlertItems([])
+    } finally {
+      setLoadingSupervisorAlerts(false)
+    }
+  }, [authLoading, formatTime, isSupervisor, loading, t])
+
+  useEffect(() => {
+    if (!isSupervisor || authLoading || loading) return
+    let mounted = true
+    const load = async () => {
+      if (!mounted) return
+      await loadSupervisorAlerts()
+    }
+
+    void load()
+
+    const intervalId = window.setInterval(() => {
+      void load()
+    }, 60000)
+
+    const handleFocus = () => {
+      void load()
+    }
+    window.addEventListener("focus", handleFocus)
+
+    return () => {
+      mounted = false
+      window.clearInterval(intervalId)
+      window.removeEventListener("focus", handleFocus)
+    }
+  }, [authLoading, isSupervisor, loadSupervisorAlerts, loading])
+
+  useEffect(() => {
+    setSupervisorAlertIndex(0)
+  }, [supervisorAlertItems.length])
+
+  useEffect(() => {
+    if (supervisorAlertItems.length <= 1) return undefined
+    const intervalId = window.setInterval(() => {
+      setSupervisorAlertIndex(prev => (supervisorAlertItems.length === 0 ? 0 : (prev + 1) % supervisorAlertItems.length))
+    }, 6000)
+    return () => window.clearInterval(intervalId)
+  }, [supervisorAlertItems.length])
 
   const activeShift = employeeDashboard?.active_shift ?? null
 
@@ -485,17 +606,26 @@ export default function DashboardPage() {
             <div className="card-header">
               <div className="card-title">{t("Alertas Recientes", "Recent alerts")}</div>
             </div>
-            <div className="alert alert-warning">
-              <div>
-                <strong>{t("Turno no iniciado", "Shift not started")}</strong>
-                <div className="text-xs">
-                  {t(
-                    "María G. no ha iniciado turno en Restaurant Don Juan (programado 08:00)",
-                    "Maria G. has not started her shift at Restaurant Don Juan (scheduled 08:00)"
+            {loadingSupervisorAlerts ? (
+              <div className="text-sm text-slate-500">{t("Cargando...", "Loading...")}</div>
+            ) : supervisorAlertItems.length === 0 ? (
+              <div className="alert alert-success">
+                <span>✅</span>
+                <span>{t("Sin alertas pendientes por ahora.", "No pending alerts right now.")}</span>
+              </div>
+            ) : (
+              <div className="alert alert-warning">
+                <span>⚠️</span>
+                <div className="text-sm">
+                  {supervisorAlertItems[supervisorAlertIndex]}
+                  {supervisorAlertItems.length > 1 && (
+                    <span className="ml-2 text-xs text-amber-700">
+                      {supervisorAlertIndex + 1}/{supervisorAlertItems.length}
+                    </span>
                   )}
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </section>
       </ProtectedRoute>
