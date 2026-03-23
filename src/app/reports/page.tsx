@@ -17,7 +17,7 @@ import {
   exportReportCsv,
   fetchGeneratedReportsHistory,
   fetchShiftsReport,
-  GeneratedBackendReportResult,
+  BackendReportColumn,
   GeneratedReportHistory,
   generateBackendReport,
   getReportColumnValue,
@@ -84,6 +84,20 @@ const COLUMN_LABELS: Record<ReportColumnKey, { es: string; en: string }> = {
   incidents: { es: "Novedades", en: "Incidents" },
   start_evidence: { es: "Evidencia inicial", en: "Start evidence" },
   end_evidence: { es: "Evidencia final", en: "End evidence" },
+}
+
+const BACKEND_COLUMN_MAP: Record<ReportColumnKey, BackendReportColumn | null> = {
+  shift_id: "shift_id",
+  restaurant_id: "restaurant_id",
+  employee_id: "employee_id",
+  supervisor_id: null,
+  start_time: "start_time",
+  end_time: "end_time",
+  status: "status",
+  duration: "hours_worked",
+  incidents: null,
+  start_evidence: "start_evidence_path",
+  end_evidence: "end_evidence_path",
 }
 
 export default function ReportsPage() {
@@ -511,42 +525,49 @@ export default function ReportsPage() {
       return
     }
 
+    const backendColumns = selectedColumns
+      .map(column => BACKEND_COLUMN_MAP[column])
+      .filter((column): column is BackendReportColumn => Boolean(column))
+
+    const skipped = selectedColumns.filter(column => BACKEND_COLUMN_MAP[column] === null)
+    if (skipped.length > 0) {
+      const labels = skipped.map(column => COLUMN_LABELS[column][language]).join(", ")
+      showToast(
+        "info",
+        t(
+          `Algunos campos no estan soportados por backend y no se incluiran: ${labels}.`,
+          `Some fields are not supported by backend and will be omitted: ${labels}.`
+        )
+      )
+    }
+
+    if (backendColumns.length === 0) {
+      showToast(
+        "info",
+        t("Selecciona al menos una columna compatible para exportar.", "Select at least one compatible column to export.")
+      )
+      return
+    }
+
     setGeneratingBackend(true)
     try {
-      const results = await Promise.allSettled([
-        generateBackendReport({
-          restaurantId,
-          periodStart: fromDate,
-          periodEnd: toDate,
-          format: "pdf",
-        }),
-        generateBackendReport({
-          restaurantId,
-          periodStart: fromDate,
-          periodEnd: toDate,
-          format: "excel",
-        }),
-      ])
-
-      const merged = results
-        .filter(
-          (item): item is PromiseFulfilledResult<GeneratedBackendReportResult> => item.status === "fulfilled"
-        )
-        .map(item => item.value)
-        .reduce(
-          (acc, item) => ({
-            url_pdf: acc.url_pdf ?? item.url_pdf,
-            url_excel: acc.url_excel ?? item.url_excel,
-          }),
-          { url_pdf: null as string | null, url_excel: null as string | null }
-        )
+      const generated = await generateBackendReport({
+        restaurantId,
+        periodStart: fromDate,
+        periodEnd: toDate,
+        exportFormat: "both",
+        columns: backendColumns,
+      })
 
       showToast("success", t("Reporte generado en backend.", "Report generated in backend."))
-      if (merged.url_pdf) {
-        window.open(merged.url_pdf, "_blank", "noopener,noreferrer")
+      if (generated.url_pdf) {
+        window.open(generated.url_pdf, "_blank", "noopener,noreferrer")
       }
-      if (merged.url_excel) {
-        window.open(merged.url_excel, "_blank", "noopener,noreferrer")
+      if (generated.url_excel) {
+        window.open(generated.url_excel, "_blank", "noopener,noreferrer")
+      }
+      if (generated.url_csv) {
+        window.open(generated.url_csv, "_blank", "noopener,noreferrer")
       }
       await loadHistory()
     } catch (error: unknown) {

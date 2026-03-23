@@ -85,9 +85,27 @@ export interface GeneratedBackendReportResult {
   hash_documento: string | null
   url_pdf: string | null
   url_excel: string | null
+  url_csv: string | null
 }
 
-export type BackendReportFormat = "pdf" | "excel"
+export type BackendReportExportFormat = "csv" | "pdf" | "both"
+export type BackendReportColumn =
+  | "shift_id"
+  | "employee_id"
+  | "employee_name"
+  | "restaurant_id"
+  | "restaurant_name"
+  | "start_time"
+  | "end_time"
+  | "hours_worked"
+  | "state"
+  | "status"
+  | "approved_by"
+  | "approved_by_name"
+  | "rejected_by"
+  | "rejected_by_name"
+  | "start_evidence_path"
+  | "end_evidence_path"
 
 function toStringId(value: unknown) {
   if (typeof value === "string" && value.trim().length > 0) return value
@@ -318,7 +336,8 @@ export async function generateBackendReport(payload: {
   restaurantId: string
   periodStart: string
   periodEnd: string
-  format: BackendReportFormat
+  exportFormat: BackendReportExportFormat
+  columns: BackendReportColumn[]
 }) {
   const raw = await invokeEdge<unknown>("reports_generate", {
     idempotencyKey: crypto.randomUUID(),
@@ -326,7 +345,8 @@ export async function generateBackendReport(payload: {
       restaurant_id: Number(payload.restaurantId),
       period_start: payload.periodStart,
       period_end: payload.periodEnd,
-      format: payload.format,
+      export_format: payload.exportFormat,
+      columns: payload.columns,
     },
   })
 
@@ -342,6 +362,7 @@ export async function generateBackendReport(payload: {
     hash_documento: typeof row.hash_documento === "string" ? row.hash_documento : null,
     url_pdf: typeof row.url_pdf === "string" ? row.url_pdf : null,
     url_excel: typeof row.url_excel === "string" ? row.url_excel : null,
+    url_csv: typeof row.url_csv === "string" ? row.url_csv : null,
   } satisfies GeneratedBackendReportResult
 }
 

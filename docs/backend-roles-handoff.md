@@ -184,8 +184,24 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
 1. `reports_manage` (Edge)
    - `action: "list_shifts"` (requiere `from/to` en ISO)
    - `action: "list_history"`
-2. `reports_generate` (Edge, PDF/Excel)
-   - Body: `{ restaurant_id, period_start, period_end }`
+2. `reports_generate` (Edge, export CSV/PDF)
+   - Request: `POST /functions/v1/reports_generate`
+   - Body:
+     ```
+     {
+       "restaurant_id": <id>,
+       "period_start": "YYYY-MM-DD",
+       "period_end": "YYYY-MM-DD",
+       "columns": [ ...campos ],
+       "export_format": "csv" | "pdf" | "both"
+     }
+     ```
+   - Campos soportados:
+     `shift_id`, `employee_id`, `employee_name`, `restaurant_id`, `restaurant_name`,
+     `start_time`, `end_time`, `hours_worked`, `state`, `status`,
+     `approved_by`, `approved_by_name`, `rejected_by`, `rejected_by_name`,
+     `start_evidence_path`, `end_evidence_path`.
+   - Respuesta: `{ success, data: { report_id, url_pdf?, url_csv? }, error, request_id }`
 
 ---
 
@@ -205,11 +221,16 @@ El Super Admin reutiliza todo lo de Supervisora y suma administracion global:
    - `action: "list"`
 6. `supervisor_presence_manage` (Edge)
    - `action: "list_today"` (opcional `from/to` en ISO para timezone correcto; default America/Bogota).
-7. `reports_generate` (Edge, PDF/Excel)
+7. `reports_generate` (Edge, export CSV/PDF)
    - Request: `POST /functions/v1/reports_generate`
    - Body:
-     `{ "restaurant_id": <id|null>, "period_start": "YYYY-MM-DD", "period_end": "YYYY-MM-DD", "format": "pdf" | "excel" }`
-   - Respuesta: `{ success, data: { report_id, url_pdf?, url_excel? }, error, request_id }`
+     `{ "restaurant_id": <id>, "period_start": "YYYY-MM-DD", "period_end": "YYYY-MM-DD", "columns": [ ...campos ], "export_format": "csv" | "pdf" | "both" }`
+   - Campos soportados:
+     `shift_id`, `employee_id`, `employee_name`, `restaurant_id`, `restaurant_name`,
+     `start_time`, `end_time`, `hours_worked`, `state`, `status`,
+     `approved_by`, `approved_by_name`, `rejected_by`, `rejected_by_name`,
+     `start_evidence_path`, `end_evidence_path`.
+   - Respuesta: `{ success, data: { report_id, url_pdf?, url_csv? }, error, request_id }`
 
 ---
 
