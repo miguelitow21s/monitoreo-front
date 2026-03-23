@@ -36,20 +36,42 @@ export default function DashboardPage() {
     return metadata?.full_name ?? metadata?.name ?? user?.email?.split("@")[0] ?? t("usuario", "user")
   })()
 
+  const refreshEmployeeDashboard = useCallback(async () => {
+    if (!isEmpleado || authLoading || loading) return
+    const data = await getEmployeeSelfDashboard()
+    setEmployeeDashboard(data)
+  }, [authLoading, isEmpleado, loading])
+
   useEffect(() => {
     if (!isEmpleado || authLoading || loading) return
     let mounted = true
-    getEmployeeSelfDashboard()
-      .then(data => {
+
+    const load = async () => {
+      try {
+        const data = await getEmployeeSelfDashboard()
         if (mounted) setEmployeeDashboard(data)
-      })
-      .catch(() => {
+      } catch {
         if (mounted) setEmployeeDashboard(null)
-      })
+      }
+    }
+
+    void load()
+
+    const intervalId = window.setInterval(() => {
+      void refreshEmployeeDashboard()
+    }, 60000)
+
+    const handleFocus = () => {
+      void refreshEmployeeDashboard()
+    }
+    window.addEventListener("focus", handleFocus)
+
     return () => {
       mounted = false
+      window.clearInterval(intervalId)
+      window.removeEventListener("focus", handleFocus)
     }
-  }, [authLoading, isEmpleado, loading])
+  }, [authLoading, isEmpleado, loading, refreshEmployeeDashboard])
 
   useEffect(() => {
     if (!isSuperAdmin || authLoading || loading) return
@@ -129,6 +151,8 @@ export default function DashboardPage() {
     }
   }, [authLoading, isSuperAdmin, loading])
 
+  const activeShift = employeeDashboard?.active_shift ?? null
+
   const nextShift = useMemo(() => {
     const shifts = employeeDashboard?.scheduled_shifts ?? []
     if (shifts.length === 0) return null
@@ -141,20 +165,42 @@ export default function DashboardPage() {
   const restaurantLabel = useMemo(() => {
     const restaurants = employeeDashboard?.assigned_restaurants ?? []
     const map = new Map(restaurants.map(item => [item.id, item.name ?? `#${item.id}`]))
+    if (activeShift?.restaurant_id) {
+      return map.get(activeShift.restaurant_id) ?? `#${activeShift.restaurant_id}`
+    }
     if (nextShift?.restaurant_id) {
       return map.get(nextShift.restaurant_id) ?? `#${nextShift.restaurant_id}`
     }
     return restaurants[0]?.name ?? t("Sin restaurante", "No restaurant")
-  }, [employeeDashboard, nextShift, t])
+  }, [activeShift?.restaurant_id, employeeDashboard, nextShift, t])
 
   const shiftHours = useMemo(() => {
+    if (activeShift?.start_time || activeShift?.scheduled_start) {
+      const startValue = activeShift.start_time ?? activeShift.scheduled_start ?? ""
+      const start = startValue ? formatTime(startValue, { hour: "2-digit", minute: "2-digit" }) : "-"
+      if (activeShift?.scheduled_end) {
+        const end = formatTime(activeShift.scheduled_end, { hour: "2-digit", minute: "2-digit" })
+        return `${start} - ${end}`
+      }
+      return t("En curso desde", "In progress since") + ` ${start}`
+    }
     if (!nextShift) return t("Sin turno programado", "No scheduled shift")
     const start = formatTime(nextShift.scheduled_start, { hour: "2-digit", minute: "2-digit" })
     const end = formatTime(nextShift.scheduled_end, { hour: "2-digit", minute: "2-digit" })
     return `${start} - ${end}`
-  }, [formatTime, nextShift, t])
+  }, [activeShift?.scheduled_end, activeShift?.scheduled_start, activeShift?.start_time, formatTime, nextShift, t])
 
   const shiftDate = useMemo(() => {
+    if (activeShift?.start_time || activeShift?.scheduled_start) {
+      const startValue = activeShift.start_time ?? activeShift.scheduled_start ?? ""
+      if (!startValue) return t("Sin fecha", "No date")
+      return formatDate(startValue, {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    }
     if (!nextShift) return t("Sin fecha", "No date")
     return formatDate(nextShift.scheduled_start, {
       weekday: "long",
@@ -162,7 +208,7 @@ export default function DashboardPage() {
       month: "long",
       day: "numeric",
     })
-  }, [formatDate, nextShift, t])
+  }, [activeShift?.scheduled_start, activeShift?.start_time, formatDate, nextShift, t])
 
   const pendingSpecialTasks = useMemo(
     () => employeeDashboard?.pending_tasks_preview ?? [],
@@ -370,7 +416,11 @@ export default function DashboardPage() {
                 <div>
                   <label>{t("Ubicación", "Location")}</label>
                   <span className="info-value">
-                    {nextShift ? t("Restaurante asignado", "Assigned restaurant") : t("Sin turno", "No shift")}
+                    {activeShift
+                      ? t("Turno en curso", "Shift in progress")
+                      : nextShift
+                        ? t("Restaurante asignado", "Assigned restaurant")
+                        : t("Sin turno", "No shift")}
                   </span>
                 </div>
               </div>

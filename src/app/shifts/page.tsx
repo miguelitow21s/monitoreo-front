@@ -3294,6 +3294,88 @@ function ShiftsPageContent() {
     )
   }
 
+  const normalizeOptionalTaskDrafts = (drafts: ScheduleTaskDraft[]) =>
+    drafts
+      .map(item => ({
+        ...item,
+        title: item.title.trim(),
+        description: item.description.trim(),
+      }))
+      .filter(item => item.title || item.description)
+
+  const buildOptionalTasksNotes = (baseNotes: string, drafts: ScheduleTaskDraft[]) => {
+    const cleanedNotes = baseNotes.trim()
+    if (drafts.length === 0) return cleanedNotes || undefined
+
+    const header = t("Tareas especiales:", "Special tasks:")
+    const lines = drafts.map((item, index) => {
+      const priorityLabel = item.priority ? ` [${item.priority}]` : ""
+      const dueLabel = item.dueAt ? ` (${item.dueAt})` : ""
+      return `${index + 1}. ${item.title} - ${item.description}${priorityLabel}${dueLabel}`
+    })
+    return [cleanedNotes, header, ...lines].filter(Boolean).join("\n")
+  }
+
+  const createOptionalTasksForActiveShift = useCallback(
+    async (drafts: ScheduleTaskDraft[], employeeId: string, restaurantId: number) => {
+      if (drafts.length === 0) return
+      const activeRow = supervisorRows.find(
+        row => row.employee_id === employeeId && Number(row.restaurant_id) === Number(restaurantId)
+      )
+
+      if (!activeRow) {
+        showToast(
+          "info",
+          t(
+            "No se crearon tareas aun porque el empleado no tiene turno activo en este momento. Puedes crearlas cuando inicie su turno.",
+            "Optional tasks were not created yet because the employee has no active shift right now. You can create them once the shift starts."
+          )
+        )
+        return
+      }
+
+      let createdTasks = 0
+      let failedTasks = 0
+      for (const draft of drafts) {
+        try {
+          await createOperationalTask({
+            shiftId: Number(activeRow.id),
+            restaurantId: Number(restaurantId),
+            assignedEmployeeId: employeeId,
+            title: draft.title,
+            description: draft.description,
+            priority: draft.priority,
+            dueAt: draft.dueAt ? new Date(draft.dueAt).toISOString() : null,
+          })
+          createdTasks += 1
+        } catch {
+          failedTasks += 1
+        }
+      }
+
+      if (createdTasks > 0) {
+        showToast(
+          "success",
+          t(
+            `${createdTasks} tarea(s) opcional(es) creadas para el turno activo.`,
+            `${createdTasks} optional task(s) created for the active shift.`
+          )
+        )
+        await loadTasks()
+      }
+      if (failedTasks > 0) {
+        showToast(
+          "info",
+          t(
+            `${failedTasks} tarea(s) opcional(es) no se pudieron crear automaticamente.`,
+            `${failedTasks} optional task(s) could not be created automatically.`
+          )
+        )
+      }
+    },
+    [loadTasks, showToast, supervisorRows, t]
+  )
+
   const handleScheduleSupervisorShiftSingle = async () => {
     if (!supervisorScheduleEmployeeId || !supervisorScheduleRestaurantId) {
       showToast("info", t("Selecciona empleado y restaurante.", "Select employee and restaurant."))
@@ -3312,15 +3394,40 @@ function ShiftsPageContent() {
       return
     }
 
+    const optionalTaskDrafts = normalizeOptionalTaskDrafts(supervisorScheduleTaskDrafts)
+    const hasInvalidOptionalTask = optionalTaskDrafts.some(item => !item.title || !item.description)
+    if (hasInvalidOptionalTask) {
+      showToast(
+        "info",
+        t(
+          "Cada tarea opcional debe tener titulo y descripcion, o quedar totalmente vacia.",
+          "Each optional task must include title and description, or remain fully empty."
+        )
+      )
+      return
+    }
+
+    const notes = buildOptionalTasksNotes(supervisorScheduleNotes, optionalTaskDrafts)
+
     setSupervisorBulkScheduling(true)
     try {
       await assignScheduledShiftsBulk({
         employeeId: supervisorScheduleEmployeeId,
         restaurantId: String(supervisorScheduleRestaurantId),
         blocks: [{ scheduledStartIso: startIso, scheduledEndIso: endIso }],
-        notes: supervisorScheduleNotes.trim() || undefined,
+        notes,
       })
       showToast("success", t("Turno programado exitosamente.", "Shift scheduled successfully."))
+
+      if (optionalTaskDrafts.length > 0) {
+        await createOptionalTasksForActiveShift(
+          optionalTaskDrafts,
+          supervisorScheduleEmployeeId,
+          Number(supervisorScheduleRestaurantId)
+        )
+      }
+
+      setSupervisorScheduleTaskDrafts([])
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo programar el turno.", "Could not schedule shift.")))
     } finally {
@@ -3355,13 +3462,7 @@ function ShiftsPageContent() {
       return
     }
 
-    const optionalTaskDrafts = supervisorScheduleTaskDrafts
-      .map(item => ({
-        ...item,
-        title: item.title.trim(),
-        description: item.description.trim(),
-      }))
-      .filter(item => item.title || item.description)
+    const optionalTaskDrafts = normalizeOptionalTaskDrafts(supervisorScheduleTaskDrafts)
 
     const hasInvalidOptionalTask = optionalTaskDrafts.some(item => !item.title || !item.description)
     if (hasInvalidOptionalTask) {
@@ -3376,69 +3477,23 @@ function ShiftsPageContent() {
     }
 
     setSupervisorBulkScheduling(true)
+    const notes = buildOptionalTasksNotes(supervisorScheduleNotes, optionalTaskDrafts)
+
     try {
       await assignScheduledShiftsBulk({
         employeeId: supervisorScheduleEmployeeId,
         restaurantId: String(supervisorScheduleRestaurantId),
         blocks: validBlocks.map(item => ({ scheduledStartIso: item.startIso, scheduledEndIso: item.endIso })),
-        notes: supervisorScheduleNotes.trim() || undefined,
+        notes,
       })
       showToast("success", t("Turnos en lote programados correctamente.", "Bulk shifts scheduled successfully."))
 
       if (optionalTaskDrafts.length > 0) {
-        const activeRow = supervisorRows.find(
-          row =>
-            row.employee_id === supervisorScheduleEmployeeId &&
-            Number(row.restaurant_id) === Number(supervisorScheduleRestaurantId)
+        await createOptionalTasksForActiveShift(
+          optionalTaskDrafts,
+          supervisorScheduleEmployeeId,
+          Number(supervisorScheduleRestaurantId)
         )
-
-        if (!activeRow) {
-          showToast(
-            "info",
-            t(
-              "No se crearon tareas aun porque el empleado no tiene turno activo en este momento. Puedes crearlas cuando inicie su turno.",
-              "Optional tasks were not created yet because the employee has no active shift right now. You can create them once the shift starts."
-            )
-          )
-        } else {
-          let createdTasks = 0
-          let failedTasks = 0
-          for (const draft of optionalTaskDrafts) {
-            try {
-              await createOperationalTask({
-                shiftId: Number(activeRow.id),
-                restaurantId: Number(supervisorScheduleRestaurantId),
-                assignedEmployeeId: supervisorScheduleEmployeeId,
-                title: draft.title,
-                description: draft.description,
-                priority: draft.priority,
-                dueAt: draft.dueAt ? new Date(draft.dueAt).toISOString() : null,
-              })
-              createdTasks += 1
-            } catch {
-              failedTasks += 1
-            }
-          }
-          if (createdTasks > 0) {
-            showToast(
-              "success",
-              t(
-                `${createdTasks} tarea(s) opcional(es) creadas para el turno activo.`,
-                `${createdTasks} optional task(s) created for the active shift.`
-              )
-            )
-            await loadTasks()
-          }
-          if (failedTasks > 0) {
-            showToast(
-              "info",
-              t(
-                `${failedTasks} tarea(s) opcional(es) no se pudieron crear automaticamente.`,
-                `${failedTasks} optional task(s) could not be created automatically.`
-              )
-            )
-          }
-        }
       }
 
       setSupervisorScheduleBlocks([])
@@ -5422,13 +5477,83 @@ function ShiftsPageContent() {
                   </div>
 
                   <div className="form-group">
-                    <label>{t("Tarea Especial (opcional)", "Special task (optional)")}</label>
+                    <label>{t("Notas del turno (opcional)", "Shift notes (optional)")}</label>
                     <input
                       type="text"
                       value={supervisorScheduleNotes}
                       onChange={event => setSupervisorScheduleNotes(event.target.value)}
-                      placeholder={t("Descripción de tarea especial", "Special task description")}
+                      placeholder={t("Notas generales del turno", "General shift notes")}
                     />
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {t("Tareas especiales (opcional)", "Special tasks (optional)")}
+                      </p>
+                      <Button size="sm" variant="ghost" onClick={handleAddSupervisorScheduleTaskDraft}>
+                        {t("Agregar tarea", "Add task")}
+                      </Button>
+                    </div>
+
+                    {supervisorScheduleTaskDrafts.length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">{t("Sin tareas especiales.", "No special tasks.")}</p>
+                    ) : (
+                      <div className="mt-3 space-y-3">
+                        {supervisorScheduleTaskDrafts.map(draft => (
+                          <div key={draft.id} className="space-y-2 rounded-lg border border-slate-200 p-2">
+                            <input
+                              value={draft.title}
+                              onChange={event =>
+                                handleUpdateSupervisorScheduleTaskDraft(draft.id, { title: event.target.value })
+                              }
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              placeholder={t("Titulo de tarea", "Task title")}
+                            />
+                            <textarea
+                              rows={2}
+                              value={draft.description}
+                              onChange={event =>
+                                handleUpdateSupervisorScheduleTaskDraft(draft.id, { description: event.target.value })
+                              }
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              placeholder={t("Descripcion", "Description")}
+                            />
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <input
+                                type="datetime-local"
+                                value={draft.dueAt}
+                                onChange={event =>
+                                  handleUpdateSupervisorScheduleTaskDraft(draft.id, { dueAt: event.target.value })
+                                }
+                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              />
+                              <select
+                                value={draft.priority}
+                                onChange={event =>
+                                  handleUpdateSupervisorScheduleTaskDraft(draft.id, {
+                                    priority: event.target.value as TaskPriority,
+                                  })
+                                }
+                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                              >
+                                <option value="low">{t("Baja", "Low")}</option>
+                                <option value="normal">{t("Normal", "Normal")}</option>
+                                <option value="high">{t("Alta", "High")}</option>
+                                <option value="critical">{t("Critica", "Critical")}</option>
+                              </select>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleRemoveSupervisorScheduleTaskDraft(draft.id)}
+                              >
+                                {t("Quitar tarea", "Remove task")}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -5679,75 +5804,6 @@ function ShiftsPageContent() {
                     />
                   </div>
 
-                  <details className="rounded-xl border border-slate-200 bg-white p-3">
-                    <summary className="cursor-pointer text-sm font-semibold text-slate-800">
-                      {t("Tareas opcionales", "Optional tasks")}
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      <Button size="sm" variant="ghost" onClick={handleAddSupervisorScheduleTaskDraft}>
-                        {t("Agregar tarea", "Add task")}
-                      </Button>
-
-                      {supervisorScheduleTaskDrafts.length === 0 ? (
-                        <p className="text-xs text-slate-500">{t("Sin tareas opcionales.", "No optional tasks.")}</p>
-                      ) : (
-                        <div className="space-y-3">
-                          {supervisorScheduleTaskDrafts.map(draft => (
-                            <div key={draft.id} className="space-y-2 rounded-lg border border-slate-200 p-2">
-                              <input
-                                value={draft.title}
-                                onChange={event =>
-                                  handleUpdateSupervisorScheduleTaskDraft(draft.id, { title: event.target.value })
-                                }
-                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                                placeholder={t("Titulo de tarea (opcional)", "Task title (optional)")}
-                              />
-                              <textarea
-                                rows={2}
-                                value={draft.description}
-                                onChange={event =>
-                                  handleUpdateSupervisorScheduleTaskDraft(draft.id, { description: event.target.value })
-                                }
-                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                                placeholder={t("Descripcion (opcional)", "Description (optional)")}
-                              />
-                              <div className="grid gap-2 sm:grid-cols-3">
-                                <input
-                                  type="datetime-local"
-                                  value={draft.dueAt}
-                                  onChange={event =>
-                                    handleUpdateSupervisorScheduleTaskDraft(draft.id, { dueAt: event.target.value })
-                                  }
-                                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                                />
-                                <select
-                                  value={draft.priority}
-                                  onChange={event =>
-                                    handleUpdateSupervisorScheduleTaskDraft(draft.id, {
-                                      priority: event.target.value as TaskPriority,
-                                    })
-                                  }
-                                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                                >
-                                  <option value="low">{t("Baja", "Low")}</option>
-                                  <option value="normal">{t("Normal", "Normal")}</option>
-                                  <option value="high">{t("Alta", "High")}</option>
-                                  <option value="critical">{t("Critica", "Critical")}</option>
-                                </select>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleRemoveSupervisorScheduleTaskDraft(draft.id)}
-                                >
-                                  {t("Quitar tarea", "Remove task")}
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </details>
 
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs text-slate-500">

@@ -38,12 +38,26 @@ export async function uploadEvidenceObject(
 }
 
 export async function createEvidenceSignedUrl(path: string, expiresInSeconds = 3600) {
+  if (/^https?:\/\//i.test(path)) return path
   const failures: string[] = []
+  const trimmedPath = path.replace(/^\/+/, "")
 
   for (const bucket of evidenceBucketCandidates) {
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresInSeconds)
-    if (!error && data?.signedUrl) return data.signedUrl
-    if (error) failures.push(`${bucket}: ${error.message}`)
+    const candidates = new Set<string>([path, trimmedPath])
+    const lowerBucket = bucket.toLowerCase()
+    for (const candidate of Array.from(candidates)) {
+      const cleaned = candidate.replace(/^\/+/, "")
+      if (cleaned.toLowerCase().startsWith(`${lowerBucket}/`)) {
+        candidates.add(cleaned.slice(lowerBucket.length + 1))
+      }
+    }
+
+    for (const candidate of candidates) {
+      if (!candidate) continue
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(candidate, expiresInSeconds)
+      if (!error && data?.signedUrl) return data.signedUrl
+      if (error) failures.push(`${bucket}: ${error.message}`)
+    }
   }
 
   if (failures.length === 0) return null
