@@ -80,7 +80,11 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
      - `{ shift_id, type, path, lat, lng, accuracy, captured_at, meta }`
      - Respuesta esperada (envelope):
        - `data = { shift_id, type, storage_path, sha256 }`
-3. `shifts_end` (Edge)
+3. Evidencia de turno (listado) via `shift_evidence_manage` (Edge)
+   - Request: `POST /functions/v1/shift_evidence_manage`
+   - Body: `{ "action": "list_by_shift", "shift_id": <id>, "type": "inicio"|"fin"|null, "limit": 50 }`
+   - Respuesta: `{ success, data: { items: [ { id, shift_id, type, storage_path, captured_at, lat, lng } ] }, error, request_id }`
+4. `shifts_end` (Edge)
    - Headers: `x-shift-otp-token`, `x-device-fingerprint`
    - Body:
      - `shift_id`
