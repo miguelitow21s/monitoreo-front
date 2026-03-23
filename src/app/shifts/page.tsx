@@ -3264,11 +3264,13 @@ function ShiftsPageContent() {
     if (nextScreen === "home") {
       setSupervisorScreenHistory(["home"])
       setSupervisorScreen("home")
+      // Consume the one-shot home param so in-page navigation is not pinned to home.
+      router.replace("/shifts")
       return
     }
 
     setSupervisorScreenWithHistory(nextScreen)
-  }, [canOperateSupervisor, searchParams, setSupervisorScreenWithHistory])
+  }, [canOperateSupervisor, router, searchParams, setSupervisorScreenWithHistory])
 
   const handleAssignStaff = async () => {
     if (!staffRestaurantId || !staffUserId) {
