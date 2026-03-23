@@ -442,6 +442,7 @@ function ShiftsPageContent() {
   const [otpDebugMaskedPhone, setOtpDebugMaskedPhone] = useState<string | null>(null)
   const [otpDebugExpiresAt, setOtpDebugExpiresAt] = useState<string | null>(null)
   const [clockMs, setClockMs] = useState(() => Date.now())
+  const [supervisorAlertIndex, setSupervisorAlertIndex] = useState(0)
   const [historyPage, setHistoryPage] = useState(1)
   const [, setHistoryTotalPages] = useState(1)
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([])
@@ -1133,6 +1134,61 @@ function ShiftsPageContent() {
     },
     [staffUsersById]
   )
+
+  const supervisorAlertItems = useMemo(() => {
+    const items: string[] = []
+
+    if (overdueSupervisorTasks.length > 0) {
+      items.push(
+        t("Hay", "There are") +
+          ` ${overdueSupervisorTasks.length} ` +
+          t("tarea(s) vencidas pendientes de cierre.", "overdue task(s) pending closure.")
+      )
+    }
+
+    if (pendingPresenceClosures.length > 0) {
+      items.push(
+        t("Tienes", "You have") +
+          ` ${pendingPresenceClosures.length} ` +
+          t("restaurante(s) con entrada registrada pero sin salida hoy.", "restaurant(s) with entry registered but no exit today.")
+      )
+    }
+
+    for (const item of missedScheduledStarts) {
+      items.push(
+        `${t("Turno no iniciado", "Shift not started")}: ${getEmployeeLabelById(item.employee_id)} ${t(
+          "no ha iniciado turno en",
+          "has not started shift at"
+        )} ${getRestaurantLabelById(item.restaurant_id)} (${t("programado", "scheduled")} ${formatTimeOnly(
+          item.scheduled_start
+        )})`
+      )
+    }
+
+    return items
+  }, [
+    getEmployeeLabelById,
+    getRestaurantLabelById,
+    missedScheduledStarts,
+    overdueSupervisorTasks.length,
+    pendingPresenceClosures.length,
+    t,
+  ])
+
+  useEffect(() => {
+    setSupervisorAlertIndex(0)
+  }, [supervisorAlertItems.length])
+
+  useEffect(() => {
+    if (supervisorAlertItems.length <= 1) return undefined
+    const intervalId = window.setInterval(() => {
+      setSupervisorAlertIndex(prev => {
+        if (supervisorAlertItems.length === 0) return 0
+        return (prev + 1) % supervisorAlertItems.length
+      })
+    }, 6000)
+    return () => window.clearInterval(intervalId)
+  }, [supervisorAlertItems.length])
 
   const getRestaurantWatermarkLabelById = useCallback(
     (restaurantId: number | null | undefined) => {
@@ -5361,20 +5417,13 @@ function ShiftsPageContent() {
                                 {t("turno(s) programados sin iniciar hoy.", "scheduled shift(s) not started today.")}
                               </p>
                             )}
-                            {missedScheduledStarts.length > 0 && (
-                              <div className="mt-2 space-y-1 text-sm text-slate-700">
-                                {missedScheduledStarts.slice(0, 3).map(item => (
-                                  <p key={`missed-${item.id}`}>
-                                    {t("Turno no iniciado", "Shift not started")}: {getEmployeeLabelById(item.employee_id)}{" "}
-                                    {t("no ha iniciado turno en", "has not started shift at")}{" "}
-                                    {getRestaurantLabelById(item.restaurant_id)} ({t("programado", "scheduled")}{" "}
-                                    {formatTimeOnly(item.scheduled_start)})
-                                  </p>
-                                ))}
-                                {missedScheduledStarts.length > 3 && (
-                                  <p className="text-xs text-slate-500">
-                                    {t("Y", "And")} {missedScheduledStarts.length - 3} {t("más...", "more...")}
-                                  </p>
+                            {supervisorAlertItems.length > 0 && (
+                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm text-amber-900">
+                                <span>{supervisorAlertItems[supervisorAlertIndex]}</span>
+                                {supervisorAlertItems.length > 1 && (
+                                  <span className="ml-2 text-xs text-amber-700">
+                                    {supervisorAlertIndex + 1}/{supervisorAlertItems.length}
+                                  </span>
                                 )}
                               </div>
                             )}

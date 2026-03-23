@@ -177,7 +177,10 @@ export async function listMyScheduledShifts(limit = 10, restaurantId?: number | 
 
 export async function listScheduledShifts(limit = 50, restaurantId?: number | null) {
   const data = await invokeScheduledManage<unknown>(buildScheduledListBody(limit, restaurantId))
-  return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
+  const items = normalizeScheduledItems(data)
+  return items
+    .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
+    .slice(0, limit)
 }
 
 export async function cancelScheduledShift(scheduledShiftId: number, notes?: string) {
