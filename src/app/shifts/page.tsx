@@ -101,6 +101,7 @@ const manrope = Manrope({
 
 const HISTORY_PAGE_SIZE = 8
 const MAX_GPS_ACCURACY_METERS = 80
+const FALLBACK_SCHEDULED_SHIFT_WINDOW_MS = 24 * 60 * 60 * 1000
 const TASK_SHOT_ORDER: Record<string, number> = {
   close_up: 1,
   mid_range: 2,
@@ -219,6 +220,20 @@ function isConsentPendingError(error: unknown) {
   return message.includes("consent") || message.includes("legal") || message.includes("data processing")
 }
 
+function readScheduleField(item: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = item[key]
+    if (typeof value === "string" && value.trim()) return value
+  }
+  return null
+}
+
+function resolveScheduledEndMs(startMs: number, scheduledEnd: string | null | undefined) {
+  const rawEndMs = scheduledEnd ? new Date(scheduledEnd).getTime() : Number.NaN
+  if (Number.isFinite(rawEndMs) && rawEndMs >= startMs) return rawEndMs
+  return startMs + FALLBACK_SCHEDULED_SHIFT_WINDOW_MS
+}
+
 function findEligibleScheduledShift(scheduledShifts: ScheduledShift[], nowMs = Date.now()) {
   const sorted = [...scheduledShifts].sort(
     (a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
@@ -231,8 +246,8 @@ function findEligibleScheduledShift(scheduledShifts: ScheduledShift[], nowMs = D
       if (status === "completed" || status === "finished" || status === "finalizado") return false
 
       const startMs = new Date(item.scheduled_start).getTime()
-      const endMs = new Date(item.scheduled_end).getTime()
-      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return false
+      if (!Number.isFinite(startMs)) return false
+      const endMs = resolveScheduledEndMs(startMs, item.scheduled_end)
 
       return nowMs <= endMs
     }) ?? null
@@ -251,8 +266,8 @@ function getScheduledShiftUiState(shift: ScheduledShift, nowMs: number): Schedul
   if (rawStatus === "in_progress" || rawStatus === "active" || rawStatus === "activo") return "in_progress"
 
   const startMs = new Date(shift.scheduled_start).getTime()
-  const endMs = new Date(shift.scheduled_end).getTime()
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return "other"
+  if (!Number.isFinite(startMs)) return "other"
+  const endMs = resolveScheduledEndMs(startMs, shift.scheduled_end)
 
   if (nowMs < startMs) return "scheduled"
   if (nowMs >= startMs && nowMs <= endMs) return "in_progress"
@@ -918,7 +933,7 @@ function ShiftsPageContent() {
     )
 
     const candidates = scheduledShifts.filter(item => {
-      if (!item.scheduled_start || !item.scheduled_end) return false
+      if (!item.scheduled_start) return false
       const status = (item.status ?? "").toLowerCase()
       if (status === "cancelled" || status === "canceled") return false
       if (status === "completed" || status === "finished" || status === "finalizado") return false
@@ -931,8 +946,8 @@ function ShiftsPageContent() {
     let best: { shift: ScheduledShift; score: number } | null = null
     for (const item of candidates) {
       const itemStart = new Date(item.scheduled_start).getTime()
-      const itemEnd = new Date(item.scheduled_end).getTime()
-      if (!Number.isFinite(itemStart) || !Number.isFinite(itemEnd)) continue
+      if (!Number.isFinite(itemStart)) continue
+      const itemEnd = resolveScheduledEndMs(itemStart, item.scheduled_end)
       if (startMs > itemEnd) continue
       const score = Math.abs(startMs - itemStart)
       if (!best || score < best.score) {
@@ -1664,17 +1679,22 @@ function ShiftsPageContent() {
       setEmployeeDashboard(payload)
       const normalizedScheduled = (payload.scheduled_shifts ?? [])
         .map((item): ScheduledShift | null => {
-          const id = Number(item.id)
-          const restaurantId = Number(item.restaurant_id)
+          const row = item as Record<string, unknown>
+          const id = Number(row.id)
+          const restaurantId = Number(row.restaurant_id)
           if (!Number.isFinite(id) || !Number.isFinite(restaurantId)) return null
-          if (!item.scheduled_start || !item.scheduled_end) return null
+          const scheduledStart =
+            readScheduleField(row, ["scheduled_start", "scheduled_start_at", "start_time", "start_at", "start"]) ?? null
+          const scheduledEnd =
+            readScheduleField(row, ["scheduled_end", "scheduled_end_at", "end_time", "end_at", "end"]) ?? ""
+          if (!scheduledStart) return null
           return {
             id,
             employee_id: currentUserId ?? "",
             restaurant_id: restaurantId,
-            scheduled_start: item.scheduled_start,
-            scheduled_end: item.scheduled_end,
-            status: item.status ?? "scheduled",
+            scheduled_start: scheduledStart,
+            scheduled_end: scheduledEnd,
+            status: (row.status as string | undefined) ?? "scheduled",
             notes: null,
           }
         })

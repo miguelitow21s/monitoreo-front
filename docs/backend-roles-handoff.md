@@ -10,19 +10,29 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
 ## 1) Encabezados y seguridad comunes
 
 1. Todas las Edge Functions se invocan por `POST /functions/v1/{fn}` (Supabase Edge).
-2. Encabezados base (siempre):
+   - Excepcion: `GET /health_ping`.
+2. Encabezados base (siempre, **todas** las Edge):
    - `Authorization: Bearer <access_token>`
    - `apikey: <SUPABASE_ANON_KEY>`
    - `Content-Type: application/json`
-   - `x-device-fingerprint: <fingerprint>` (siempre lo agrega `invokeEdge`)
+   - `Idempotency-Key: <uuid>`
+   - `x-device-fingerprint: <string >= 16 chars>` (siempre lo agrega `invokeEdge`)
 3. Encabezados adicionales (segun flujo):
-   - `Idempotency-Key: <uuid>` para evitar duplicados (siempre se manda en acciones sensibles).
    - `x-shift-otp-token: <otp_token>` requerido para iniciar/terminar turnos y subir evidencia.
 4. Device binding:
    - `trusted_device_validate` + `trusted_device_register` se llaman automaticamente al iniciar flujos sensibles.
 5. OTP de telefono:
    - `phone_otp_send` y `phone_otp_verify` se usan para generar el `x-shift-otp-token`.
-6. `health_ping` es solo **GET** (no POST).
+
+### A) Perfil y rol (todos los perfiles)
+
+1. `users_manage` (Edge)
+   - `action: "me"` retorna `{ id, email, role, is_active, first_name, last_name, full_name, phone_e164 }`.
+2. `users_bootstrap` (Edge, **fallback**)
+   - Request: `POST /functions/v1/users_bootstrap`
+   - Body: `{ "action": "bootstrap_my_user" }`
+   - Respuesta: `{ success, data: { id, email, role, is_active, ... }, error, request_id }`
+   - Mantener como fallback si `users_manage` falla; no rompe el flujo.
 
 ---
 
@@ -89,6 +99,7 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
 
 1. `employee_self_service` (Edge)
    - `action: "my_dashboard"` (restaurantes asignados, turnos programados, tareas pendientes, shift activo).
+   - `action: "my_active_shift"` (turno activo del empleado).
    - `action: "my_hours_history"` (historial horas).
    - `action: "create_observation"` (observaciones/alertas).
 
@@ -111,14 +122,20 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
 
 ### A) Control de turnos
 
-1. Listado turnos activos (DB)
-   - `shifts` table (end_time IS NULL).
+1. Listado turnos activos (Edge)
+   - Request: `POST /functions/v1/shifts_manage`
+   - Body: `{ "action": "list_active", "restaurant_id": <id?>, "limit": 50 }`
+   - Respuesta: `{ success, data: { items: [ { id, employee_id, restaurant_id, start_time, status, start_evidence_path?, end_evidence_path? } ] }, error, request_id }`
 2. Cambios de estado (Edge)
    - `shifts_approve` o `shifts_reject`
    - Headers: `x-shift-otp-token` + `x-device-fingerprint`
 3. Incidentes de turno (Edge)
    - `incidents_create` con `{ shift_id, description }`
    - Headers: `x-shift-otp-token` + `x-device-fingerprint`
+4. Listado de incidentes por turno (Edge)
+   - Request: `POST /functions/v1/incidents_manage`
+   - Body: `{ "action": "list_by_shift", "shift_id": <id> }`
+   - Respuesta: `{ success, data: { items: [ { id, shift_id, note, created_at } ] }, error, request_id }`
 
 ### B) Programacion de turnos
 
@@ -134,6 +151,8 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
 ### C) Restaurantes y personal
 
 1. `restaurant_staff_manage` (Edge)
+   - `action: "list_my_restaurants"`
+   - `action: "list_assignable_employees"`
    - `action: "list_by_restaurant"`
    - `action: "assign_employee" | "unassign_employee"`
 2. `admin_supervisors_manage` **NO aplica a supervisora** (solo super_admin).
@@ -143,24 +162,30 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
 
 1. Upload evidencia (Storage)
    - `uploadEvidenceObject(filePath, blob)` -> bucket `evidence`/`shift-evidence`.
-2. **Evitar writes directos a DB desde frontend** (por ejemplo `supervisor_presence_logs`).
-   - Si se mantiene fallback DB: RLS + constraints obligatorios.
+2. `supervisor_presence_manage` (Edge)
+   - `action: "register"`
+   - `action: "list_my"`
+   - `action: "list_by_restaurant"` (opcional `from/to` en ISO).
 
 ### E) Tareas operativas (supervisora)
 
 1. `operational_tasks_manage` (Edge)
    - `action: "list_supervision"` (con `restaurant_id` opcional)
    - `action: "create"` (crear tarea)
+   - `action: "update"` (editar detalles)
+   - `action: "cancel"` (cancelar sin evidencia)
+   - `action: "mark_in_progress"`
+   - `action: "close"` (cerrar sin evidencia)
    - `action: "complete"` (cerrar con evidencia)
    - `action: "request_evidence_upload"` / `request_manifest_upload`
-2. DB directa (Supabase)
-   - `operational_tasks` update (editar detalles, cerrar/cancelar, delete).
 
 ### F) Reportes
 
-1. `reports_generate` (Edge)
+1. `reports_manage` (Edge)
+   - `action: "list_shifts"` (requiere `from/to` en ISO)
+   - `action: "list_history"`
+2. `reports_generate` (Edge, PDF/Excel)
    - Body: `{ restaurant_id, period_start, period_end }`
-2. `reports` table (historial, fallback).
 
 ---
 
@@ -173,7 +198,18 @@ El Super Admin reutiliza todo lo de Supervisora y suma administracion global:
 2. `admin_restaurants_manage` (Edge)
    - `action: "list" | "create" | "update" | "activate" | "deactivate"`
 3. `admin_dashboard_metrics` (Edge) si se usa tablero ejecutivo.
-4. `reports_generate` (Edge) y consultas a `reports` para auditoria.
+4. `reports_manage` (Edge)
+   - `action: "list_shifts"` (requiere `from/to` en ISO)
+   - `action: "list_history"`
+5. `audit_logs_manage` (Edge)
+   - `action: "list"`
+6. `supervisor_presence_manage` (Edge)
+   - `action: "list_today"` (opcional `from/to` en ISO para timezone correcto; default America/Bogota).
+7. `reports_generate` (Edge, PDF/Excel)
+   - Request: `POST /functions/v1/reports_generate`
+   - Body:
+     `{ "restaurant_id": <id|null>, "period_start": "YYYY-MM-DD", "period_end": "YYYY-MM-DD", "format": "pdf" | "excel" }`
+   - Respuesta: `{ success, data: { report_id, url_pdf?, url_excel? }, error, request_id }`
 
 ---
 
@@ -183,3 +219,7 @@ El Super Admin reutiliza todo lo de Supervisora y suma administracion global:
 2. El frontend espera respuestas en envelope `{ success, data, error, request_id }` en Edge.
 3. El `x-device-fingerprint` se envia en todos los llamados Edge; el backend debe aceptarlo y registrarlo.
 4. Ventana de 30 min eliminada: se permite iniciar cualquier turno programado **no vencido**. Si hay varios, enviar `scheduled_shift_id`.
+5. Errores tipicos:
+   - `405`: metodo incorrecto (debe ser POST).
+   - `422`: falta `Idempotency-Key` o payload invalido.
+   - `403`: rol sin acceso al restaurante o accion.

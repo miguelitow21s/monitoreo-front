@@ -87,6 +87,8 @@ export interface GeneratedBackendReportResult {
   url_excel: string | null
 }
 
+export type BackendReportFormat = "pdf" | "excel"
+
 function toStringId(value: unknown) {
   if (typeof value === "string" && value.trim().length > 0) return value
   if (typeof value === "number" && Number.isFinite(value)) return String(value)
@@ -316,6 +318,7 @@ export async function generateBackendReport(payload: {
   restaurantId: string
   periodStart: string
   periodEnd: string
+  format: BackendReportFormat
 }) {
   const raw = await invokeEdge<unknown>("reports_generate", {
     idempotencyKey: crypto.randomUUID(),
@@ -323,6 +326,7 @@ export async function generateBackendReport(payload: {
       restaurant_id: Number(payload.restaurantId),
       period_start: payload.periodStart,
       period_end: payload.periodEnd,
+      format: payload.format,
     },
   })
 

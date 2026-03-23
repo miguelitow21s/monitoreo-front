@@ -17,6 +17,7 @@ import {
   exportReportCsv,
   fetchGeneratedReportsHistory,
   fetchShiftsReport,
+  GeneratedBackendReportResult,
   GeneratedReportHistory,
   generateBackendReport,
   getReportColumnValue,
@@ -512,17 +513,40 @@ export default function ReportsPage() {
 
     setGeneratingBackend(true)
     try {
-      const generated = await generateBackendReport({
-        restaurantId,
-        periodStart: fromDate,
-        periodEnd: toDate,
-      })
+      const results = await Promise.allSettled([
+        generateBackendReport({
+          restaurantId,
+          periodStart: fromDate,
+          periodEnd: toDate,
+          format: "pdf",
+        }),
+        generateBackendReport({
+          restaurantId,
+          periodStart: fromDate,
+          periodEnd: toDate,
+          format: "excel",
+        }),
+      ])
+
+      const merged = results
+        .filter(
+          (item): item is PromiseFulfilledResult<GeneratedBackendReportResult> => item.status === "fulfilled"
+        )
+        .map(item => item.value)
+        .reduce(
+          (acc, item) => ({
+            url_pdf: acc.url_pdf ?? item.url_pdf,
+            url_excel: acc.url_excel ?? item.url_excel,
+          }),
+          { url_pdf: null as string | null, url_excel: null as string | null }
+        )
+
       showToast("success", t("Reporte generado en backend.", "Report generated in backend."))
-      if (generated.url_pdf) {
-        window.open(generated.url_pdf, "_blank", "noopener,noreferrer")
+      if (merged.url_pdf) {
+        window.open(merged.url_pdf, "_blank", "noopener,noreferrer")
       }
-      if (generated.url_excel) {
-        window.open(generated.url_excel, "_blank", "noopener,noreferrer")
+      if (merged.url_excel) {
+        window.open(merged.url_excel, "_blank", "noopener,noreferrer")
       }
       await loadHistory()
     } catch (error: unknown) {
