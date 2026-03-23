@@ -775,8 +775,7 @@ function ShiftsPageContent() {
     }
     return endPhotoCaptures.length
   }, [endEvidenceUploaded, endEvidencePhotoCount, endPhotoCaptures.length])
-  const expectedEndPhotoCount = startEvidencePhotoCount > 0 ? startEvidencePhotoCount : null
-  const endPhotosMeetExpected = expectedEndPhotoCount ? endPhotoCaptures.length >= expectedEndPhotoCount : true
+  const recommendedEndPhotoCount = startEvidencePhotoCount > 1 ? startEvidencePhotoCount : null
   const startPhotoTarget = shiftAreaOptions.length > 0 ? shiftAreaOptions.length : Math.max(startPhotoCaptures.length, 1)
   const startPhotoProgress = Math.min(100, (startPhotoCaptures.length / startPhotoTarget) * 100)
   const canContinueToPhotos = gpsStatus === "valid" && startFitForWork === true
@@ -1441,13 +1440,6 @@ function ShiftsPageContent() {
     if (activeShift && hasStartEvidence && !endEvidenceUploaded) {
       if (endPhotoCaptures.length === 0) {
         blockers.push(t("Debes capturar fotos de salida.", "You must capture exit photos."))
-      } else if (expectedEndPhotoCount && endPhotoCaptures.length < expectedEndPhotoCount) {
-        blockers.push(
-          t(
-            `Debes tomar al menos ${expectedEndPhotoCount} fotos de salida (las mismas del inicio).`,
-            `You must take at least ${expectedEndPhotoCount} exit photos (same as start).`
-          )
-        )
       } else if (!endPhotosReady) {
         blockers.push(t("Selecciona el area y subarea en cada foto de salida.", "Select area and subarea for each exit photo."))
       } else {
@@ -1530,7 +1522,7 @@ function ShiftsPageContent() {
     endPhotoCaptures.length,
     endPhotosReady,
     endEvidenceUploaded,
-    expectedEndPhotoCount,
+    recommendedEndPhotoCount,
     t,
   ])
 
@@ -2348,14 +2340,6 @@ function ShiftsPageContent() {
         if (endPhotoCaptures.length === 0) {
           throw new Error(t("Debes capturar fotos de salida.", "You must capture exit photos."))
         }
-        if (expectedEndPhotoCount && endPhotoCaptures.length < expectedEndPhotoCount) {
-          throw new Error(
-            t(
-              `Debes tomar al menos ${expectedEndPhotoCount} fotos de salida (las mismas del inicio).`,
-              `You must take at least ${expectedEndPhotoCount} exit photos (same as start).`
-            )
-          )
-        }
         if (!endPhotosReady) {
           throw new Error(t("Selecciona el area y subarea en cada foto de salida.", "Select area and subarea for each exit photo."))
         }
@@ -2566,16 +2550,6 @@ function ShiftsPageContent() {
     }
     if (endPhotoCaptures.length === 0) {
       showToast("info", t("Debes capturar fotos de salida.", "You must capture exit photos."))
-      return
-    }
-    if (expectedEndPhotoCount && endPhotoCaptures.length < expectedEndPhotoCount) {
-      showToast(
-        "info",
-        t(
-          `Debes tomar al menos ${expectedEndPhotoCount} fotos de salida (las mismas del inicio).`,
-          `You must take at least ${expectedEndPhotoCount} exit photos (same as start).`
-        )
-      )
       return
     }
     if (!endPhotosReady) {
@@ -4461,11 +4435,11 @@ function ShiftsPageContent() {
                             </div>
                           )}
 
-                          {expectedEndPhotoCount && (
+                          {recommendedEndPhotoCount && (
                             <p className="card-subtitle">
                               {t(
-                                `Debes tomar al menos ${expectedEndPhotoCount} fotos de salida.`,
-                                `You must capture at least ${expectedEndPhotoCount} end photos.`
+                                `Recomendado: tomar ${recommendedEndPhotoCount} fotos de salida para comparar con el inicio.`,
+                                `Recommended: capture ${recommendedEndPhotoCount} end photos to compare with start evidence.`
                               )}
                             </p>
                           )}
@@ -4475,7 +4449,7 @@ function ShiftsPageContent() {
                               type="button"
                               className="btn btn-secondary"
                               onClick={() => void handleUploadEndEvidence()}
-                              disabled={uploadingEndEvidence || !coords || !endPhotosReady || !endPhotosMeetExpected}
+                              disabled={uploadingEndEvidence || !coords || !endPhotosReady}
                             >
                               {uploadingEndEvidence
                                 ? t("Almacenando datos...", "Saving data...")
