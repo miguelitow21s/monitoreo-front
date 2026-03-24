@@ -126,7 +126,7 @@ export default function AccountPasswordPage() {
                     placeholder={t("Escribe tu PIN actual", "Type your current PIN")}
                     value={currentPassword}
                     onChange={e => setCurrentPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="w-full bg-transparent text-sm text-slate-800 outline-none"
+                    className="w-full bg-transparent pr-20 text-sm text-slate-800 outline-none"
                   />
                   <button
                     type="button"
@@ -155,7 +155,7 @@ export default function AccountPasswordPage() {
                     placeholder={t("PIN de 6 digitos", "6-digit PIN")}
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="w-full bg-transparent text-sm text-slate-800 outline-none"
+                    className="w-full bg-transparent pr-20 text-sm text-slate-800 outline-none"
                   />
                   <button
                     type="button"
@@ -184,7 +184,7 @@ export default function AccountPasswordPage() {
                     placeholder={t("Repite el PIN", "Repeat the PIN")}
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="w-full bg-transparent text-sm text-slate-800 outline-none"
+                    className="w-full bg-transparent pr-20 text-sm text-slate-800 outline-none"
                   />
                   <button
                     type="button"

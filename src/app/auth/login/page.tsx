@@ -16,6 +16,16 @@ const manrope = Manrope({
   weight: ["400", "600", "700", "800"],
 })
 
+function EyeIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+      {visible ? <path d="M4 4l16 16" /> : null}
+    </svg>
+  )
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const { session, loading } = useAuth()
@@ -25,6 +35,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [acceptedDataTreatment, setAcceptedDataTreatment] = useState(false)
@@ -294,8 +305,8 @@ export default function LoginPage() {
               </svg>
             </span>
             <input
-              type="password"
-              className="form-control"
+              type={showPassword ? "text" : "password"}
+              className="form-control has-password-toggle"
               placeholder="••••••"
               pattern="[0-9]*"
               inputMode="numeric"
@@ -308,6 +319,15 @@ export default function LoginPage() {
                 if (error) setError(null)
               }}
             />
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowPassword(prev => !prev)}
+              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Ver PIN", "Show PIN")}
+            >
+              <EyeIcon visible={showPassword} />
+              {showPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
+            </button>
           </div>
         </div>
 

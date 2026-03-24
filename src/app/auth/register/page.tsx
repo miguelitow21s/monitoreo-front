@@ -26,6 +26,16 @@ function canDeferProfileBootstrap(error: unknown) {
   )
 }
 
+function EyeIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+      {visible ? <path d="M4 4l16 16" /> : null}
+    </svg>
+  )
+}
+
 export default function RegisterPage() {
   const router = useRouter()
   const { t } = useI18n()
@@ -34,6 +44,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -201,18 +212,29 @@ export default function RegisterPage() {
 
         <div className="form-group">
           <label>{t("PIN numérico (6 dígitos)", "Numeric PIN (6 digits)")}</label>
-          <input
-            type="password"
-            required
-            inputMode="numeric"
-            maxLength={6}
-            pattern="[0-9]*"
-            autoComplete="new-password"
-            value={password}
-            onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            className="form-control"
-            placeholder="••••••"
-          />
+          <div className="password-wrapper">
+            <input
+              type={showPassword ? "text" : "password"}
+              required
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]*"
+              autoComplete="new-password"
+              value={password}
+              onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="form-control has-password-toggle"
+              placeholder="••••••"
+            />
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowPassword(prev => !prev)}
+              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Ver PIN", "Show PIN")}
+            >
+              <EyeIcon visible={showPassword} />
+              {showPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
+            </button>
+          </div>
         </div>
 
         {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
