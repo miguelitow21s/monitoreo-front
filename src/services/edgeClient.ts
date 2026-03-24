@@ -322,10 +322,36 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
     }
   }
 
-  const { data, error } = await supabase.functions.invoke(fn, {
+  let { data, error } = await supabase.functions.invoke(fn, {
     headers,
     body: options.body as Record<string, unknown> | string | Blob | ArrayBuffer | FormData | undefined,
   })
+
+  if (error) {
+    const extracted = await extractErrorContext(error)
+    const status = extracted.status ?? (error as { status?: unknown }).status
+    const canRetryAuth = typeof status === "number" && status === 401 && !options.accessToken
+    if (canRetryAuth) {
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+      const refreshedToken = refreshed?.session?.access_token
+      if (!refreshError && refreshedToken) {
+        if (shouldDebugEndpoint(fn)) {
+          debugGroup(`edge.retry_auth ${fn}`, {
+            message: "Retrying with refreshed session.",
+          })
+        }
+        const retry = await supabase.functions.invoke(fn, {
+          headers: {
+            ...headers,
+            Authorization: `Bearer ${refreshedToken}`,
+          },
+          body: options.body as Record<string, unknown> | string | Blob | ArrayBuffer | FormData | undefined,
+        })
+        data = retry.data
+        error = retry.error
+      }
+    }
+  }
 
   if (error) {
     const extracted = await extractErrorContext(error)
