@@ -261,6 +261,31 @@ function extractActionAndRestaurant(body: EdgeInvokeOptions["body"]) {
   return { action: action ?? null, restaurant_id: restaurantId }
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".")
+    if (parts.length < 2) return null
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/")
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")
+    const json =
+      typeof atob === "function"
+        ? atob(padded)
+        : Buffer.from(padded, "base64").toString("utf-8")
+    const parsed = JSON.parse(json)
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+function isTokenExpiringSoon(token: string, leewaySeconds = 30) {
+  const payload = decodeJwtPayload(token)
+  const exp = typeof payload?.exp === "number" ? payload.exp : null
+  if (!exp) return false
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  return exp <= nowSeconds + leewaySeconds
+}
+
 export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {}) {
   if (isEdgeTemporarilyUnavailable()) {
     throw toError(
@@ -287,6 +312,13 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
   if (!token) {
     const { data } = await supabase.auth.getSession()
     token = data.session?.access_token ?? undefined
+    if (token && isTokenExpiringSoon(token)) {
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+      const refreshedToken = refreshed?.session?.access_token
+      if (!refreshError && refreshedToken) {
+        token = refreshedToken
+      }
+    }
   }
 
   if (token) {
@@ -364,6 +396,16 @@ export async function invokeEdge<T>(fn: string, options: EdgeInvokeOptions = {})
         message: extracted.message ?? error.message ?? "Edge Function request failed.",
         status: typeof status === "number" ? status : null,
       })
+    }
+    if (typeof status === "number" && status === 401 && !options.accessToken) {
+      await supabase.auth.signOut()
+      throw toError(
+        "Sesion expirada. Inicia sesion nuevamente.",
+        status,
+        extracted.code,
+        extracted.requestId,
+        extracted.details
+      )
     }
     throw toError(
       extracted.message ?? error.message ?? "Edge Function request failed.",
