@@ -90,22 +90,17 @@ export interface GeneratedBackendReportResult {
 
 export type BackendReportExportFormat = "csv" | "pdf" | "both"
 export type BackendReportColumn =
-  | "shift_id"
-  | "employee_id"
-  | "employee_name"
-  | "restaurant_id"
-  | "restaurant_name"
-  | "start_time"
-  | "end_time"
-  | "hours_worked"
-  | "state"
-  | "status"
-  | "approved_by"
-  | "approved_by_name"
-  | "rejected_by"
-  | "rejected_by_name"
-  | "start_evidence_path"
-  | "end_evidence_path"
+  | "Turno"
+  | "Restaurante"
+  | "Empleado"
+  | "Supervisora"
+  | "Inicio"
+  | "Fin"
+  | "Estado"
+  | "Duración"
+  | "Novedades"
+  | "Evidencia inicial"
+  | "Evidencia final"
 
 function toStringId(value: unknown) {
   if (typeof value === "string" && value.trim().length > 0) return value

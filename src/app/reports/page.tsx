@@ -82,24 +82,24 @@ const COLUMN_LABELS: Record<ReportColumnKey, { es: string; en: string }> = {
   start_time: { es: "Inicio", en: "Start" },
   end_time: { es: "Fin", en: "End" },
   status: { es: "Estado", en: "Status" },
-  duration: { es: "Duracion", en: "Duration" },
+  duration: { es: "Duración", en: "Duration" },
   incidents: { es: "Novedades", en: "Incidents" },
   start_evidence: { es: "Evidencia inicial", en: "Start evidence" },
   end_evidence: { es: "Evidencia final", en: "End evidence" },
 }
 
-const BACKEND_COLUMN_MAP: Record<ReportColumnKey, BackendReportColumn | null> = {
-  shift_id: "shift_id",
-  restaurant_id: "restaurant_id",
-  employee_id: "employee_id",
-  supervisor_id: null,
-  start_time: "start_time",
-  end_time: "end_time",
-  status: "status",
-  duration: "hours_worked",
-  incidents: null,
-  start_evidence: "start_evidence_path",
-  end_evidence: "end_evidence_path",
+const BACKEND_COLUMN_MAP: Record<ReportColumnKey, BackendReportColumn> = {
+  shift_id: "Turno",
+  restaurant_id: "Restaurante",
+  employee_id: "Empleado",
+  supervisor_id: "Supervisora",
+  start_time: "Inicio",
+  end_time: "Fin",
+  status: "Estado",
+  duration: "Duración",
+  incidents: "Novedades",
+  start_evidence: "Evidencia inicial",
+  end_evidence: "Evidencia final",
 }
 
 export default function ReportsPage() {
@@ -540,21 +540,7 @@ export default function ReportsPage() {
       return
     }
 
-    const backendColumns = selectedColumns
-      .map(column => BACKEND_COLUMN_MAP[column])
-      .filter((column): column is BackendReportColumn => Boolean(column))
-
-    const skipped = selectedColumns.filter(column => BACKEND_COLUMN_MAP[column] === null)
-    if (skipped.length > 0) {
-      const labels = skipped.map(column => COLUMN_LABELS[column][language]).join(", ")
-      showToast(
-        "info",
-        t(
-          `Algunos campos no estan soportados por backend y no se incluiran: ${labels}.`,
-          `Some fields are not supported by backend and will be omitted: ${labels}.`
-        )
-      )
-    }
+    const backendColumns = selectedColumns.map(column => BACKEND_COLUMN_MAP[column])
 
     if (backendColumns.length === 0) {
       showToast(
@@ -580,9 +566,6 @@ export default function ReportsPage() {
       }
       if (generated.url_excel) {
         window.open(generated.url_excel, "_blank", "noopener,noreferrer")
-      }
-      if (generated.url_csv) {
-        window.open(generated.url_csv, "_blank", "noopener,noreferrer")
       }
       await loadHistory()
     } catch (error: unknown) {
