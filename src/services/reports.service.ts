@@ -97,7 +97,7 @@ export type BackendReportColumn =
   | "Inicio"
   | "Fin"
   | "Estado"
-  | "Duración"
+  | "Duracion"
   | "Novedades"
   | "Evidencia inicial"
   | "Evidencia final"

@@ -96,7 +96,7 @@ const BACKEND_COLUMN_MAP: Record<ReportColumnKey, BackendReportColumn> = {
   start_time: "Inicio",
   end_time: "Fin",
   status: "Estado",
-  duration: "Duración",
+  duration: "Duracion",
   incidents: "Novedades",
   start_evidence: "Evidencia inicial",
   end_evidence: "Evidencia final",
