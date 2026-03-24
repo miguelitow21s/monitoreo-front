@@ -14,7 +14,7 @@ import { EmployeeDashboardData, getEmployeeSelfDashboard } from "@/services/empl
 import { listSupervisorPresenceByRestaurant, SupervisorPresenceSummary } from "@/services/supervisorPresence.service"
 import { listRestaurants, Restaurant } from "@/services/restaurants.service"
 import { listUserProfiles } from "@/services/users.service"
-import { listScheduledShifts } from "@/services/scheduling.service"
+import { listScheduledShiftsAll } from "@/services/scheduling.service"
 import { getActiveShiftsForSupervision } from "@/services/operations.service"
 
 const manrope = Manrope({
@@ -225,8 +225,7 @@ export default function DashboardPage() {
     if (!isSupervisor || authLoading || loading) return
     setLoadingSupervisorAlerts(true)
     try {
-      const [scheduled, active, restaurants, profiles] = await Promise.all([
-        listScheduledShifts(120),
+      const [active, restaurants, profiles] = await Promise.all([
         getActiveShiftsForSupervision(80),
         listRestaurants({ includeInactive: false }),
         listUserProfiles(),
@@ -257,9 +256,33 @@ export default function DashboardPage() {
           .filter((key): key is string => !!key)
       )
 
-      const now = new Date()
-      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-      const dayEnd = dayStart + 24 * 60 * 60 * 1000
+      const fallbackTimezone = resolveDashboardTimeZone()
+      const scheduled: Awaited<ReturnType<typeof listScheduledShiftsAll>> = []
+      const restaurantQueue = restaurants.filter(item => Number.isFinite(Number(item.id)))
+
+      if (restaurantQueue.length === 0) {
+        const range = buildDayRangeForTimeZone(fallbackTimezone)
+        const rows = await listScheduledShiftsAll(200, null, { ...range, status: "scheduled" })
+        scheduled.push(...rows)
+      } else {
+        const workers = Array.from(
+          { length: Math.min(PRESENCE_FETCH_CONCURRENCY, restaurantQueue.length) },
+          () =>
+            (async () => {
+              while (restaurantQueue.length > 0) {
+                const restaurant = restaurantQueue.shift()
+                if (!restaurant) return
+                const restaurantId = Number(restaurant.id)
+                if (!Number.isFinite(restaurantId)) continue
+                const timeZone = resolveRestaurantTimeZone(restaurant, fallbackTimezone)
+                const range = buildDayRangeForTimeZone(timeZone)
+                const rows = await listScheduledShiftsAll(200, restaurantId, { ...range, status: "scheduled" })
+                scheduled.push(...rows)
+              }
+            })()
+        )
+        await Promise.all(workers)
+      }
 
       const items: string[] = []
       for (const shift of scheduled) {
@@ -270,7 +293,6 @@ export default function DashboardPage() {
 
         const startMs = new Date(shift.scheduled_start).getTime()
         if (!Number.isFinite(startMs)) continue
-        if (startMs < dayStart || startMs >= dayEnd) continue
         if (Date.now() < startMs) continue
 
         const restaurantLabel =

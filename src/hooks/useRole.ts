@@ -118,10 +118,7 @@ export function useRole() {
     }
   }, [user?.id, lastProfileFetchUserId])
 
-  const metadataRole = normalizeRole(
-    (user?.user_metadata?.role as string | undefined) ?? (user?.app_metadata?.role as string | undefined)
-  )
-  const role = profileRole ?? metadataRole ?? undefined
+  const role = profileRole ?? undefined
   const pendingRole = !!user?.id && lastProfileFetchUserId !== user.id
   const combinedLoading = loading || loadingRole || pendingRole
 
@@ -130,12 +127,11 @@ export function useRole() {
       userId: user?.id ?? null,
       profileRole,
       profileIsActive,
-      metadataRole,
       role,
       pendingRole,
       loading: combinedLoading,
     })
-  }, [combinedLoading, metadataRole, pendingRole, profileIsActive, profileRole, role, user?.id])
+  }, [combinedLoading, pendingRole, profileIsActive, profileRole, role, user?.id])
 
   return {
     role,

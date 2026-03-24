@@ -156,16 +156,23 @@ export async function assignScheduledShift(payload: {
   })
 }
 
-function buildScheduledListBody(limit: number, restaurantId?: number | null) {
+function buildScheduledListBody(
+  limit: number,
+  restaurantId?: number | null,
+  range?: { from?: string; to?: string; status?: string }
+) {
   const body: Record<string, unknown> = {
     action: "list",
-    status: "scheduled",
+    status: range?.status ?? "scheduled",
     limit,
   }
 
   if (typeof restaurantId === "number" && Number.isFinite(restaurantId)) {
     body.restaurant_id = restaurantId
   }
+
+  if (range?.from) body.from = range.from
+  if (range?.to) body.to = range.to
 
   return body
 }
@@ -177,6 +184,15 @@ export async function listMyScheduledShifts(limit = 10, restaurantId?: number | 
 
 export async function listScheduledShifts(limit = 50, restaurantId?: number | null) {
   const data = await invokeScheduledManage<unknown>(buildScheduledListBody(limit, restaurantId))
+  return filterUpcomingScheduledShifts(normalizeScheduledItems(data)).slice(0, limit)
+}
+
+export async function listScheduledShiftsAll(
+  limit = 200,
+  restaurantId?: number | null,
+  range?: { from?: string; to?: string; status?: string }
+) {
+  const data = await invokeScheduledManage<unknown>(buildScheduledListBody(limit, restaurantId, range))
   const items = normalizeScheduledItems(data)
   return items
     .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())

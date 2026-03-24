@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Manrope } from "next/font/google"
+import tzLookup from "tz-lookup"
 
 import CameraCapture from "@/components/CameraCapture"
 import GPSGuard, { Coordinates } from "@/components/GPSGuard"
@@ -48,6 +49,7 @@ import {
   assignScheduledShiftsBulk,
   cancelScheduledShift,
   listScheduledShifts,
+  listScheduledShiftsAll,
   reprogramScheduledShift,
   ScheduledShift,
 } from "@/services/scheduling.service"
@@ -424,6 +426,83 @@ function formatTimeOnly(value: string) {
   })
 }
 
+function resolveDashboardTimeZone() {
+  const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return resolved && resolved.trim().length > 0 ? resolved : "America/New_York"
+}
+
+function getTimeZoneParts(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+  const parts = formatter.formatToParts(date)
+  const map = parts.reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value
+    return acc
+  }, {} as Record<string, string>)
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second),
+  }
+}
+
+function getTimeZoneOffsetMinutes(date: Date, timeZone: string) {
+  const parts = getTimeZoneParts(date, timeZone)
+  const utc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+  return (utc - date.getTime()) / 60000
+}
+
+function buildDayRangeForTimeZone(timeZone: string) {
+  const now = new Date()
+  const todayParts = getTimeZoneParts(now, timeZone)
+  const baseUtc = Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day, 0, 0, 0)
+  let offset = getTimeZoneOffsetMinutes(new Date(baseUtc), timeZone)
+  let utcMidnight = baseUtc - offset * 60000
+  const recalculatedOffset = getTimeZoneOffsetMinutes(new Date(utcMidnight), timeZone)
+  if (recalculatedOffset !== offset) {
+    offset = recalculatedOffset
+    utcMidnight = baseUtc - offset * 60000
+  }
+
+  const from = new Date(utcMidnight).toISOString()
+
+  const tomorrow = new Date(utcMidnight + 24 * 60 * 60 * 1000)
+  const tomorrowParts = getTimeZoneParts(tomorrow, timeZone)
+  const tomorrowBaseUtc = Date.UTC(tomorrowParts.year, tomorrowParts.month - 1, tomorrowParts.day, 0, 0, 0)
+  let tomorrowOffset = getTimeZoneOffsetMinutes(new Date(tomorrowBaseUtc), timeZone)
+  let tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
+  const recalculatedTomorrowOffset = getTimeZoneOffsetMinutes(new Date(tomorrowUtcMidnight), timeZone)
+  if (recalculatedTomorrowOffset !== tomorrowOffset) {
+    tomorrowOffset = recalculatedTomorrowOffset
+    tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
+  }
+  const to = new Date(tomorrowUtcMidnight).toISOString()
+
+  return { from, to }
+}
+
+function resolveRestaurantTimeZone(restaurant: Restaurant, fallback: string) {
+  if (typeof restaurant.lat === "number" && typeof restaurant.lng === "number") {
+    try {
+      return tzLookup(restaurant.lat, restaurant.lng)
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
 async function sha256Hex(blob: Blob) {
   const buffer = await blob.arrayBuffer()
   const hashBuffer = await crypto.subtle.digest("SHA-256", buffer)
@@ -575,6 +654,7 @@ function ShiftsPageContent() {
   const [, setHistoryTotalPages] = useState(1)
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([])
   const [supervisionScheduledShifts, setSupervisionScheduledShifts] = useState<ScheduledShift[]>([])
+  const [supervisionScheduledAlerts, setSupervisionScheduledAlerts] = useState<ScheduledShift[]>([])
   const [startObservation, setStartObservation] = useState("")
   const [endObservation, setEndObservation] = useState("")
   const [startFitForWork, setStartFitForWork] = useState<boolean | null>(null)
@@ -1017,7 +1097,7 @@ function ShiftsPageContent() {
     return Array.from(latestByRestaurant.values()).filter(item => item.phase === "start")
   }, [supervisorPresence])
   const missedScheduledStarts = useMemo(() => {
-    if (!canOperateSupervisor || supervisionScheduledShifts.length === 0) return [] as ScheduledShift[]
+    if (!canOperateSupervisor || supervisionScheduledAlerts.length === 0) return [] as ScheduledShift[]
 
     const now = new Date(clockMs)
     const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
@@ -1034,7 +1114,7 @@ function ShiftsPageContent() {
         .filter((key): key is string => !!key)
     )
 
-    return supervisionScheduledShifts
+    return supervisionScheduledAlerts
       .filter(item => {
         const status = (item.status ?? "").toLowerCase()
         if (status === "cancelled" || status === "canceled") return false
@@ -1052,7 +1132,7 @@ function ShiftsPageContent() {
         return !activeEmployeeRestaurant.has(`${employeeKey}|${restaurantKey}`)
       })
       .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
-  }, [canOperateSupervisor, clockMs, supervisionScheduledShifts, supervisorRows])
+  }, [canOperateSupervisor, clockMs, supervisionScheduledAlerts, supervisorRows])
 
   const totalWorkedMinutes = useMemo(
     () => history.reduce((acc, item) => acc + durationMinutes(item.start_time, item.end_time), 0),
@@ -1793,6 +1873,44 @@ function ShiftsPageContent() {
     t,
   ])
 
+  const loadSupervisionScheduledAlerts = useCallback(async () => {
+    if (!canOperateSupervisor) return
+    try {
+      const fallbackTimezone = resolveDashboardTimeZone()
+      const restaurantQueue = knownRestaurants.filter(item => Number.isFinite(Number(item.id)))
+
+      if (restaurantQueue.length === 0) {
+        const range = buildDayRangeForTimeZone(fallbackTimezone)
+        const rows = await listScheduledShiftsAll(200, null, { ...range, status: "scheduled" })
+        setSupervisionScheduledAlerts(rows)
+        return
+      }
+
+      const scheduled: ScheduledShift[] = []
+      const workers = Array.from(
+        { length: Math.min(4, restaurantQueue.length) },
+        () =>
+          (async () => {
+            while (restaurantQueue.length > 0) {
+              const restaurant = restaurantQueue.shift()
+              if (!restaurant) return
+              const restaurantId = Number(restaurant.id)
+              if (!Number.isFinite(restaurantId)) continue
+              const timeZone = resolveRestaurantTimeZone(restaurant, fallbackTimezone)
+              const range = buildDayRangeForTimeZone(timeZone)
+              const rows = await listScheduledShiftsAll(200, restaurantId, { ...range, status: "scheduled" })
+              scheduled.push(...rows)
+            }
+          })()
+      )
+
+      await Promise.all(workers)
+      setSupervisionScheduledAlerts(scheduled)
+    } catch {
+      setSupervisionScheduledAlerts([])
+    }
+  }, [canOperateSupervisor, knownRestaurants])
+
   const loadKnownRestaurants = useCallback(async () => {
     try {
       const rows = await listRestaurants({ includeInactive: false, ...(isSuperAdmin ? { useAdminApi: true } : {}) })
@@ -1909,6 +2027,12 @@ function ShiftsPageContent() {
     if (!canOperateSupervisor) return
     void loadSupervisionScheduledShifts()
   }, [canOperateSupervisor, loadSupervisionScheduledShifts, roleLoading])
+
+  useEffect(() => {
+    if (roleLoading) return
+    if (!canOperateSupervisor) return
+    void loadSupervisionScheduledAlerts()
+  }, [canOperateSupervisor, loadSupervisionScheduledAlerts, roleLoading])
 
   useEffect(() => {
     if (roleLoading) return
@@ -3447,6 +3571,8 @@ function ShiftsPageContent() {
     }
 
     setSupervisorScreenWithHistory(nextScreen)
+    // Consume the one-shot param to avoid forcing the screen on every render.
+    router.replace("/shifts")
   }, [canOperateSupervisor, router, searchParams, setSupervisorScreenWithHistory])
 
   const handleAssignStaff = async () => {

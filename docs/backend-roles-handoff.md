@@ -84,6 +84,10 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
    - Request: `POST /functions/v1/shift_evidence_manage`
    - Body: `{ "action": "list_by_shift", "shift_id": <id>, "type": "inicio"|"fin"|null, "limit": 50 }`
    - Respuesta: `{ success, data: { items: [ { id, shift_id, type, storage_path, captured_at, lat, lng } ] }, error, request_id }`
+   - Notas:
+     - Bucket: `shift-evidence`.
+     - Si no hay fotos, `items` viene vacío → mostrar “sin evidencia”.
+     - Si hay múltiples fotos, mostrar galería por `type` (inicio/fin).
 4. `shifts_end` (Edge)
    - Headers: `x-shift-otp-token`, `x-device-fingerprint`
    - Body:
@@ -144,7 +148,13 @@ Objetivo: documentar todos los metodos, logica y encabezados que el frontend usa
 ### B) Programacion de turnos
 
 1. `scheduled_shifts_manage` (Edge)
-   - `action: "list"` (con `status: "scheduled"`, `limit`, `restaurant_id` opcional)
+   - `action: "list"` (acepta `status`, `limit`, `restaurant_id` opcional, `from/to` ISO opcionales)
+     - Si se omite `restaurant_id` → devuelve TODO el scope del usuario (supervisora).
+     - No filtra solo a futuro por defecto; para alertas usar `status=scheduled` + `from/to` del día.
+     - Ejemplo alertas:
+       ```
+       { "action": "list", "status": "scheduled", "from": "2026-03-24T00:00:00.000Z", "to": "2026-03-24T23:59:59.999Z" }
+       ```
    - `action: "assign"` (asignar un turno)
    - `action: "bulk_assign"` (lotes)
      - Respuesta esperada (envelope):
