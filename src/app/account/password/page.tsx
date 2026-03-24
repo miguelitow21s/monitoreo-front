@@ -19,6 +19,26 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+function EyeIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width="16"
+      height="16"
+      aria-hidden="true"
+    >
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+      {visible ? <path d="M4 4l16 16" /> : null}
+    </svg>
+  )
+}
+
 export default function AccountPasswordPage() {
   const { t } = useI18n()
   const { user } = useAuth()
@@ -111,8 +131,10 @@ export default function AccountPasswordPage() {
                   <button
                     type="button"
                     onClick={() => setShowCurrentPassword(prev => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                    aria-label={showCurrentPassword ? t("Ocultar PIN", "Hide PIN") : t("Ver PIN", "Show PIN")}
+                    className="absolute right-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-500/90 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
                   >
+                    <EyeIcon visible={showCurrentPassword} />
                     {showCurrentPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
                   </button>
                 </div>
@@ -138,8 +160,10 @@ export default function AccountPasswordPage() {
                   <button
                     type="button"
                     onClick={() => setShowNewPassword(prev => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                    aria-label={showNewPassword ? t("Ocultar PIN", "Hide PIN") : t("Ver PIN", "Show PIN")}
+                    className="absolute right-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-500/90 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
                   >
+                    <EyeIcon visible={showNewPassword} />
                     {showNewPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
                   </button>
                 </div>
@@ -165,8 +189,10 @@ export default function AccountPasswordPage() {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(prev => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                    aria-label={showConfirmPassword ? t("Ocultar PIN", "Hide PIN") : t("Ver PIN", "Show PIN")}
+                    className="absolute right-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-500/90 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
                   >
+                    <EyeIcon visible={showConfirmPassword} />
                     {showConfirmPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
                   </button>
                 </div>
