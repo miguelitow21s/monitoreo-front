@@ -4040,19 +4040,20 @@ function ShiftsPageContent() {
           <section className={`space-y-5 ${manrope.className}`}>
             {otpPanel}
             {isEmpleado && (
-              <div className={`space-y-6 ${manrope.className}`}>
+              <div id="employeeContent" className={`space-y-6 ${manrope.className}`}>
                 {isEmployeeStartInfoStage && !activeShift && (
-                  <div className="space-y-5">
-                    <div className="employee-step-header">
+                  <div id="startShiftFlow" className="tab-content active space-y-5">
+                    <div className="page-title">
                       <button
                         type="button"
-                        className="employee-back-btn"
+                        className="header-btn"
                         onClick={() => router.push("/dashboard")}
                         aria-label={t("Volver", "Back")}
+                        style={{ marginRight: "10px" }}
                       >
-                        {t("⬅ Volver", "⬅ Back")}
+                        ←
                       </button>
-                      <h2>{t("Iniciar Turno", "Start shift")}</h2>
+                      {t("Iniciar Turno", "Start shift")}
                     </div>
 
                     <div className="gps-verification">
@@ -4088,7 +4089,14 @@ function ShiftsPageContent() {
                         }}
                       />
                       <label htmlFor="healthCheck">
-                        <strong>{t("Confirmo buen estado de salud", "I confirm good health condition")}</strong>
+                        <strong>{t("Certificado de Actitud", "Fitness declaration")}</strong>
+                        <br />
+                        <small>
+                          {t(
+                            "Confirmo que me encuentro en perfecto estado de salud para iniciar mis labores.",
+                            "I confirm that I am in perfect health condition to start my shift."
+                          )}
+                        </small>
                       </label>
                     </div>
 
@@ -4097,32 +4105,34 @@ function ShiftsPageContent() {
                       className="btn btn-primary"
                       onClick={() => handleEmployeeView("start-evidence")}
                       disabled={!canContinueToPhotos}
+                      id="btnContinuePhotos"
                     >
-                      {t("Continuar", "Continue")} <span>→</span>
+                      {t("Continuar a Fotos", "Continue to photos")} <span>→</span>
                     </button>
                   </div>
                 )}
 
                 {isEmployeeStartEvidenceStage && !activeShift && (
-                  <div className="space-y-5">
-                    <div className="employee-step-header">
+                  <div id="photosReport" className="tab-content active space-y-5">
+                    <div className="page-title">
                       <button
                         type="button"
-                        className="employee-back-btn"
+                        className="header-btn"
                         onClick={() => handleEmployeeView("start")}
                         aria-label={t("Volver", "Back")}
+                        style={{ marginRight: "10px" }}
                       >
-                        {t("⬅ Volver", "⬅ Back")}
+                        ←
                       </button>
-                      <h2>{t("Fotos de Inicio", "Start photos")}</h2>
+                      {t("Fotos de Inicio", "Start photos")}
                     </div>
 
                     <div className="card">
                       <div className="card-header">
                         <div>
-                          <div className="card-title">{t("Fotos de Inicio", "Start photos")}</div>
+                          <div className="card-title">{t("Áreas a Fotografiar", "Areas to photograph")}</div>
                           <div className="card-subtitle">
-                            {t("Registra evidencia inicial por área.", "Register initial evidence per area.")}
+                            {t("Tome fotos del estado inicial de cada área", "Take photos of each area initial state")}
                           </div>
                         </div>
                       </div>
@@ -4175,7 +4185,7 @@ function ShiftsPageContent() {
                         </div>
                       )}
 
-                      <div className="photo-grid">
+                      <div id="photoGrid" className="photo-grid">
                         {startPhotoCaptures.map(item => (
                           <div key={item.id} className="photo-slot has-image">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -4230,10 +4240,11 @@ function ShiftsPageContent() {
 
                       <div className="progress-container">
                         <div className="progress-bar">
-                          <div className="progress-fill" style={{ width: `${startPhotoProgress}%` }} />
+                          <div id="photoProgress" className="progress-fill" style={{ width: `${startPhotoProgress}%` }} />
                         </div>
                         <p style={{ textAlign: "center", marginTop: "10px", fontSize: "14px", color: "var(--gray)" }}>
-                          {startPhotoCaptures.length} {t("de", "of")} {startPhotoTarget} {t("fotos completadas", "photos completed")}
+                          <span id="photosTaken">{startPhotoCaptures.length}</span> {t("de", "of")}{" "}
+                          <span id="totalPhotos">{startPhotoTarget}</span> {t("fotos completadas", "photos completed")}
                         </p>
                       </div>
                     </div>
@@ -4243,6 +4254,7 @@ function ShiftsPageContent() {
                       className="btn btn-success"
                       onClick={() => void handleStart(isSupervisora ? expectedRestaurantId : undefined)}
                       disabled={!canSubmit}
+                      id="btnStartCleaning"
                     >
                       {processing ? t("Almacenando datos...", "Saving data...") : t("Iniciar Limpieza", "Start cleaning")}
                     </button>
@@ -4258,7 +4270,7 @@ function ShiftsPageContent() {
                 )}
 
                 {isEmployeeProfileStage && (
-                  <div className="space-y-5">
+                  <div id="employeeProfile" className="tab-content active space-y-5">
                     <div className="profile-header">
                       <div className="profile-avatar">{profileInitials}</div>
                       <div className="profile-name">{displayName}</div>
@@ -4397,7 +4409,7 @@ function ShiftsPageContent() {
                 )}
 
                 {isEmployeeCleaningStage && (
-                  <div className="space-y-5">
+                  <div id="cleaningProgress" className="tab-content active space-y-5">
                     <div className="page-title">{t("Turno en Progreso", "Shift in progress")}</div>
 
                     <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
@@ -4406,7 +4418,7 @@ function ShiftsPageContent() {
                         <span>{t("TURNO ACTIVO", "SHIFT ACTIVE")}</span>
                       </div>
 
-                      <div className="timer-display">{formatElapsed(elapsedShiftMs)}</div>
+                      <div id="cleaningTimer" className="timer-display">{formatElapsed(elapsedShiftMs)}</div>
 
                       <div className="alert alert-warning" style={{ margin: "20px 0" }}>
                         <span><AlertWarnIcon /></span>
@@ -4446,7 +4458,7 @@ function ShiftsPageContent() {
                 )}
 
                 {isEmployeeEndStage && (
-                  <div id="shift-end" className="space-y-5">
+                  <div id={!showShiftSummary ? "finishShift" : "shiftSummary"} className="tab-content active space-y-5">
                     {!showShiftSummary ? (
                       <>
                         <div className="page-title">
@@ -4522,7 +4534,7 @@ function ShiftsPageContent() {
                             </div>
                           )}
 
-                          <div className="photo-grid">
+                          <div id="photoGridEnd" className="photo-grid">
                             {endPhotoCaptures.map(item => (
                               <div key={item.id} className="photo-slot has-image">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -4610,7 +4622,7 @@ function ShiftsPageContent() {
                           )}
                         </div>
 
-                        <div className="card">
+                        <div id="specialTaskComplete" className="card" style={{ display: pendingEmployeeTasks.length > 0 ? "block" : "none" }}>
                           <div className="card-header">
                             <div className="card-title">{t("Tarea Especial", "Special task")}</div>
                           </div>
@@ -4662,7 +4674,7 @@ function ShiftsPageContent() {
                           onClick={() => setShowShiftSummary(true)}
                           disabled={!endEvidenceUploaded}
                         >
-                          {t("Ver resumen", "View summary")}
+                          {t("Ver Resumen y Finalizar", "View summary and finish")}
                         </button>
                       </>
                     ) : (
@@ -4682,11 +4694,11 @@ function ShiftsPageContent() {
                         <div className="card">
                           <div className="stats-grid">
                             <div className="stat-card">
-                              <div className="stat-value">{summaryDurationLabel}</div>
+                              <div id="summaryDuration" className="stat-value">{summaryDurationLabel}</div>
                               <div className="stat-label">{t("Duración", "Duration")}</div>
                             </div>
                             <div className="stat-card">
-                              <div className="stat-value">{endEvidenceCount}</div>
+                              <div id="summaryPhotos" className="stat-value">{endEvidenceCount}</div>
                               <div className="stat-label">{t("Fotos", "Photos")}</div>
                             </div>
                           </div>
@@ -4711,7 +4723,7 @@ function ShiftsPageContent() {
                             <div className="info-icon"><InfoCalendarIcon /></div>
                             <div>
                               <label>{t("Fecha", "Date")}</label>
-                              <span className="info-value">{summaryDateLabel}</span>
+                              <span id="summaryDate" className="info-value">{summaryDateLabel}</span>
                             </div>
                           </div>
                         </div>

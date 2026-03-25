@@ -192,6 +192,7 @@ export default function DashboardPage() {
   const { loading: authLoading, user } = useAuth()
   const { loading, isEmpleado, isSuperAdmin } = useRole()
   const [employeeDashboard, setEmployeeDashboard] = useState<EmployeeDashboardData | null | undefined>(undefined)
+  const [employeeRestaurants, setEmployeeRestaurants] = useState<Restaurant[]>([])
   const [supervisorAlertItems, setSupervisorAlertItems] = useState<string[]>([])
   const [supervisorAlertIndex, setSupervisorAlertIndex] = useState(0)
   const [loadingSupervisorAlerts, setLoadingSupervisorAlerts] = useState(false)
@@ -204,8 +205,12 @@ export default function DashboardPage() {
 
   const refreshEmployeeDashboard = useCallback(async () => {
     if (!isEmpleado || authLoading || loading) return
-    const data = await getEmployeeSelfDashboard()
+    const [data, restaurants] = await Promise.all([
+      getEmployeeSelfDashboard(),
+      listRestaurants({ includeInactive: false }).catch(() => [] as Restaurant[]),
+    ])
     setEmployeeDashboard(data)
+    setEmployeeRestaurants(restaurants)
   }, [authLoading, isEmpleado, loading])
 
   useEffect(() => {
@@ -214,10 +219,19 @@ export default function DashboardPage() {
 
     const load = async () => {
       try {
-        const data = await getEmployeeSelfDashboard()
-        if (mounted) setEmployeeDashboard(data)
+        const [data, restaurants] = await Promise.all([
+          getEmployeeSelfDashboard(),
+          listRestaurants({ includeInactive: false }).catch(() => [] as Restaurant[]),
+        ])
+        if (mounted) {
+          setEmployeeDashboard(data)
+          setEmployeeRestaurants(restaurants)
+        }
       } catch {
-        if (mounted) setEmployeeDashboard(null)
+        if (mounted) {
+          setEmployeeDashboard(null)
+          setEmployeeRestaurants([])
+        }
       }
     }
 
@@ -399,6 +413,32 @@ export default function DashboardPage() {
     return restaurants[0]?.name ?? t("Sin restaurante", "No restaurant")
   }, [activeShift?.restaurant_id, employeeDashboard, nextShift, t])
 
+  const selectedRestaurantId = useMemo(() => {
+    if (typeof activeShift?.restaurant_id === "number") return activeShift.restaurant_id
+    if (typeof nextShift?.restaurant_id === "number") return nextShift.restaurant_id
+    const fallbackId = employeeDashboard?.assigned_restaurants?.[0]?.id
+    return typeof fallbackId === "number" ? fallbackId : null
+  }, [activeShift?.restaurant_id, employeeDashboard?.assigned_restaurants, nextShift?.restaurant_id])
+
+  const selectedRestaurant = useMemo(() => {
+    if (!selectedRestaurantId) return null
+    return employeeRestaurants.find(item => Number(item.id) === Number(selectedRestaurantId)) ?? null
+  }, [employeeRestaurants, selectedRestaurantId])
+
+  const restaurantLocationLabel = useMemo(() => {
+    if (!selectedRestaurant) return t("Sin ubicación", "No location")
+    const parts = [
+      selectedRestaurant.address_line,
+      selectedRestaurant.city,
+      selectedRestaurant.state,
+      selectedRestaurant.postal_code,
+      selectedRestaurant.country,
+    ]
+      .map(item => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean)
+    return parts.join(", ") || t("Sin ubicación", "No location")
+  }, [selectedRestaurant, t])
+
   const shiftDate = useMemo(() => {
     if (activeShift?.start_time || activeShift?.scheduled_start) {
       const startValue = activeShift.start_time ?? activeShift.scheduled_start ?? ""
@@ -418,6 +458,27 @@ export default function DashboardPage() {
       day: "numeric",
     })
   }, [activeShift?.scheduled_start, activeShift?.start_time, formatDate, nextShift, t])
+
+  const shiftScheduleLabel = useMemo(() => {
+    const startValue = activeShift?.start_time ?? activeShift?.scheduled_start ?? nextShift?.scheduled_start ?? null
+    const endValue = activeShift?.scheduled_end ?? nextShift?.scheduled_end ?? null
+
+    if (!startValue || !endValue) return t("Sin turno programado", "No scheduled shift")
+
+    const start = new Date(startValue)
+    const end = new Date(endValue)
+    const startMs = start.getTime()
+    const endMs = end.getTime()
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+      return t("Sin turno programado", "No scheduled shift")
+    }
+
+    const durationHours = Math.round(((endMs - startMs) / (1000 * 60 * 60)) * 10) / 10
+    const durationLabel = `${durationHours} ${t("horas", "hours")}`
+    return `${formatTime(startValue, { hour: "2-digit", minute: "2-digit" })} - ${formatTime(endValue, { hour: "2-digit", minute: "2-digit" })} (${durationLabel})`
+  }, [activeShift?.scheduled_end, activeShift?.scheduled_start, activeShift?.start_time, formatTime, nextShift?.scheduled_end, nextShift?.scheduled_start, t])
+
+  const specialTask = employeeDashboard?.pending_tasks_preview?.[0] ?? null
 
   const supervisorQuickActions = useMemo(
     () => [
@@ -495,16 +556,18 @@ export default function DashboardPage() {
     if (isEmpleado) {
       return (
         <ProtectedRoute>
-          <section className={`space-y-5 ${manrope.className}`}>
+          <section id="employeeHome" className={`tab-content active space-y-5 ${manrope.className}`}>
             <div className="welcome-banner">
-              <h2>{t("¡Hola", "Hello")}, {displayName}!</h2>
-              <p>{shiftDate}</p>
+              <h2>
+                {t("¡Hola", "Hello")} <span id="employeeName">{displayName}</span>! 👋
+              </h2>
+              <p id="currentDate">{shiftDate}</p>
             </div>
 
-            <div className="shift-info">
+            <div id="shiftInfo" className="shift-info">
               <div className="info-item">
                 <div className="info-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
                     <path d="M4 10h16v10H4z" />
                     <path d="M7 10V7h10v3" />
                     <path d="M9 14h6" />
@@ -514,6 +577,41 @@ export default function DashboardPage() {
                   <label>{t("Restaurante", "Restaurant")}</label>
                   <span className="info-value">{restaurantLabel}</span>
                 </div>
+              </div>
+
+              <div className="info-item">
+                <div className="info-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 3" />
+                  </svg>
+                </div>
+                <div>
+                  <label>{t("Horario", "Schedule")}</label>
+                  <span className="info-value">{shiftScheduleLabel}</span>
+                </div>
+              </div>
+
+              <div className="info-item">
+                <div className="info-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+                    <path d="M12 22s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                </div>
+                <div>
+                  <label>{t("Ubicación", "Location")}</label>
+                  <span className="info-value">{restaurantLocationLabel}</span>
+                </div>
+              </div>
+            </div>
+
+            <div id="specialTask" className="task-card" style={{ display: specialTask ? "block" : "none" }}>
+              <h4>⭐ {t("Tarea Especial Asignada", "Assigned special task")}</h4>
+              <p id="specialTaskDesc">{specialTask?.title ?? t("Sin tarea especial pendiente.", "No pending special task.")}</p>
+              <div className="task-observations">
+                <strong>{t("Observaciones previas", "Previous notes")}:</strong>
+                <p id="specialTaskNotes">{specialTask?.status ?? t("Sin observaciones.", "No notes.")}</p>
               </div>
             </div>
 
