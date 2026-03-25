@@ -16,12 +16,22 @@ const manrope = Manrope({
   weight: ["400", "600", "700", "800"],
 })
 
-function EyeIcon({ visible }: { visible: boolean }) {
+function BroomIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
-      <circle cx="12" cy="12" r="3" />
-      {visible ? <path d="M4 4l16 16" /> : null}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="36" height="36" aria-hidden="true">
+      <path d="M6 3l15 15" />
+      <path d="M4 18l4-4 2 2-4 4H4v-2z" />
+      <path d="M14 6l4-4" />
+    </svg>
+  )
+}
+
+function SignInIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" />
+      <path d="M10 17l5-5-5-5" />
+      <path d="M15 12H3" />
     </svg>
   )
 }
@@ -35,7 +45,6 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [acceptedDataTreatment, setAcceptedDataTreatment] = useState(false)
@@ -239,7 +248,9 @@ export default function LoginPage() {
         </div>
 
         <div className="logo">
-          <div className="logo-icon">WT</div>
+          <div className="logo-icon">
+            <BroomIcon />
+          </div>
           <h1>WorkTrace</h1>
           <p>{t("Gestión Profesional de Limpieza", "Professional cleaning management")}</p>
         </div>
@@ -305,8 +316,8 @@ export default function LoginPage() {
               </svg>
             </span>
             <input
-              type={showPassword ? "text" : "password"}
-              className="form-control has-password-toggle"
+              type="password"
+              className="form-control"
               placeholder="••••••"
               pattern="[0-9]*"
               inputMode="numeric"
@@ -319,15 +330,6 @@ export default function LoginPage() {
                 if (error) setError(null)
               }}
             />
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => setShowPassword(prev => !prev)}
-              aria-label={showPassword ? t("Ocultar PIN", "Hide PIN") : t("Ver PIN", "Show PIN")}
-            >
-              <EyeIcon visible={showPassword} />
-              {showPassword ? t("Ocultar", "Hide") : t("Ver", "Show")}
-            </button>
           </div>
         </div>
 
@@ -345,6 +347,7 @@ export default function LoginPage() {
             needsBackendConsent
           }
         >
+          <SignInIcon />
           {submitting ? t("Ingresando...", "Signing in...") : t("Iniciar Sesión", "Sign in")}
         </button>
 

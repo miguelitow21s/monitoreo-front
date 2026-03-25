@@ -431,7 +431,7 @@ export async function cancelOperationalTask(taskId: number, reason?: string | nu
   return { id: resolvedTaskId } as OperationalTask
 }
 
-export async function deleteOperationalTask(taskId: number) {
+export async function deleteOperationalTask() {
   throw new Error("Delete task is not supported. Use cancel instead.")
 }
 

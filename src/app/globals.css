@@ -291,6 +291,60 @@ select:focus {
   gap: 10px;
 }
 
+.employee-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.employee-step-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.employee-back-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.employee-back-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.supervisor-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.supervisor-step-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.supervisor-back-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.supervisor-back-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -356,6 +410,11 @@ select:focus {
   box-shadow: 0 10px 20px -12px rgba(14, 165, 233, 0.5);
 }
 
+.header-brand-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
 .header-brand span {
   font-weight: 700;
   font-size: 18px;
@@ -364,6 +423,25 @@ select:focus {
 .header-actions {
   display: flex;
   gap: 15px;
+  align-items: center;
+}
+
+.header-lang-switch .inline-flex {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.header-lang-switch .inline-flex button {
+  color: #e2e8f0;
+}
+
+.header-lang-switch .inline-flex button:hover {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.header-lang-switch .inline-flex button.bg-slate-900 {
+  background: #0ea5e9;
+  color: white;
 }
 
 .header-btn {
@@ -1400,4 +1478,46 @@ textarea.form-control:focus {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Compatibility helpers for legacy visual snippets */
+.app-container {
+  min-height: 100vh;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal-content {
+  background: var(--dark-light);
+  padding: 20px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2100;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top: 4px solid var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }

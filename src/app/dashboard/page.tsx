@@ -11,7 +11,6 @@ import { useRole } from "@/hooks/useRole"
 import tzLookup from "tz-lookup"
 
 import { EmployeeDashboardData, getEmployeeSelfDashboard } from "@/services/employeeSelfService.service"
-import { listSupervisorPresenceByRestaurant, SupervisorPresenceSummary } from "@/services/supervisorPresence.service"
 import { listRestaurants, Restaurant } from "@/services/restaurants.service"
 import { listUserProfiles } from "@/services/users.service"
 import { listScheduledShiftsAll } from "@/services/scheduling.service"
@@ -24,7 +23,84 @@ const manrope = Manrope({
 
 const PRESENCE_FETCH_CONCURRENCY = 4
 
-type ActionIconKey = "restaurants" | "users" | "shifts" | "reports"
+type ActionIconKey = "restaurants" | "users" | "shifts" | "reports" | "config" | "audit"
+
+const resolveDashboardTimeZone = () => {
+  const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return resolved && resolved.trim().length > 0 ? resolved : "America/New_York"
+}
+
+const getTimeZoneParts = (date: Date, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+  const parts = formatter.formatToParts(date)
+  const map = parts.reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value
+    return acc
+  }, {} as Record<string, string>)
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+    second: Number(map.second),
+  }
+}
+
+const getTimeZoneOffsetMinutes = (date: Date, timeZone: string) => {
+  const parts = getTimeZoneParts(date, timeZone)
+  const utc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+  return (utc - date.getTime()) / 60000
+}
+
+const buildDayRangeForTimeZone = (timeZone: string) => {
+  const now = new Date()
+  const todayParts = getTimeZoneParts(now, timeZone)
+  const baseUtc = Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day, 0, 0, 0)
+  let offset = getTimeZoneOffsetMinutes(new Date(baseUtc), timeZone)
+  let utcMidnight = baseUtc - offset * 60000
+  const recalculatedOffset = getTimeZoneOffsetMinutes(new Date(utcMidnight), timeZone)
+  if (recalculatedOffset !== offset) {
+    offset = recalculatedOffset
+    utcMidnight = baseUtc - offset * 60000
+  }
+
+  const from = new Date(utcMidnight).toISOString()
+
+  const tomorrow = new Date(utcMidnight + 24 * 60 * 60 * 1000)
+  const tomorrowParts = getTimeZoneParts(tomorrow, timeZone)
+  const tomorrowBaseUtc = Date.UTC(tomorrowParts.year, tomorrowParts.month - 1, tomorrowParts.day, 0, 0, 0)
+  let tomorrowOffset = getTimeZoneOffsetMinutes(new Date(tomorrowBaseUtc), timeZone)
+  let tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
+  const recalculatedTomorrowOffset = getTimeZoneOffsetMinutes(new Date(tomorrowUtcMidnight), timeZone)
+  if (recalculatedTomorrowOffset !== tomorrowOffset) {
+    tomorrowOffset = recalculatedTomorrowOffset
+    tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
+  }
+  const to = new Date(tomorrowUtcMidnight).toISOString()
+
+  return { from, to }
+}
+
+const resolveRestaurantTimeZone = (restaurant: Restaurant, fallback: string) => {
+  if (typeof restaurant.lat === "number" && typeof restaurant.lng === "number") {
+    try {
+      return tzLookup(restaurant.lat, restaurant.lng)
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
 
 function ActionIcon({ name }: { name: ActionIconKey }) {
   if (name === "restaurants") {
@@ -55,6 +131,28 @@ function ActionIcon({ name }: { name: ActionIconKey }) {
         <path d="M8 3v4" />
         <path d="M16 3v4" />
         <path d="M3 10h18" />
+      </svg>
+    )
+  }
+
+  if (name === "config") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c0 .7.4 1.3 1.1 1.5H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z" />
+      </svg>
+    )
+  }
+
+  if (name === "audit") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 7h11" />
+        <path d="M9 12h11" />
+        <path d="M9 17h11" />
+        <path d="M4 7h.01" />
+        <path d="M4 12h.01" />
+        <path d="M4 17h.01" />
       </svg>
     )
   }
@@ -94,8 +192,6 @@ export default function DashboardPage() {
   const { loading: authLoading, user } = useAuth()
   const { loading, isEmpleado, isSuperAdmin } = useRole()
   const [employeeDashboard, setEmployeeDashboard] = useState<EmployeeDashboardData | null | undefined>(undefined)
-  const [todaySupervisions, setTodaySupervisions] = useState<SupervisorPresenceSummary[]>([])
-  const [loadingTodaySupervisions, setLoadingTodaySupervisions] = useState(false)
   const [supervisorAlertItems, setSupervisorAlertItems] = useState<string[]>([])
   const [supervisorAlertIndex, setSupervisorAlertIndex] = useState(0)
   const [loadingSupervisorAlerts, setLoadingSupervisorAlerts] = useState(false)
@@ -142,84 +238,6 @@ export default function DashboardPage() {
       window.removeEventListener("focus", handleFocus)
     }
   }, [authLoading, isEmpleado, loading, refreshEmployeeDashboard])
-
-  useEffect(() => {
-    if (!isSuperAdmin || authLoading || loading) return
-    let mounted = true
-    setLoadingTodaySupervisions(true)
-    const fetchPresence = async () => {
-      const [restaurants, profiles] = await Promise.all([
-        listRestaurants({ includeInactive: false, useAdminApi: true }),
-        listUserProfiles({ useAdminApi: true }),
-      ])
-
-      const supervisorNameById = profiles.reduce((acc, profile) => {
-        acc.set(profile.id, profile.full_name ?? profile.email ?? profile.id)
-        return acc
-      }, new Map<string, string>())
-
-      const restaurantById = restaurants.reduce((acc, restaurant) => {
-        const numericId = Number(restaurant.id)
-        if (Number.isFinite(numericId)) {
-          acc.set(numericId, restaurant)
-        }
-        return acc
-      }, new Map<number, Restaurant>())
-
-      const restaurantQueue = restaurants.filter(item => Number.isFinite(Number(item.id)))
-
-      const fallbackTimezone = resolveDashboardTimeZone()
-      const results: SupervisorPresenceSummary[] = []
-
-      const workers = Array.from({ length: Math.min(PRESENCE_FETCH_CONCURRENCY, restaurantQueue.length) }, () =>
-        (async () => {
-          while (restaurantQueue.length > 0) {
-            const restaurant = restaurantQueue.shift()
-            if (!restaurant) return
-            const restaurantId = Number(restaurant.id)
-            if (!Number.isFinite(restaurantId)) continue
-
-            const timeZone = resolveRestaurantTimeZone(restaurant, fallbackTimezone)
-            const range = buildDayRangeForTimeZone(timeZone)
-            const logs = await listSupervisorPresenceByRestaurant(restaurantId, 50, range)
-            for (const log of logs) {
-              const restaurantInfo = restaurantById.get(log.restaurant_id)
-              const supervisorName = log.supervisor_id ? supervisorNameById.get(log.supervisor_id) : null
-              results.push({
-                id: String(log.id),
-                supervisor_id: log.supervisor_id,
-                supervisor_name: supervisorName ?? null,
-                restaurant_id: log.restaurant_id,
-                restaurant_name: restaurantInfo?.name ?? null,
-                phase: log.phase,
-                recorded_at: log.recorded_at,
-                notes: log.notes ?? null,
-              })
-            }
-          }
-        })()
-      )
-
-      await Promise.all(workers)
-      results.sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime())
-      return results
-    }
-
-    fetchPresence()
-      .then(items => {
-        if (mounted) setTodaySupervisions(items)
-      })
-      .catch(() => {
-        if (mounted) setTodaySupervisions([])
-      })
-      .finally(() => {
-        if (mounted) setLoadingTodaySupervisions(false)
-      })
-
-    return () => {
-      mounted = false
-    }
-  }, [authLoading, isSuperAdmin, loading])
 
   const loadSupervisorAlerts = useCallback(async () => {
     if (!isSupervisor || authLoading || loading) return
@@ -381,22 +399,6 @@ export default function DashboardPage() {
     return restaurants[0]?.name ?? t("Sin restaurante", "No restaurant")
   }, [activeShift?.restaurant_id, employeeDashboard, nextShift, t])
 
-  const shiftHours = useMemo(() => {
-    if (activeShift?.start_time || activeShift?.scheduled_start) {
-      const startValue = activeShift.start_time ?? activeShift.scheduled_start ?? ""
-      const start = startValue ? formatTime(startValue, { hour: "2-digit", minute: "2-digit" }) : "-"
-      if (activeShift?.scheduled_end) {
-        const end = formatTime(activeShift.scheduled_end, { hour: "2-digit", minute: "2-digit" })
-        return `${start} - ${end}`
-      }
-      return t("En curso desde", "In progress since") + ` ${start}`
-    }
-    if (!nextShift) return t("Sin turno programado", "No scheduled shift")
-    const start = formatTime(nextShift.scheduled_start, { hour: "2-digit", minute: "2-digit" })
-    const end = formatTime(nextShift.scheduled_end, { hour: "2-digit", minute: "2-digit" })
-    return `${start} - ${end}`
-  }, [activeShift?.scheduled_end, activeShift?.scheduled_start, activeShift?.start_time, formatTime, nextShift, t])
-
   const shiftDate = useMemo(() => {
     if (activeShift?.start_time || activeShift?.scheduled_start) {
       const startValue = activeShift.start_time ?? activeShift.scheduled_start ?? ""
@@ -417,40 +419,29 @@ export default function DashboardPage() {
     })
   }, [activeShift?.scheduled_start, activeShift?.start_time, formatDate, nextShift, t])
 
-  const pendingSpecialTasks = useMemo(
-    () => employeeDashboard?.pending_tasks_preview ?? [],
-    [employeeDashboard]
-  )
-  const employeeLoading = isEmpleado && employeeDashboard === undefined
-  const showSpecialTasksCard = employeeLoading || pendingSpecialTasks.length > 0
-
-  const adminQuickActions = useMemo(
+  const supervisorQuickActions = useMemo(
     () => [
       {
         key: "restaurants",
         label: t("Restaurantes", "Restaurants"),
-        helper: t("Gestion", "Manage"),
         icon: "restaurants" as const,
         href: "/restaurants",
       },
       {
-        key: "users",
-        label: t("Usuarios", "Users"),
-        helper: t("Gestion", "Manage"),
+        key: "employees",
+        label: t("Empleados", "Employees"),
         icon: "users" as const,
         href: "/users",
       },
       {
         key: "shifts",
         label: t("Turnos", "Shifts"),
-        helper: t("Monitoreo", "Monitoring"),
         icon: "shifts" as const,
-        href: "/shifts",
+        href: "/shifts?supervisor=turnos",
       },
       {
         key: "reports",
         label: t("Informes", "Reports"),
-        helper: t("Historial", "History"),
         icon: "reports" as const,
         href: "/reports",
       },
@@ -458,114 +449,35 @@ export default function DashboardPage() {
     [t]
   )
 
-  const resolveDashboardTimeZone = () => {
-    const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone
-    return resolved && resolved.trim().length > 0 ? resolved : "America/New_York"
-  }
-
-  const getTimeZoneParts = (date: Date, timeZone: string) => {
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    })
-    const parts = formatter.formatToParts(date)
-    const map = parts.reduce((acc, part) => {
-      if (part.type !== "literal") acc[part.type] = part.value
-      return acc
-    }, {} as Record<string, string>)
-    return {
-      year: Number(map.year),
-      month: Number(map.month),
-      day: Number(map.day),
-      hour: Number(map.hour),
-      minute: Number(map.minute),
-      second: Number(map.second),
-    }
-  }
-
-  const getTimeZoneOffsetMinutes = (date: Date, timeZone: string) => {
-    const parts = getTimeZoneParts(date, timeZone)
-    const utc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
-    return (utc - date.getTime()) / 60000
-  }
-
-  const formatOffset = (offsetMinutes: number) => {
-    const sign = offsetMinutes >= 0 ? "+" : "-"
-    const abs = Math.abs(offsetMinutes)
-    const hours = String(Math.floor(abs / 60)).padStart(2, "0")
-    const minutes = String(Math.floor(abs % 60)).padStart(2, "0")
-    return `${sign}${hours}:${minutes}`
-  }
-
-  const buildDayRangeForTimeZone = (timeZone: string) => {
-    const now = new Date()
-    const todayParts = getTimeZoneParts(now, timeZone)
-    const baseUtc = Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day, 0, 0, 0)
-    let offset = getTimeZoneOffsetMinutes(new Date(baseUtc), timeZone)
-    let utcMidnight = baseUtc - offset * 60000
-    const recalculatedOffset = getTimeZoneOffsetMinutes(new Date(utcMidnight), timeZone)
-    if (recalculatedOffset !== offset) {
-      offset = recalculatedOffset
-      utcMidnight = baseUtc - offset * 60000
-    }
-
-    const from = new Date(utcMidnight).toISOString()
-
-    const tomorrow = new Date(utcMidnight + 24 * 60 * 60 * 1000)
-    const tomorrowParts = getTimeZoneParts(tomorrow, timeZone)
-    const tomorrowBaseUtc = Date.UTC(tomorrowParts.year, tomorrowParts.month - 1, tomorrowParts.day, 0, 0, 0)
-    let tomorrowOffset = getTimeZoneOffsetMinutes(new Date(tomorrowBaseUtc), timeZone)
-    let tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
-    const recalculatedTomorrowOffset = getTimeZoneOffsetMinutes(new Date(tomorrowUtcMidnight), timeZone)
-    if (recalculatedTomorrowOffset !== tomorrowOffset) {
-      tomorrowOffset = recalculatedTomorrowOffset
-      tomorrowUtcMidnight = tomorrowBaseUtc - tomorrowOffset * 60000
-    }
-    const to = new Date(tomorrowUtcMidnight).toISOString()
-
-    return { from, to }
-  }
-
-  const resolveRestaurantTimeZone = (restaurant: Restaurant, fallback: string) => {
-    if (typeof restaurant.lat === "number" && typeof restaurant.lng === "number") {
-      try {
-        return tzLookup(restaurant.lat, restaurant.lng)
-      } catch {
-        return fallback
-      }
-    }
-    return fallback
-  }
-
-  const supervisionStatusLabel = (phase: SupervisorPresenceSummary["phase"]) => {
-    if (phase === "end") return t("Verificado en sitio", "Verified on site")
-    return t("Inicio verificado", "Start verified")
-  }
-
-  const supervisionLine = (item: SupervisorPresenceSummary) => {
-    const restaurant = item.restaurant_name ?? (item.restaurant_id ? `#${item.restaurant_id}` : t("Sin restaurante", "No restaurant"))
-    const time = formatTime(item.recorded_at, { hour: "2-digit", minute: "2-digit" })
-    return `${restaurant} - ${time}`
-  }
-
-  const supervisorDisplayName = (item: SupervisorPresenceSummary) => {
-    if (item.supervisor_name) return item.supervisor_name
-    if (item.supervisor_id) return `Supervisor ${item.supervisor_id.slice(0, 8)}`
-    return t("Supervisor", "Supervisor")
-  }
-
-  const supervisorInitials = (name: string) => {
-    const chunks = name.split(" ").filter(Boolean)
-    if (chunks.length === 0) return "SV"
-    if (chunks.length === 1) return chunks[0].slice(0, 2).toUpperCase()
-    return `${chunks[0][0]}${chunks[1][0]}`.toUpperCase()
-  }
+  const superAdminQuickActions = useMemo(
+    () => [
+      {
+        key: "supervisorView",
+        label: t("Funciones Supervisor", "Supervisor tools"),
+        icon: "shifts" as const,
+        href: "/shifts?supervisor=home",
+      },
+      {
+        key: "supervisors",
+        label: t("Gestionar Supervisores", "Manage supervisors"),
+        icon: "users" as const,
+        href: "/users",
+      },
+      {
+        key: "config",
+        label: t("Configuración", "Configuration"),
+        icon: "config" as const,
+        href: "/account/password",
+      },
+      {
+        key: "audit",
+        label: t("Auditoría", "Audit"),
+        icon: "audit" as const,
+        href: "/reports",
+      },
+    ],
+    [t]
+  )
 
   if (loading || authLoading) {
     return (
@@ -593,7 +505,9 @@ export default function DashboardPage() {
               <div className="info-item">
                 <div className="info-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                    <path d="M3 9l9-6 9 6v11a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z" />
+                    <path d="M4 10h16v10H4z" />
+                    <path d="M7 10V7h10v3" />
+                    <path d="M9 14h6" />
                   </svg>
                 </div>
                 <div>
@@ -601,58 +515,7 @@ export default function DashboardPage() {
                   <span className="info-value">{restaurantLabel}</span>
                 </div>
               </div>
-              <div className="info-item">
-                <div className="info-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 3" />
-                  </svg>
-                </div>
-                <div>
-                  <label>{t("Horario", "Schedule")}</label>
-                  <span className="info-value">{shiftHours}</span>
-                </div>
-              </div>
-              <div className="info-item">
-                <div className="info-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                    <path d="M12 22s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                </div>
-                <div>
-                  <label>{t("Ubicación", "Location")}</label>
-                  <span className="info-value">
-                    {activeShift
-                      ? t("Turno en curso", "Shift in progress")
-                      : nextShift
-                        ? t("Restaurante asignado", "Assigned restaurant")
-                        : t("Sin turno", "No shift")}
-                  </span>
-                </div>
-              </div>
             </div>
-
-            {showSpecialTasksCard && (
-              <div className="task-card">
-                <h4>{t("Tarea especial asignada", "Special task assigned")}</h4>
-                {employeeLoading ? (
-                  <p>{t("Cargando...", "Loading...")}</p>
-                ) : (
-                  <div className="task-observations">
-                    {pendingSpecialTasks.length > 0 ? (
-                      <ul className="space-y-2">
-                        {pendingSpecialTasks.map(task => (
-                          <li key={task.id}>{task.title ?? t("Tarea asignada", "Assigned task")}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>{t("Sin tareas especiales pendientes.", "No special tasks pending.")}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
 
             <div className="action-buttons">
               <button className="btn-large btn-success" type="button" onClick={() => router.push("/shifts?view=start")}>
@@ -675,7 +538,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="quick-actions">
-            {adminQuickActions.map(action => (
+            {supervisorQuickActions.map(action => (
               <button
                 key={action.key}
                 type="button"
@@ -725,13 +588,8 @@ export default function DashboardPage() {
       <section className={`space-y-5 ${manrope.className}`}>
         <div className="page-title">{t("Panel de Superusuario", "Superuser panel")}</div>
 
-        <div className="welcome-banner" style={{ background: "linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)" }}>
-          <h2>{t("Control Total del Sistema", "Full system control")}</h2>
-          <p>{t("Administración y configuración", "Administration and configuration")}</p>
-        </div>
-
         <div className="quick-actions">
-          {adminQuickActions.map(action => (
+          {superAdminQuickActions.map(action => (
             <button
               key={action.key}
               type="button"
@@ -744,33 +602,6 @@ export default function DashboardPage() {
               <span>{action.label}</span>
             </button>
           ))}
-        </div>
-
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">{t("Supervisiones realizadas hoy", "Supervisions completed today")}</div>
-          </div>
-          {loadingTodaySupervisions ? (
-            <div className="text-sm text-slate-500">{t("Cargando...", "Loading...")}</div>
-          ) : todaySupervisions.length === 0 ? (
-            <div className="text-sm text-slate-500">{t("Sin supervisiones registradas hoy.", "No supervision records today.")}</div>
-          ) : (
-            <div className="space-y-2">
-              {todaySupervisions.slice(0, 6).map(item => {
-                const name = supervisorDisplayName(item)
-                return (
-                  <div key={item.id} className="employee-list-item">
-                    <div className="employee-avatar">{supervisorInitials(name)}</div>
-                    <div className="employee-info">
-                      <h4>{name}</h4>
-                      <p>{supervisionLine(item)}</p>
-                    </div>
-                    <small className="text-emerald-300">{supervisionStatusLabel(item.phase)}</small>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
       </section>
     </ProtectedRoute>

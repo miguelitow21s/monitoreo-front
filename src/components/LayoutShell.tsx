@@ -6,12 +6,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { useI18n } from "@/hooks/useI18n"
 import { useRole } from "@/hooks/useRole"
+import LanguageSwitch from "@/components/LanguageSwitch"
 
 type LayoutShellProps = {
   children: React.ReactNode
 }
 
-type NavIconKey = "home" | "profile" | "logout" | "supervise" | "reports"
+type NavIconKey = "home" | "profile" | "logout" | "supervise" | "reports" | "audit"
 
 function NavIcon({ icon }: { icon: NavIconKey }) {
   if (icon === "home") {
@@ -41,7 +42,7 @@ function NavIcon({ icon }: { icon: NavIconKey }) {
     )
   }
 
-  if (icon === "reports") {
+  if (icon === "reports" || icon === "audit") {
     return (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 20h16" />
@@ -54,12 +55,9 @@ function NavIcon({ icon }: { icon: NavIconKey }) {
 
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 6h11" />
-      <path d="M9 12h11" />
-      <path d="M9 18h11" />
-      <path d="M4 6l2 2 3-3" />
-      <path d="M4 12l2 2 3-3" />
-      <path d="M4 18l2 2 3-3" />
+      <path d="M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+      <path d="m14 17 5-5-5-5" />
+      <path d="M19 12H9" />
     </svg>
   )
 }
@@ -84,8 +82,7 @@ export default function LayoutShell({ children }: LayoutShellProps) {
 
   const supervisorMode = searchParams?.get("supervisor")
   const supervisorHomeActive = pathname.startsWith("/shifts") && supervisorMode !== "presence"
-  const supervisorReportsActive = pathname.startsWith("/reports")
-  const superAdminReportsActive = pathname.startsWith("/reports")
+  const superAdminAuditActive = pathname.startsWith("/reports")
 
   const navItems = useMemo(() => {
     if (isEmpleado) {
@@ -148,11 +145,11 @@ export default function LayoutShell({ children }: LayoutShellProps) {
           active: pathname === "/dashboard",
         },
         {
-          key: "reports",
-          label: t("Reportes", "Reports"),
-          icon: "reports" as const,
+          key: "audit",
+          label: t("Auditoría", "Audit"),
+          icon: "audit" as const,
           href: "/reports",
-          active: superAdminReportsActive,
+          active: superAdminAuditActive,
         },
         {
           key: "logout",
@@ -171,10 +168,9 @@ export default function LayoutShell({ children }: LayoutShellProps) {
     isSuperAdmin,
     isSupervisora,
     pathname,
-    searchParams,
     supervisorHomeActive,
     supervisorMode,
-    superAdminReportsActive,
+    superAdminAuditActive,
     t,
   ])
 
@@ -194,10 +190,18 @@ export default function LayoutShell({ children }: LayoutShellProps) {
       {showChrome && (
         <header className="header">
           <div className="header-brand">
-            <span className="header-brand-icon">WT</span>
+            <span className="header-brand-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m4 3 7 7" />
+                <path d="m2 5 2-2 4 4-2 2z" />
+                <path d="m13 10 8 8" />
+                <path d="M15 8c1.5-1.5 4-1.5 5.5 0l.5.5-3 3-.5-.5c-1.5-1.5-1.5-4 0-5.5z" />
+              </svg>
+            </span>
             <span>{brandLabel}</span>
           </div>
           <div className="header-actions">
+            <LanguageSwitch compact className="header-lang-switch" />
             <button
               type="button"
               className="header-btn"

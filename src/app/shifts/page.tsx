@@ -74,14 +74,10 @@ import {
   uploadTaskManifestViaSignedToken,
 } from "@/services/tasks.service"
 import {
-  assignEmployeeToRestaurant,
   listMySupervisorRestaurants,
-  listRestaurantEmployees,
   listRestaurants,
   Restaurant,
-  RestaurantEmployee,
   SupervisorRestaurantOption,
-  unassignEmployeeFromRestaurant,
 } from "@/services/restaurants.service"
 import { createEvidenceSignedUrl, uploadEvidenceObject } from "@/services/storageEvidence.service"
 import { listShiftEvidenceByShift } from "@/services/shiftEvidence.service"
@@ -265,25 +261,6 @@ function QuickActionIcon({ name }: { name: QuickActionIconKey }) {
   )
 }
 
-function formatDuration(start: string, end: string | null) {
-  const startDate = new Date(start).getTime()
-  const endDate = new Date(end ?? Date.now()).getTime()
-  if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || endDate < startDate) return "-"
-
-  const minutes = Math.floor((endDate - startDate) / 60000)
-  const hours = Math.floor(minutes / 60)
-  const restMinutes = minutes % 60
-  return `${hours}h ${restMinutes}m`
-}
-
-function durationMinutes(start: string, end: string | null) {
-  if (!end) return 0
-  const startDate = new Date(start).getTime()
-  const endDate = new Date(end).getTime()
-  if (!Number.isFinite(startDate) || !Number.isFinite(endDate) || endDate < startDate) return 0
-  return Math.floor((endDate - startDate) / 60000)
-}
-
 function toRadians(value: number) {
   return (value * Math.PI) / 180
 }
@@ -383,11 +360,6 @@ function findEligibleScheduledShift(scheduledShifts: ScheduledShift[], nowMs = D
       return nowMs <= endMs
     }) ?? null
   )
-}
-
-function getCurrentScheduledRestaurantId(scheduledShifts: ScheduledShift[], nowMs = Date.now()) {
-  const match = findEligibleScheduledShift(scheduledShifts, nowMs)
-  return match?.restaurant_id
 }
 
 function getScheduledShiftUiState(shift: ScheduledShift, nowMs: number): ScheduledShiftUiState {
@@ -581,7 +553,7 @@ function formatRestaurantLabel(restaurant: Restaurant | null | undefined) {
 function ShiftsPageContent() {
   const { loading: roleLoading, isEmpleado, isSupervisora, isSuperAdmin } = useRole()
   const { formatDateTime: formatDateTimeI18n, t } = useI18n()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const { showToast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -619,7 +591,6 @@ function ShiftsPageContent() {
   const [endAreaDetail, setEndAreaDetail] = useState("")
   const [endSubareaKey, setEndSubareaKey] = useState("")
   const [activeShift, setActiveShift] = useState<ShiftRecord | null>(null)
-  const [history, setHistory] = useState<ShiftRecord[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [processing, setProcessing] = useState(false)
   const [uploadingStartEvidence, setUploadingStartEvidence] = useState(false)
@@ -631,7 +602,7 @@ function ShiftsPageContent() {
   const [supervisorScreen, setSupervisorScreen] = useState<
     "home" | "turnos" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active" | "alerts"
   >("home")
-  const [supervisorScreenHistory, setSupervisorScreenHistory] = useState<Array<typeof supervisorScreen>>(["home"])
+  const [, setSupervisorScreenHistory] = useState<Array<typeof supervisorScreen>>(["home"])
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
   const [endEvidenceUploadError, setEndEvidenceUploadError] = useState<string | null>(null)
   const [endShiftError, setEndShiftError] = useState<string | null>(null)
@@ -705,9 +676,6 @@ function ShiftsPageContent() {
   const [presenceRestaurants, setPresenceRestaurants] = useState<SupervisorRestaurantOption[]>([])
   const [presenceRestaurantId, setPresenceRestaurantId] = useState<number | null>(null)
   const [presenceCoords, setPresenceCoords] = useState<Coordinates | null>(null)
-  const [presencePhoto, setPresencePhoto] = useState<Blob | null>(null)
-  const [presenceNotes, setPresenceNotes] = useState("")
-  const [presencePhase, setPresencePhase] = useState<"start" | "end">("start")
   const [supervisionStep, setSupervisionStep] = useState<"start" | "cleaning" | "end">("start")
   const [supervisionStartPhotos, setSupervisionStartPhotos] = useState<SupervisionPhotoDraft[]>([])
   const [supervisionEndPhotos, setSupervisionEndPhotos] = useState<SupervisionPhotoDraft[]>([])
@@ -718,7 +686,6 @@ function ShiftsPageContent() {
   const [supervisionObservation, setSupervisionObservation] = useState("")
   const [supervisionUploading, setSupervisionUploading] = useState(false)
   const [supervisionSessionId, setSupervisionSessionId] = useState<string>(() => crypto.randomUUID())
-  const [registeringPresence, setRegisteringPresence] = useState(false)
   const [taskDetailModalTask, setTaskDetailModalTask] = useState<OperationalTask | null>(null)
   const [taskDetailManifest, setTaskDetailManifest] = useState<TaskEvidenceManifestResolved | null>(null)
   const [loadingTaskDetailManifest, setLoadingTaskDetailManifest] = useState(false)
@@ -732,9 +699,6 @@ function ShiftsPageContent() {
   const [staffRestaurants, setStaffRestaurants] = useState<SupervisorRestaurantOption[]>([])
   const [staffRestaurantId, setStaffRestaurantId] = useState<number | null>(null)
   const [staffUsers, setStaffUsers] = useState<UserProfile[]>([])
-  const [staffUserId, setStaffUserId] = useState("")
-  const [staffAssignments, setStaffAssignments] = useState<RestaurantEmployee[]>([])
-  const [assigningStaff, setAssigningStaff] = useState(false)
   const [supervisorShiftRestaurantId, setSupervisorShiftRestaurantId] = useState<number | null>(null)
   const [supervisorScheduleEmployeeId, setSupervisorScheduleEmployeeId] = useState("")
   const [supervisorScheduleRestaurantId, setSupervisorScheduleRestaurantId] = useState<number | null>(null)
@@ -928,10 +892,6 @@ function ShiftsPageContent() {
       endPhotoCaptures.every(item => isAreaComplete(item.areaKey, item.areaDetail, item.subareaKey)),
     [endPhotoCaptures, isAreaComplete]
   )
-  const pendingSpecialTasks = useMemo(
-    () => employeeDashboard?.pending_tasks_preview ?? [],
-    [employeeDashboard]
-  )
   const handleEmployeeView = useCallback(
     (view: EmployeeView) => {
       router.push(`/shifts?view=${view}`)
@@ -1058,8 +1018,6 @@ function ShiftsPageContent() {
     const metadata = user?.user_metadata as { phone?: string; phone_number?: string } | undefined
     return metadata?.phone ?? metadata?.phone_number ?? t("Sin teléfono", "No phone")
   }, [t, user?.user_metadata])
-  const upcomingShiftsCount = scheduledShifts.length
-  const pendingTasksCount = employeeDashboard?.pending_tasks_count ?? pendingEmployeeTasks.length
   const scheduleHoursValue = useMemo(() => {
     if (!supervisorBulkStartTime || !supervisorBulkEndTime) return 0
     const [startH, startM] = supervisorBulkStartTime.split(":").map(Number)
@@ -1134,12 +1092,6 @@ function ShiftsPageContent() {
       .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
   }, [canOperateSupervisor, clockMs, supervisionScheduledAlerts, supervisorRows])
 
-  const totalWorkedMinutes = useMemo(
-    () => history.reduce((acc, item) => acc + durationMinutes(item.start_time, item.end_time), 0),
-    [history]
-  )
-  const monthHoursValue = useMemo(() => Math.round(totalWorkedMinutes / 60), [totalWorkedMinutes])
-
   useEffect(() => {
     const intervalId = window.setInterval(() => setClockMs(Date.now()), 1000)
     return () => window.clearInterval(intervalId)
@@ -1154,11 +1106,6 @@ function ShiftsPageContent() {
           uiState: getScheduledShiftUiState(item, clockMs),
         })),
     [clockMs, scheduledShifts]
-  )
-
-  const scheduledShiftUiStateById = useMemo(
-    () => new Map(scheduledShiftsWithUiState.map(item => [item.shift.id, item.uiState])),
-    [scheduledShiftsWithUiState]
   )
 
   const nextScheduledShift = useMemo(
@@ -1804,22 +1751,18 @@ function ShiftsPageContent() {
     endPhotoCaptures.length,
     endPhotosReady,
     endEvidenceUploaded,
-    recommendedEndPhotoCount,
     t,
   ])
 
-  const shiftEvidencePhase = activeShift
-    ? hasStartEvidence
-      ? t("fin-turno", "shift-end")
-      : t("inicio-turno", "shift-start")
-    : t("inicio-turno", "shift-start")
-
-  const shiftOverlayLines = [
-    coordsAddress
-      ? `${t("Direccion", "Address")}: ${coordsAddress}`
-      : t("Direccion: pendiente", "Address: pending"),
-    `${t("Restaurante", "Restaurant")}: ${getRestaurantWatermarkLabelById(expectedRestaurantId)}`,
-  ]
+  const shiftOverlayLines = useMemo(
+    () => [
+      coordsAddress
+        ? `${t("Direccion", "Address")}: ${coordsAddress}`
+        : t("Direccion: pendiente", "Address: pending"),
+      `${t("Restaurante", "Restaurant")}: ${getRestaurantWatermarkLabelById(expectedRestaurantId)}`,
+    ],
+    [coordsAddress, expectedRestaurantId, getRestaurantWatermarkLabelById, t]
+  )
   const startOverlayLines = useMemo(() => [...shiftOverlayLines], [shiftOverlayLines])
   const endOverlayLines = useMemo(() => [...shiftOverlayLines], [shiftOverlayLines])
 
@@ -1831,7 +1774,6 @@ function ShiftsPageContent() {
         getMyShiftHistory(page, HISTORY_PAGE_SIZE),
       ])
       setActiveShift(active)
-      setHistory(historyResult.rows)
       setHistoryTotalPages(historyResult.totalPages)
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo cargar la informacion de turnos.", "Could not load shift information.")))
@@ -2171,26 +2113,12 @@ function ShiftsPageContent() {
 
       const nextRestaurantId = restaurants[0]?.id ?? null
       setStaffRestaurantId(prev => (prev && restaurants.some(item => item.id === prev) ? prev : nextRestaurantId))
-      setStaffUserId(prev => (prev && employees.some(item => item.id === prev) ? prev : employees[0]?.id ?? ""))
       setSupervisorScheduleRestaurantId(prev => (prev && restaurants.some(item => item.id === prev) ? prev : nextRestaurantId))
       setSupervisorScheduleEmployeeId(prev => (prev && employees.some(item => item.id === prev) ? prev : employees[0]?.id ?? ""))
     } catch (error: unknown) {
       showToast("error", extractErrorMessage(error, t("No se pudo cargar asignacion de personal.", "Could not load staff assignment context.")))
     }
   }, [canOperateSupervisor, isSuperAdmin, showToast, t])
-
-  const loadStaffAssignments = useCallback(async () => {
-    if (!canOperateSupervisor || !staffRestaurantId) {
-      setStaffAssignments([])
-      return
-    }
-    try {
-      const rows = await listRestaurantEmployees(String(staffRestaurantId), "employee")
-      setStaffAssignments(rows.filter((row): row is RestaurantEmployee => row !== null))
-    } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, t("No se pudo cargar el personal asignado.", "Could not load assigned staff.")))
-    }
-  }, [canOperateSupervisor, showToast, staffRestaurantId, t])
 
   useEffect(() => {
     if (roleLoading) return
@@ -2217,11 +2145,6 @@ function ShiftsPageContent() {
     if (roleLoading) return
     void loadStaffAssignmentContext()
   }, [loadStaffAssignmentContext, roleLoading])
-
-  useEffect(() => {
-    if (roleLoading) return
-    void loadStaffAssignments()
-  }, [loadStaffAssignments, roleLoading])
 
   useEffect(() => {
     if (!supervisorScheduleRestaurantId) {
@@ -2277,7 +2200,7 @@ function ShiftsPageContent() {
     return () => {
       active = false
     }
-  }, [coords?.lat, coords?.lng, resolveAddressLabel])
+  }, [coords, resolveAddressLabel])
 
   useEffect(() => {
     let active = true
@@ -2287,7 +2210,7 @@ function ShiftsPageContent() {
     return () => {
       active = false
     }
-  }, [taskCoords?.lat, taskCoords?.lng, resolveAddressLabel])
+  }, [taskCoords, resolveAddressLabel])
 
   useEffect(() => {
     let active = true
@@ -2297,7 +2220,7 @@ function ShiftsPageContent() {
     return () => {
       active = false
     }
-  }, [presenceCoords?.lat, presenceCoords?.lng, resolveAddressLabel])
+  }, [presenceCoords, resolveAddressLabel])
 
   const uploadEvidence = async (
     prefix: string,
@@ -3289,43 +3212,6 @@ function ShiftsPageContent() {
     }
   }
 
-  const handleRegisterPresence = async () => {
-    if (!presenceRestaurantId) {
-      showToast("info", t("Selecciona un restaurante para registrar entrada/salida de supervision.", "Select a restaurant to register supervisor entry/exit."))
-      return
-    }
-    if (!presenceCoords || !presencePhoto) {
-      showToast("info", t("El registro de supervision requiere GPS y evidencia fotografica.", "Supervisor registration requires GPS and photo evidence."))
-      return
-    }
-
-    setRegisteringPresence(true)
-    try {
-      const prefix = presencePhase === "start" ? "supervisor-start" : "supervisor-end"
-      const { filePath, evidenceHash, evidenceMimeType, evidenceSizeBytes } = await uploadEvidence(prefix, presencePhoto, presenceCoords)
-      await registerSupervisorPresence({
-        restaurantId: presenceRestaurantId,
-        phase: presencePhase,
-        lat: presenceCoords.lat,
-        lng: presenceCoords.lng,
-        notes: presenceNotes.trim() || null,
-        evidencePath: filePath,
-        evidenceHash,
-        evidenceMimeType,
-        evidenceSizeBytes,
-      })
-      setPresenceNotes("")
-      setPresenceCoords(null)
-      setPresencePhoto(null)
-      showToast("success", t("Presencia de supervision registrada.", "Supervisor presence registered."))
-      await loadPresenceLogs()
-    } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, t("No se pudo registrar la presencia de supervision.", "Could not register supervisor presence.")))
-    } finally {
-      setRegisteringPresence(false)
-    }
-  }
-
   const resetSupervisionFlow = useCallback(() => {
     setSupervisionStep("start")
     setSupervisionStartPhotos(prev => {
@@ -3341,7 +3227,6 @@ function ShiftsPageContent() {
     setSupervisionSubareaKey("")
     setSupervisionObservation("")
     setPresenceCoords(null)
-    setPresencePhoto(null)
     setSupervisionSessionId(crypto.randomUUID())
   }, [])
 
@@ -3574,38 +3459,6 @@ function ShiftsPageContent() {
     // Consume the one-shot param to avoid forcing the screen on every render.
     router.replace("/shifts")
   }, [canOperateSupervisor, router, searchParams, setSupervisorScreenWithHistory])
-
-  const handleAssignStaff = async () => {
-    if (!staffRestaurantId || !staffUserId) {
-      showToast("info", t("Selecciona restaurante y empleado.", "Select restaurant and employee."))
-      return
-    }
-
-    setAssigningStaff(true)
-    try {
-      await assignEmployeeToRestaurant(String(staffRestaurantId), staffUserId, "employee")
-      showToast("success", t("Empleado asignado al restaurante.", "Employee assigned to restaurant."))
-      await loadStaffAssignments()
-    } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, t("No se pudo asignar personal.", "Could not assign staff.")))
-    } finally {
-      setAssigningStaff(false)
-    }
-  }
-
-  const handleUnassignStaff = async (userId: string) => {
-    if (!staffRestaurantId) return
-    setAssigningStaff(true)
-    try {
-      await unassignEmployeeFromRestaurant(String(staffRestaurantId), userId, "employee")
-      showToast("success", t("Empleado desasignado.", "Employee unassigned."))
-      await loadStaffAssignments()
-    } catch (error: unknown) {
-      showToast("error", extractErrorMessage(error, t("No se pudo desasignar personal.", "Could not unassign staff.")))
-    } finally {
-      setAssigningStaff(false)
-    }
-  }
 
   const handleToggleSupervisorBulkWeekday = (day: number) => {
     setSupervisorBulkWeekdays(prev => {
@@ -4190,16 +4043,16 @@ function ShiftsPageContent() {
               <div className={`space-y-6 ${manrope.className}`}>
                 {isEmployeeStartInfoStage && !activeShift && (
                   <div className="space-y-5">
-                    <div className="page-title">
+                    <div className="employee-step-header">
                       <button
                         type="button"
-                        className="header-btn"
+                        className="employee-back-btn"
                         onClick={() => router.push("/dashboard")}
                         aria-label={t("Volver", "Back")}
                       >
-                        ←
+                        {t("⬅ Volver", "⬅ Back")}
                       </button>
-                      {t("Iniciar Turno", "Start shift")}
+                      <h2>{t("Iniciar Turno", "Start shift")}</h2>
                     </div>
 
                     <div className="gps-verification">
@@ -4219,9 +4072,7 @@ function ShiftsPageContent() {
                         onClick={verifyEmployeeGps}
                         style={{ marginTop: "15px" }}
                       >
-                        {gpsStatus === "checking"
-                          ? t("Verificando...", "Verifying...")
-                          : t("Verificar Ubicación", "Verify location")}
+                        {gpsStatus === "checking" ? t("Verificando...", "Verifying...") : t("Verificar GPS", "Verify GPS")}
                       </button>
                     </div>
 
@@ -4237,14 +4088,7 @@ function ShiftsPageContent() {
                         }}
                       />
                       <label htmlFor="healthCheck">
-                        <strong>{t("Certificado de Actitud", "Fitness certificate")}</strong>
-                        <br />
-                        <small>
-                          {t(
-                            "Confirmo que me encuentro en perfecto estado de salud para iniciar mis labores.",
-                            "I confirm I am in good health to start my shift."
-                          )}
-                        </small>
+                        <strong>{t("Confirmo buen estado de salud", "I confirm good health condition")}</strong>
                       </label>
                     </div>
 
@@ -4254,31 +4098,31 @@ function ShiftsPageContent() {
                       onClick={() => handleEmployeeView("start-evidence")}
                       disabled={!canContinueToPhotos}
                     >
-                      {t("Continuar a Fotos", "Continue to photos")} <span>→</span>
+                      {t("Continuar", "Continue")} <span>→</span>
                     </button>
                   </div>
                 )}
 
                 {isEmployeeStartEvidenceStage && !activeShift && (
                   <div className="space-y-5">
-                    <div className="page-title">
+                    <div className="employee-step-header">
                       <button
                         type="button"
-                        className="header-btn"
+                        className="employee-back-btn"
                         onClick={() => handleEmployeeView("start")}
                         aria-label={t("Volver", "Back")}
                       >
-                        ←
+                        {t("⬅ Volver", "⬅ Back")}
                       </button>
-                      {t("Fotos de Inicio", "Start photos")}
+                      <h2>{t("Fotos de Inicio", "Start photos")}</h2>
                     </div>
 
                     <div className="card">
                       <div className="card-header">
                         <div>
-                          <div className="card-title">{t("Áreas a Fotografiar", "Areas to photograph")}</div>
+                          <div className="card-title">{t("Fotos de Inicio", "Start photos")}</div>
                           <div className="card-subtitle">
-                            {t("Tome fotos del estado inicial de cada área", "Take photos of each area before cleaning")}
+                            {t("Registra evidencia inicial por área.", "Register initial evidence per area.")}
                           </div>
                         </div>
                       </div>
@@ -4421,28 +4265,9 @@ function ShiftsPageContent() {
                       <div className="profile-role">{t("Empleado de Limpieza", "Cleaning staff")}</div>
                     </div>
 
-                    <div className="stats-grid">
-                      <div className="stat-card">
-                        <div className="stat-value">{monthHoursValue}h</div>
-                        <div className="stat-label">{t("Horas este mes", "Hours this month")}</div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-value">{history.length}</div>
-                        <div className="stat-label">{t("Turnos realizados", "Completed shifts")}</div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-value">{upcomingShiftsCount}</div>
-                        <div className="stat-label">{t("Turnos próximos", "Upcoming shifts")}</div>
-                      </div>
-                      <div className="stat-card">
-                        <div className="stat-value">{pendingTasksCount}</div>
-                        <div className="stat-label">{t("Tareas especiales", "Special tasks")}</div>
-                      </div>
-                    </div>
-
                     <div className="card">
                       <div className="card-header">
-                        <div className="card-title">{t("Información de Contacto", "Contact info")}</div>
+                        <div className="card-title">{t("Perfil", "Profile")}</div>
                       </div>
                       <div className="info-item">
                         <div className="info-icon">✉️</div>
@@ -4458,26 +4283,6 @@ function ShiftsPageContent() {
                           <span className="info-value">{profilePhone}</span>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="card">
-                      <div className="card-header">
-                        <div className="card-title">{t("Tareas Especiales", "Special tasks")}</div>
-                      </div>
-                      {pendingSpecialTasks.length === 0 ? (
-                        <p className="text-sm text-slate-500">
-                          {t("No hay tareas especiales pendientes.", "No special tasks pending.")}
-                        </p>
-                      ) : (
-                        <div className="space-y-3">
-                          {pendingSpecialTasks.map(task => (
-                            <div key={task.id} className="task-card">
-                              <h4>⭐ {task.title ?? t("Tarea asignada", "Assigned task")}</h4>
-                              <p>{task.status ?? t("Pendiente", "Pending")}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -4857,7 +4662,7 @@ function ShiftsPageContent() {
                           onClick={() => setShowShiftSummary(true)}
                           disabled={!endEvidenceUploaded}
                         >
-                          {t("Ver Resumen y Finalizar", "View summary and finish")}
+                          {t("Ver resumen", "View summary")}
                         </button>
                       </>
                     ) : (
@@ -5778,16 +5583,16 @@ function ShiftsPageContent() {
 
                 {supervisorScreen === "turnos" && (
                   <div className="space-y-5">
-                    <div className="page-title">
+                    <div className="supervisor-step-header">
                       <button
                         type="button"
-                        className="header-btn"
+                        className="supervisor-back-btn"
                         onClick={() => setSupervisorScreenWithHistory("home")}
                         aria-label={t("Volver", "Back")}
                       >
-                        ←
+                        ⬅
                       </button>
-                      {t("Programación de Turnos", "Shift scheduling")}
+                      <h2>{t("Programación de Turnos", "Shift scheduling")}</h2>
                     </div>
 
                     {supervisorOtpHint}
@@ -5921,16 +5726,16 @@ function ShiftsPageContent() {
 
             {supervisorScreen === "schedule" && (
               <div className="space-y-5">
-                <div className="page-title">
+                <div className="supervisor-step-header">
                   <button
                     type="button"
-                    className="header-btn"
+                    className="supervisor-back-btn"
                     onClick={() => setSupervisorScreenWithHistory("turnos")}
                     aria-label={t("Volver", "Back")}
                   >
-                    ←
+                    ⬅
                   </button>
-                  {t("Programar Turno", "Schedule shift")}
+                  <h2>{t("Programar Turno", "Schedule shift")}</h2>
                 </div>
 
                 <div className="card">
@@ -6354,16 +6159,16 @@ function ShiftsPageContent() {
 
             {supervisorScreen === "presence" && isSupervisora && (
               <div className="space-y-5">
-                <div className="page-title">
+                <div className="supervisor-step-header">
                   <button
                     type="button"
-                    className="header-btn"
+                    className="supervisor-back-btn"
                     onClick={handleSupervisorBack}
                     aria-label={t("Volver", "Back")}
                   >
-                    ←
+                    ⬅
                   </button>
-                  {t("Supervisión en Sitio", "On-site supervision")}
+                  <h2>{t("Supervisión", "Supervision")}</h2>
                 </div>
 
                 <div className="gps-verification">
