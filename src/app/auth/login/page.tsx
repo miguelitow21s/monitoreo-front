@@ -8,7 +8,7 @@ import { Manrope } from "next/font/google"
 import LanguageSwitch from "@/components/LanguageSwitch"
 import { useLanguage } from "@/context/LanguageContext"
 import { useAuth } from "@/hooks/useAuth"
-import { acceptLegalConsent, getLegalConsentStatus, LegalConsentStatus } from "@/services/compliance.service"
+import { acceptLegalConsent, getLegalConsentStatus } from "@/services/compliance.service"
 import { supabase } from "@/services/supabaseClient"
 
 const manrope = Manrope({
@@ -26,12 +26,49 @@ function BroomIcon() {
   )
 }
 
+function EnvelopeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
+      <path d="M3 7l9 6 9-6" />
+    </svg>
+  )
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <rect x="4" y="11" width="16" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  )
+}
+
 function SignInIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
       <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" />
       <path d="M10 17l5-5-5-5" />
       <path d="M15 12H3" />
+    </svg>
+  )
+}
+
+function WarningIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+      <path d="M18 6L6 18" />
+      <path d="M6 6l12 12" />
     </svg>
   )
 }
@@ -48,12 +85,13 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [acceptedDataTreatment, setAcceptedDataTreatment] = useState(false)
-  const [legalStatus, setLegalStatus] = useState<LegalConsentStatus | null>(null)
   const [loadingLegalStatus, setLoadingLegalStatus] = useState(false)
-  const [needsBackendConsent, setNeedsBackendConsent] = useState(false)
-  const [processingBackendConsent, setProcessingBackendConsent] = useState(false)
-  const [pendingAccessToken, setPendingAccessToken] = useState<string | null>(null)
   const [blockAutoRedirect, setBlockAutoRedirect] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [savingPassword, setSavingPassword] = useState(false)
 
   const extractErrorMessage = (rawError: unknown) => {
     if (rawError instanceof Error && rawError.message) return rawError.message
@@ -76,8 +114,7 @@ export default function LoginPage() {
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault()
     setError(null)
-    setNeedsBackendConsent(false)
-    setPendingAccessToken(null)
+    setPasswordError(null)
 
     if (!acceptedDataTreatment) {
       setError(
@@ -92,55 +129,66 @@ export default function LoginPage() {
     setSubmitting(true)
     setBlockAutoRedirect(true)
 
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (signInError) {
-      setError(t("Credenciales invalidas", "Invalid credentials"))
-      setSubmitting(false)
-      setBlockAutoRedirect(false)
-      return
-    }
-
-    let accessToken: string | null = data.session?.access_token ?? null
-    if (!accessToken) {
-      const sessionResult = await supabase.auth.getSession()
-      accessToken = sessionResult.data.session?.access_token ?? null
-    }
-
-    if (!accessToken) {
-      await supabase.auth.signOut()
-      setError(
-        t(
-          "No se pudo establecer sesion autenticada. Inicia sesion de nuevo.",
-          "Authenticated session was not established. Sign in again."
-        )
-      )
-      setSubmitting(false)
-      setBlockAutoRedirect(false)
-      return
-    }
-
     try {
-      setLoadingLegalStatus(true)
-      const status = await getLegalConsentStatus(accessToken)
-      setLegalStatus(status)
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-      if (!status.accepted) {
-        setNeedsBackendConsent(true)
-        setPendingAccessToken(accessToken)
+      if (signInError) {
+        setError(t("Credenciales invalidas", "Invalid credentials"))
+        setBlockAutoRedirect(false)
+        return
+      }
+
+      const freshSession = data.session ?? (await supabase.auth.getSession()).data.session
+      const accessToken = freshSession?.access_token ?? null
+      if (!accessToken) {
+        await supabase.auth.signOut()
         setError(
           t(
-            "Debes leer y aceptar los terminos y condiciones para continuar.",
-            "You must read and accept terms and conditions to continue."
+            "No se pudo establecer sesion autenticada. Inicia sesion de nuevo.",
+            "Authenticated session was not established. Sign in again."
           )
         )
-        setSubmitting(false)
+        setBlockAutoRedirect(false)
+        return
+      }
+
+      setLoadingLegalStatus(true)
+      const status = await getLegalConsentStatus(accessToken)
+
+      if (!status.accepted) {
+        if (!status.active_term?.id) {
+          throw new Error(
+            t(
+              "No se encontro termino legal activo para aceptar.",
+              "No active legal term was found to accept."
+            )
+          )
+        }
+        await acceptLegalConsent(status.active_term.id, accessToken)
+      }
+
+      const metadata = {
+        ...((data.user?.user_metadata as Record<string, unknown> | null) ?? {}),
+        ...((data.user?.app_metadata as Record<string, unknown> | null) ?? {}),
+      }
+      const mustChangePassword =
+        metadata.mustChangePassword === true ||
+        metadata.must_change_password === true ||
+        metadata.requirePasswordChange === true ||
+        metadata.require_password_change === true
+
+      if (mustChangePassword) {
+        setShowPasswordModal(true)
         setLoadingLegalStatus(false)
         return
       }
+
+      setLoadingLegalStatus(false)
+      setBlockAutoRedirect(false)
+      router.replace("/dashboard")
     } catch (legalError: unknown) {
       await supabase.auth.signOut()
       const status =
@@ -188,40 +236,54 @@ export default function LoginPage() {
       })
 
       setError(message)
-      setSubmitting(false)
       setLoadingLegalStatus(false)
       setBlockAutoRedirect(false)
       return
+    } finally {
+      setSubmitting(false)
     }
-
-    setLoadingLegalStatus(false)
-    setBlockAutoRedirect(false)
-    router.replace("/dashboard")
   }
 
-  const handleAcceptBackendConsent = async () => {
-    if (!legalStatus?.active_term) {
-      setError(
+  const closePasswordModal = async () => {
+    setShowPasswordModal(false)
+    setNewPassword("")
+    setConfirmPassword("")
+    setPasswordError(null)
+    await supabase.auth.signOut()
+    setBlockAutoRedirect(false)
+  }
+
+  const handlePasswordChange = async () => {
+    setPasswordError(null)
+
+    if (!/^\d{6,}$/.test(newPassword)) {
+      setPasswordError(
         t(
-          "No se encontro termino legal activo para aceptar.",
-          "No active legal term was found to accept."
+          "La nueva contraseña debe tener mínimo 6 dígitos numéricos.",
+          "New password must contain at least 6 numeric digits."
         )
       )
       return
     }
 
-    setError(null)
-    setProcessingBackendConsent(true)
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t("Las contraseñas no coinciden.", "Passwords do not match."))
+      return
+    }
+
+    setSavingPassword(true)
     try {
-      await acceptLegalConsent(legalStatus.active_term.id, pendingAccessToken ?? undefined)
-      setNeedsBackendConsent(false)
-      setPendingAccessToken(null)
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateError) throw updateError
+      setShowPasswordModal(false)
+      setNewPassword("")
+      setConfirmPassword("")
       setBlockAutoRedirect(false)
       router.replace("/dashboard")
-    } catch (legalError: unknown) {
-      setError(extractErrorMessage(legalError))
+    } catch (passwordUpdateError: unknown) {
+      setPasswordError(extractErrorMessage(passwordUpdateError))
     } finally {
-      setProcessingBackendConsent(false)
+      setSavingPassword(false)
     }
   }
 
@@ -241,12 +303,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className={`login-container ${manrope.className}`}>
-      <form onSubmit={handleLogin} className="login-box">
+    <div id="loginScreen" className={`login-container ${manrope.className}`}>
+      <div className="login-box">
         <div className="flex justify-end">
-          <LanguageSwitch />
+          <LanguageSwitch compact />
         </div>
-
         <div className="logo">
           <div className="logo-icon">
             <BroomIcon />
@@ -258,6 +319,7 @@ export default function LoginPage() {
         <div className="consent-box">
           <label>
             <input
+              id="consentCheck"
               type="checkbox"
               checked={acceptedDataTreatment}
               onChange={e => {
@@ -272,103 +334,135 @@ export default function LoginPage() {
               )}
             </span>
           </label>
-          {needsBackendConsent && (
-            <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
-              {t(
-                "Tienes sesión iniciada, pero falta aceptar los términos activos en backend.",
-                "Session is active, but backend legal terms still need your acceptance."
-              )}
+        </div>
+
+        <form id="loginForm" onSubmit={handleLogin}>
+          <div className="form-group">
+            <label>{t("Correo Electrónico", "Email")}</label>
+            <div className="input-wrapper">
+              <span className="input-icon">
+                <EnvelopeIcon />
+              </span>
+              <input
+                id="loginEmail"
+                type="email"
+                className="form-control"
+                placeholder={t("usuario@worktrace.com", "user@worktrace.com")}
+                required
+                autoComplete="username"
+                value={email}
+                onChange={e => {
+                  setEmail(e.target.value)
+                  if (error) setError(null)
+                }}
+              />
             </div>
-          )}
-        </div>
-
-        <div className="form-group">
-          <label>{t("Correo Electrónico", "Email")}</label>
-          <div className="input-wrapper">
-            <span className="input-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
-                <path d="M3 7l9 6 9-6" />
-              </svg>
-            </span>
-            <input
-              type="email"
-              className="form-control"
-              placeholder={t("usuario@worktrace.com", "user@worktrace.com")}
-              required
-              autoComplete="username"
-              value={email}
-              onChange={e => {
-                setEmail(e.target.value)
-                if (error) setError(null)
-              }}
-            />
           </div>
-        </div>
 
-        <div className="form-group">
-          <label>{t("Contraseña Numérica", "Numeric PIN")}</label>
-          <div className="input-wrapper">
-            <span className="input-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
-                <rect x="4" y="11" width="16" height="9" rx="2" />
-                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-              </svg>
-            </span>
-            <input
-              type="password"
-              className="form-control"
-              placeholder="••••••"
-              pattern="[0-9]*"
-              inputMode="numeric"
-              maxLength={6}
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={e => {
-                setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))
-                if (error) setError(null)
-              }}
-            />
+          <div className="form-group">
+            <label>{t("Contraseña Numérica", "Numeric password")}</label>
+            <div className="input-wrapper">
+              <span className="input-icon">
+                <LockIcon />
+              </span>
+              <input
+                id="loginPassword"
+                type="password"
+                className="form-control"
+                placeholder="••••••"
+                pattern="[0-9]*"
+                inputMode="numeric"
+                maxLength={6}
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={e => {
+                  setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  if (error) setError(null)
+                }}
+              />
+            </div>
           </div>
-        </div>
 
-        {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+          {error && <div className="alert alert-error">{error}</div>}
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={
-            submitting ||
-            loading ||
-            loadingLegalStatus ||
-            !acceptedDataTreatment ||
-            processingBackendConsent ||
-            needsBackendConsent
-          }
-        >
-          <SignInIcon />
-          {submitting ? t("Ingresando...", "Signing in...") : t("Iniciar Sesión", "Sign in")}
-        </button>
-
-        {needsBackendConsent && (
           <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void handleAcceptBackendConsent()}
-            disabled={processingBackendConsent}
+            type="submit"
+            className="btn btn-primary"
+            disabled={submitting || loading || loadingLegalStatus || !acceptedDataTreatment}
           >
-            {processingBackendConsent
-              ? t("Aceptando términos...", "Accepting terms...")
-              : t("Aceptar términos y continuar", "Accept terms and continue")}
+            <SignInIcon />
+            {submitting || loadingLegalStatus
+              ? t("Ingresando...", "Signing in...")
+              : t("Iniciar Sesión", "Sign in")}
           </button>
-        )}
+        </form>
 
         <div className="forgot-password">
           <Link href="/auth/forgot-password">{t("¿Olvidé mi contraseña?", "Forgot password?")}</Link>
         </div>
+      </div>
 
-      </form>
+      {showPasswordModal && (
+        <div id="passwordModal" className="modal active login-password-modal">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>{t("Cambiar Contraseña", "Change password")}</h3>
+              <button className="btn-close" type="button" onClick={() => void closePasswordModal()}>
+                <CloseIcon />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="alert alert-warning">
+                <span>
+                  <WarningIcon />
+                </span>
+                <span>
+                  {t(
+                    "Por seguridad, debe cambiar su contraseña temporal en el primer ingreso.",
+                    "For security, you must change your temporary password on first sign in."
+                  )}
+                </span>
+              </div>
+
+              <div className="form-group">
+                <label>{t("Nueva Contraseña Numérica", "New numeric password")}</label>
+                <input
+                  id="newPassword"
+                  type="password"
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  placeholder={t("Mínimo 6 dígitos", "Minimum 6 digits")}
+                  value={newPassword}
+                  onChange={event => setNewPassword(event.target.value.replace(/\D/g, "").slice(0, 12))}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>{t("Confirmar Contraseña", "Confirm password")}</label>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  placeholder={t("Repita la contraseña", "Repeat password")}
+                  value={confirmPassword}
+                  onChange={event => setConfirmPassword(event.target.value.replace(/\D/g, "").slice(0, 12))}
+                />
+              </div>
+
+              {passwordError && <div className="alert alert-error">{passwordError}</div>}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-primary" type="button" onClick={() => void handlePasswordChange()} disabled={savingPassword}>
+                {savingPassword ? t("Guardando...", "Saving...") : t("Guardar Contraseña", "Save password")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
