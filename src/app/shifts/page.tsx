@@ -600,7 +600,7 @@ function ShiftsPageContent() {
   const [startEvidencePhotoCount, setStartEvidencePhotoCount] = useState(0)
   const [endEvidencePhotoCount, setEndEvidencePhotoCount] = useState(0)
   const [supervisorScreen, setSupervisorScreen] = useState<
-    "home" | "turnos" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active" | "alerts"
+    "home" | "restaurants" | "employees" | "reports" | "turnos" | "otp" | "staff" | "schedule" | "presence" | "tasks" | "scheduled" | "active" | "alerts"
   >("home")
   const [, setSupervisorScreenHistory] = useState<Array<typeof supervisorScreen>>(["home"])
   const [startRecoveryPhoto, setStartRecoveryPhoto] = useState<Blob | null>(null)
@@ -711,6 +711,11 @@ function ShiftsPageContent() {
   const [supervisorBulkWeekdays, setSupervisorBulkWeekdays] = useState<number[]>([1, 2, 3, 4, 5])
   const [supervisorBulkScheduling, setSupervisorBulkScheduling] = useState(false)
   const [supervisorScheduleTaskDrafts, setSupervisorScheduleTaskDrafts] = useState<ScheduleTaskDraft[]>([])
+  const [supervisorReportStart, setSupervisorReportStart] = useState(() => daysFromToday(-18))
+  const [supervisorReportEnd, setSupervisorReportEnd] = useState(() => daysFromToday(0))
+  const [supervisorReportRestaurantId, setSupervisorReportRestaurantId] = useState<number | null>(null)
+  const [supervisorReportEmployeeId, setSupervisorReportEmployeeId] = useState("")
+  const [supervisorReportResultVisible, setSupervisorReportResultVisible] = useState(false)
   const [shiftSuccess, setShiftSuccess] = useState<{
     restaurantLabel: string
     startTime: string
